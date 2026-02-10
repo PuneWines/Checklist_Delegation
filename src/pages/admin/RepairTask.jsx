@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, Loader2 } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { createRepair } from "../../redux/slice/repairSlice";
+import { uniqueGivenByData, uniqueDoerNameData } from "../../redux/slice/assignTaskSlice";
 
 export default function RepairTask() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const { givenBy, doerName } = useSelector((state) => state.assignTask);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Form State aligned with your requirements
@@ -18,9 +20,12 @@ export default function RepairTask() {
         issueDetails: ""
     });
 
+    useEffect(() => {
+        dispatch(uniqueGivenByData());
+        dispatch(uniqueDoerNameData("Maintenance")); // Or generic
+    }, [dispatch]);
+
     // Hardcoded Options
-    const filledByOptions = ["Pratap Kumar Rout", "Chhotu Bhaiya", "Prashant Kumar Sharma", "Rakesh Kumar Rout", "Other"];
-    const assignToOptions = ["Pratap Kumar Rout", "Other"];
     const machineOptions = [
         "A", "B", "C", "D", "E", "F", "G", "H", "I",
         "Atlas compressor", "ELGI Compreser", "Transformers",
@@ -78,7 +83,7 @@ export default function RepairTask() {
                         {/* 1. Form Filled By */}
                         <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                Form Filled By <span className="text-red-500">*</span>
+                                Assign From <span className="text-red-500">*</span>
                             </label>
                             <select
                                 name="filledBy"
@@ -86,8 +91,8 @@ export default function RepairTask() {
                                 onChange={handleChange}
                                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
                             >
-                                <option value="">Select person...</option>
-                                {filledByOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                <option value="">Select Assign From...</option>
+                                {givenBy.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                             </select>
                         </div>
 
@@ -102,8 +107,8 @@ export default function RepairTask() {
                                 onChange={handleChange}
                                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
                             >
-                                <option value="">Select person to assign...</option>
-                                {assignToOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                <option value="">Select person... (Doer)</option>
+                                {doerName.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                             </select>
                         </div>
 

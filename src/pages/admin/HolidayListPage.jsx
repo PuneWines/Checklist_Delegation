@@ -47,7 +47,6 @@ const HolidayListPage = () => {
         if (!newHoliday.holiday_date || !newHoliday.holiday_name) return;
 
         try {
-            setIsProcessing(true); // Using setIsSubmitting instead if that's what's available
             setIsSubmitting(true);
 
             const selectedDate = newHoliday.holiday_date; // YYYY-MM-DD
@@ -71,20 +70,29 @@ const HolidayListPage = () => {
             // Tables: checklist, delegation, maintenance_tasks (column: task_start_date)
             // Table: ea_tasks (column: planned_date)
 
-            await Promise.all([
+            const cleanupResults = await Promise.allSettled([
                 supabase.from('checklist').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
                 supabase.from('delegation').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
                 supabase.from('maintenance_tasks').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
                 supabase.from('ea_tasks').delete().gte('planned_date', startOfDay).lte('planned_date', endOfDay)
             ]);
 
+            cleanupResults.forEach((result, index) => {
+                if (result.status === 'rejected') {
+                    console.error(`Cleanup failed for table index ${index}:`, result.reason);
+                } else if (result.value.error) {
+                    console.error(`Cleanup error for table index ${index}:`, result.value.error);
+                }
+            });
+
             console.log(`Cleaned up tasks for holiday: ${selectedDate}`);
 
             setNewHoliday({ holiday_date: '', holiday_name: '' });
             fetchHolidays();
+            alert('Holiday added and tasks cleaned up successfully!');
         } catch (err) {
             console.error('Error adding holiday:', err);
-            alert('Error adding holiday and cleaning up tasks.');
+            alert(`Error adding holiday: ${err.message || 'Unknown error'}`);
         } finally {
             setIsSubmitting(false);
         }

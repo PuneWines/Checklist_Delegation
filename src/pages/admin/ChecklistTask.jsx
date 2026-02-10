@@ -250,14 +250,14 @@ export default function ChecklistTask() {
                             {/* Given By & Doer */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-1.5">Given By</label>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1.5">Assign From</label>
                                     <select
                                         name="givenBy"
                                         value={formData.givenBy}
                                         onChange={handleChange}
                                         className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
                                     >
-                                        <option value="">Select Given By</option>
+                                        <option value="">Select Assign From</option>
                                         {givenBy.map((g, i) => <option key={i} value={g}>{g}</option>)}
                                     </select>
                                 </div>

@@ -1,7 +1,3 @@
-// loginSlice.js
-// import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-// import { createDepartmentApi, createUserApi, deleteUserByIdApi, fetchDepartmentDataApi, fetchUserDetailsApi, updateDepartmentDataApi, updateUserDataApi } from '../api/settingApi';
-// loginSlice.js - Fix the imports
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import {
   createDepartmentApi,
@@ -15,7 +11,11 @@ import {
   fetchGivenByDataApi,
   fetchCustomDropdownsApi,
   createCustomDropdownApi,
-  deleteCustomDropdownApi
+  deleteCustomDropdownApi,
+  createAssignFromApi,
+  deleteDepartmentApi,
+  deleteAssignFromApi,
+  updateCustomDropdownApi
 } from '../api/settingApi';
 
 
@@ -23,7 +23,6 @@ export const userDetails = createAsyncThunk(
   'fetch/user',
   async () => {
     const user = await fetchUserDetailsApi();
-
     return user;
   }
 );
@@ -48,7 +47,6 @@ export const departmentDetails = createAsyncThunk(
   'fetch/department',
   async () => {
     const department = await fetchDepartmentDataApi();
-
     return department;
   }
 );
@@ -57,36 +55,27 @@ export const createUser = createAsyncThunk(
   'post/users',
   async (newUser) => {
     const user = await createUserApi(newUser);
-
     return user;
   }
 );
 
 export const updateUser = createAsyncThunk('update/users', async ({ id, updatedUser }) => {
   const user = await updateUserDataApi({ id, updatedUser });
-
   return user;
-}
-);
+});
 
 export const createDepartment = createAsyncThunk(
   'post/department',
   async (newDept) => {
     const department = await createDepartmentApi(newDept);
-
     return department;
   }
 );
 
 export const updateDepartment = createAsyncThunk('update/department', async ({ id, updatedDept }) => {
-  console.log(updatedDept);
-
   const department = await updateDepartmentDataApi({ id, updatedDept });
-
-
   return department;
-}
-);
+});
 
 export const deleteUser = createAsyncThunk(
   'delete/user',
@@ -120,7 +109,37 @@ export const deleteCustomDropdown = createAsyncThunk(
   }
 );
 
+export const createAssignFrom = createAsyncThunk(
+  'post/assign-from',
+  async (name) => {
+    const data = await createAssignFromApi(name);
+    return data;
+  }
+);
 
+export const deleteDepartment = createAsyncThunk(
+  'delete/department',
+  async (id) => {
+    const deletedId = await deleteDepartmentApi(id);
+    return deletedId;
+  }
+);
+
+export const deleteAssignFrom = createAsyncThunk(
+  'delete/assign-from',
+  async (id) => {
+    const deletedId = await deleteAssignFromApi(id);
+    return deletedId;
+  }
+);
+
+export const updateCustomDropdown = createAsyncThunk(
+  'update/custom-dropdown',
+  async ({ id, category, value }) => {
+    const data = await updateCustomDropdownApi({ id, category, value });
+    return data;
+  }
+);
 
 const settingsSlice = createSlice({
   name: 'settings',
@@ -144,7 +163,6 @@ const settingsSlice = createSlice({
       .addCase(userDetails.fulfilled, (state, action) => {
         state.loading = false;
         state.userData = action.payload;
-
       })
       .addCase(userDetails.rejected, (state, action) => {
         state.loading = false;
@@ -157,12 +175,10 @@ const settingsSlice = createSlice({
       .addCase(departmentDetails.fulfilled, (state, action) => {
         state.loading = false;
         state.department = action.payload;
-
       })
       .addCase(departmentDetails.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
-
       })
       .addCase(createUser.pending, (state) => {
         state.loading = true;
@@ -171,7 +187,6 @@ const settingsSlice = createSlice({
       .addCase(createUser.fulfilled, (state, action) => {
         state.loading = false;
         state.userData.push(action.payload);
-
       })
       .addCase(departmentOnlyDetails.pending, (state) => {
         state.loading = true;
@@ -200,7 +215,6 @@ const settingsSlice = createSlice({
       .addCase(createUser.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
-
       })
       .addCase(updateUser.pending, (state) => {
         state.loading = true;
@@ -215,7 +229,6 @@ const settingsSlice = createSlice({
       .addCase(updateUser.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
-
       })
       .addCase(createDepartment.pending, (state) => {
         state.loading = true;
@@ -223,13 +236,15 @@ const settingsSlice = createSlice({
       })
       .addCase(createDepartment.fulfilled, (state, action) => {
         state.loading = false;
-        state.department.push(action.payload);
-
+        state.department.push({
+          id: action.payload.id,
+          department: action.payload.name,
+          given_by: ""
+        });
       })
       .addCase(createDepartment.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
-
       })
       .addCase(updateDepartment.pending, (state) => {
         state.loading = true;
@@ -238,13 +253,12 @@ const settingsSlice = createSlice({
       .addCase(updateDepartment.fulfilled, (state, action) => {
         state.loading = false;
         state.department = state.department.map((dept) =>
-          dept.id === action.payload.id ? action.payload : dept
+          dept.id === action.payload.id ? { id: action.payload.id, department: action.payload.name, given_by: "" } : dept
         );
       })
       .addCase(updateDepartment.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
-
       })
       .addCase(deleteUser.pending, (state) => {
         state.loading = true;
@@ -291,6 +305,52 @@ const settingsSlice = createSlice({
         state.customDropdowns = state.customDropdowns.filter((item) => item.id !== action.payload);
       })
       .addCase(deleteCustomDropdown.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(createAssignFrom.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(createAssignFrom.fulfilled, (state, action) => {
+        state.loading = false;
+        state.givenBy.push({ id: action.payload.id, given_by: action.payload.name });
+      })
+      .addCase(createAssignFrom.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(deleteDepartment.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(deleteDepartment.fulfilled, (state, action) => {
+        state.loading = false;
+        state.department = state.department.filter((dept) => dept.id !== action.payload);
+      })
+      .addCase(deleteDepartment.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(deleteAssignFrom.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(deleteAssignFrom.fulfilled, (state, action) => {
+        state.loading = false;
+        state.givenBy = state.givenBy.filter((item) => item.id !== action.payload);
+      })
+      .addCase(deleteAssignFrom.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(updateCustomDropdown.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(updateCustomDropdown.fulfilled, (state, action) => {
+        state.loading = false;
+        state.customDropdowns = state.customDropdowns.map((item) =>
+          item.id === action.payload.id ? action.payload : item
+        );
+      })
+      .addCase(updateCustomDropdown.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       });

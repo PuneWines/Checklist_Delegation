@@ -4,6 +4,7 @@ import { BellRing, FileCheck, Calendar, Clock, Wrench, X } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { useDispatch, useSelector } from "react-redux";
 import { uniqueDepartmentData, uniqueDoerNameData, uniqueGivenByData } from "../../redux/slice/assignTaskSlice";
+import { customDropdownDetails } from "../../redux/slice/settingSlice";
 import { postMaintenanceTaskApi } from "../../redux/api/maintenanceApi";
 import { maintenanceData } from "../../redux/slice/maintenanceSlice";
 import supabase from "../../SupabaseClient";
@@ -13,6 +14,7 @@ export default function MaintenanceTask() {
     const navigate = useNavigate();
     const { department, doerName, givenBy } = useSelector((state) => state.assignTask);
     const maintenance = useSelector((state) => state.maintenance.maintenance);
+    const { customDropdowns } = useSelector((state) => state.setting);
     const username = localStorage.getItem('user-name');
 
     const [formData, setFormData] = useState({
@@ -51,6 +53,7 @@ export default function MaintenanceTask() {
         dispatch(uniqueGivenByData());
         dispatch(uniqueDoerNameData("Maintenance"));
         dispatch(maintenanceData(1));
+        dispatch(customDropdownDetails());
     }, [dispatch, username]);
 
     const handleChange = (e) => {
@@ -251,16 +254,31 @@ export default function MaintenanceTask() {
                                 <label className="text-sm font-bold text-gray-700">Machine Name</label>
                                 <select name="machineName" value={formData.machineName} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
                                     <option value="">Select Machine</option>
-                                    <option value="Machine A">Machine A</option>
-                                    <option value="Machine B">Machine B</option>
+                                    {customDropdowns
+                                        .filter(item => item.category === "Machine Name")
+                                        .map((item) => (
+                                            <option key={item.id} value={item.value}>{item.value}</option>
+                                        ))
+                                    }
                                 </select>
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-gray-700">Task Status</label>
                                 <select name="taskStatus" value={formData.taskStatus} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
                                     <option value="">Select Task Status</option>
-                                    <option value="Pending">Pending</option>
-                                    <option value="In Progress">In Progress</option>
+                                    {customDropdowns
+                                        .filter(item => item.category === "Task Status")
+                                        .map((item) => (
+                                            <option key={item.id} value={item.value}>{item.value}</option>
+                                        ))
+                                    }
+                                    {/* Fallback hardcoded if no dynamic data */}
+                                    {(!customDropdowns.some(item => item.category === "Task Status")) && (
+                                        <>
+                                            <option value="Pending">Pending</option>
+                                            <option value="In Progress">In Progress</option>
+                                        </>
+                                    )}
                                 </select>
                             </div>
                         </div>
@@ -268,9 +286,9 @@ export default function MaintenanceTask() {
                         {/* Row 3: Given By | Machine Area */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <label className="text-sm font-bold text-gray-700">Given By</label>
+                                <label className="text-sm font-bold text-gray-700">Assign From</label>
                                 <select name="givenBy" value={formData.givenBy} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
-                                    <option value="">Select Given By</option>
+                                    <option value="">Select Assign From</option>
                                     {givenBy.map((g, i) => <option key={i} value={g}>{g}</option>)}
                                 </select>
                             </div>

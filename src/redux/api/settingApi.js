@@ -46,26 +46,25 @@ export const fetchUserDetailsApi = async () => {
 export const fetchDepartmentDataApi = async () => {
   try {
     const { data, error } = await supabase
-      .from('users')
-      .select('id, department, given_by')
-      .not('department', 'is', null)     // Exclude null departments
-      .neq('department', '')             // Exclude empty string departments
-      .order('department', { ascending: true });
+      .from('departments')
+      .select('*')
+      .order('name', { ascending: true });
 
     if (error) {
-      console.log("error when fetching data", error);
+      console.log("error when fetching departments", error);
       return [];
     }
 
-    // Filter unique combinations of department + given_by
-    const uniqueDepartments = Array.from(
-      new Map(
-        data.map((item) => [`${item.department}-${item.given_by}`, item])
-      ).values()
-    );
+    // Format to match old expectations if necessary, 
+    // though name is better than department field name now
+    const formatted = data.map(d => ({
+      id: d.id,
+      department: d.name,
+      given_by: "" // Placeholder as it's now decoupled
+    }));
 
-    console.log("fetch successfully", uniqueDepartments);
-    return uniqueDepartments;
+    console.log("fetch successfully", formatted);
+    return formatted;
   } catch (error) {
     console.log("error from supabase", error);
     return [];
@@ -171,77 +170,88 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
 
 export const createDepartmentApi = async (newDept) => {
   try {
-    // Step 1: Get the current max ID
-    const { data: maxIdData, error: maxIdError } = await supabase
-      .from("users")
-      .select("id")
-      .order("id", { ascending: false })
-      .limit(1);
-
-    if (maxIdError) {
-      console.error("Error fetching last ID:", maxIdError);
-      return;
-    }
-
-    const lastId = maxIdData?.[0]?.id || 0; // default to 0 if no users yet
-    const newId = lastId + 1;
-
-    // Step 2: Insert user with new ID
     const { data, error } = await supabase
-      .from("users")
-      .insert([
-        {
-          id: newId, // 👈 manually setting the next ID
-          department: newDept.name,
-          given_by: newDept.givenBy,
-        }
-      ])
+      .from("departments")
+      .insert([{ name: newDept.name }])
       .select()
       .single();
 
-    if (error) {
-      console.log("Error when posting data:", error);
-    } else {
-      console.log("Posted successfully", data);
-    }
-
+    if (error) throw error;
     return data;
   } catch (error) {
-    console.log("Error from Supabase:", error);
-  }
-};
-
-export const updateDepartmentDataApi = async ({ id, updatedDept }) => {
-  console.log(updatedDept);
-
-  try {
-    if (!updatedDept || !updatedDept.department || !updatedDept.given_by) {
-      throw new Error("Missing department or given_by data");
-    }
-
-    const { data, error } = await supabase
-      .from("users")
-      .update({
-        department: updatedDept.department,
-        given_by: updatedDept.given_by,
-      })
-      .eq("id", id)
-      .select()
-      .single();
-
-    if (error) {
-      console.log("Error when updating data", error);
-      throw error;
-    }
-
-    console.log("Updated successfully", data);
-    return data;
-  } catch (error) {
-    console.log("Error from Supabase", error);
+    console.log("Error creating department:", error);
     throw error;
   }
 };
 
+export const updateDepartmentDataApi = async ({ id, updatedDept }) => {
+  try {
+    const { data, error } = await supabase
+      .from("departments")
+      .update({ name: updatedDept.department })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.log("Error updating department:", error);
+    throw error;
+  }
+};
+
+
+export const deleteDepartmentApi = async (id) => {
+  try {
+    const { error } = await supabase
+      .from("departments")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+    return id;
+  } catch (error) {
+    console.log("Error deleting department:", error);
+    throw error;
+  }
+};
+
+export const deleteAssignFromApi = async (id) => {
+  try {
+    const { error } = await supabase
+      .from("assign_from")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+    return id;
+  } catch (error) {
+    console.log("Error deleting assign_from:", error);
+    throw error;
+  }
+};
+
+export const updateCustomDropdownApi = async ({ id, category, value }) => {
+  try {
+    const { data, error } = await supabase
+      .from("dropdown_options")
+      .update({ category, value })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return {
+      id: data.id,
+      category: data.category,
+      value: data.value
+    };
+  } catch (error) {
+    console.log("Error updating custom dropdown:", error);
+    throw error;
+  }
+};
 
 export const deleteUserByIdApi = async (id) => {
   try {
@@ -267,30 +277,18 @@ export const deleteUserByIdApi = async (id) => {
 
 // In your settingApi.js file, add these functions:
 
-// Fetch only unique departments (without given_by)
+// Fetch only unique departments
 export const fetchDepartmentsOnlyApi = async () => {
   try {
     const { data, error } = await supabase
-      .from('users')
-      .select('department')
-      .not('department', 'is', null)
-      .neq('department', '')
-      .order('department', { ascending: true });
+      .from('departments')
+      .select('name')
+      .order('name', { ascending: true });
 
-    if (error) {
-      console.log("error when fetching departments", error);
-      return [];
-    }
-
-    // Get unique departments only
-    const uniqueDepartments = [...new Set(data.map(item => item.department))]
-      .filter(dept => dept) // Remove empty values
-      .map(dept => ({ department: dept }));
-
-    console.log("departments fetched successfully", uniqueDepartments);
-    return uniqueDepartments;
+    if (error) throw error;
+    return data.map(d => ({ department: d.name }));
   } catch (error) {
-    console.log("error from supabase", error);
+    console.log("error fetching departments", error);
     return [];
   }
 };
@@ -299,81 +297,83 @@ export const fetchDepartmentsOnlyApi = async () => {
 export const fetchGivenByDataApi = async () => {
   try {
     const { data, error } = await supabase
-      .from('users')
-      .select('given_by')
-      .not('given_by', 'is', null)
-      .neq('given_by', '')
-      .order('given_by', { ascending: true });
+      .from('assign_from')
+      .select('name')
+      .order('name', { ascending: true });
 
-    if (error) {
-      console.log("error when fetching given_by data", error);
-      return [];
-    }
-
-    // Get unique given_by values only
-    const uniqueGivenBy = [...new Set(data.map(item => item.given_by))]
-      .filter(givenBy => givenBy) // Remove empty values
-      .map(givenBy => ({ given_by: givenBy }));
-
-    console.log("given_by fetched successfully", uniqueGivenBy);
-    return uniqueGivenBy;
+    if (error) throw error;
+    return data.map(d => ({ given_by: d.name }));
   } catch (error) {
-    console.log("error from supabase", error);
+    console.log("error fetching assign_from data", error);
     return [];
+  }
+};
+
+export const createAssignFromApi = async (name) => {
+  try {
+    const { data, error } = await supabase
+      .from("assign_from")
+      .insert([{ name }])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.log("error creating assign_from", error);
+    throw error;
   }
 };
 
 export const fetchCustomDropdownsApi = async () => {
   try {
     const { data, error } = await supabase
-      .from('users')
-      .select('id, user_access, given_by') // user_access=Category, given_by=Value
-      .eq('role', 'custom_dropdown')
-      .order('user_access', { ascending: true });
+      .from('dropdown_options')
+      .select('*')
+      .order('category', { ascending: true });
 
-    if (error) {
-      console.log("error fetching custom dropdowns", error);
-      return [];
-    }
-    return data;
+    if (error) throw error;
+    // Format to match old expectations: user_access=category, given_by=value
+    return data.map(item => ({
+      id: item.id,
+      category: item.category,
+      value: item.value
+    }));
   } catch (error) {
-    console.log("error from supabase", error);
+    console.log("error fetching custom dropdowns", error);
     return [];
   }
 };
 
 export const createCustomDropdownApi = async (item) => {
   try {
-    // Get max ID
-    const { data: maxIdData } = await supabase.from('users').select('id').order('id', { ascending: false }).limit(1);
-    const newId = (maxIdData?.[0]?.id || 0) + 1;
-
     const { data, error } = await supabase
-      .from('users')
+      .from('dropdown_options')
       .insert([{
-        id: newId,
-        role: 'custom_dropdown',
-        user_access: item.category, // Category Name
-        given_by: item.value,       // Option Value
-        department: null,
-        user_name: null
+        category: item.category,
+        value: item.value
       }])
       .select()
       .single();
 
     if (error) throw error;
-    return data;
+    return {
+      id: data.id,
+      category: data.category,
+      value: data.value
+    };
   } catch (error) {
     console.log("error creating custom dropdown", error);
+    throw error;
   }
 };
 
 export const deleteCustomDropdownApi = async (id) => {
   try {
-    const { error } = await supabase.from('users').delete().eq('id', id);
+    const { error } = await supabase.from('dropdown_options').delete().eq('id', id);
     if (error) throw error;
     return id;
   } catch (error) {
     console.log("error deleting custom dropdown", error);
+    throw error;
   }
 };

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, User, Building, X, Save, Edit, Trash2, Settings, Search, ChevronDown, Calendar, RefreshCw } from 'lucide-react';
 import AdminLayout from '../components/layout/AdminLayout';
 import { useDispatch, useSelector } from 'react-redux';
-import { createDepartment, createUser, deleteUser, departmentOnlyDetails, givenByDetails, departmentDetails, updateDepartment, updateUser, userDetails } from '../redux/slice/settingSlice';
+import { createDepartment, createUser, deleteUser, departmentOnlyDetails, givenByDetails, departmentDetails, updateDepartment, updateUser, userDetails, customDropdownDetails, createCustomDropdown, deleteCustomDropdown, createAssignFrom, deleteDepartment, deleteAssignFrom, updateCustomDropdown } from '../redux/slice/settingSlice';
 import supabase from '../SupabaseClient';
 
 const Setting = () => {
@@ -24,7 +24,7 @@ const Setting = () => {
   const [remark, setRemark] = useState('');
   const [leaveUsernameFilter, setLeaveUsernameFilter] = useState('');
 
-  const { userData, department, departmentsOnly, givenBy, loading, error } = useSelector((state) => state.setting);
+  const { userData, department, departmentsOnly, givenBy, customDropdowns, loading, error } = useSelector((state) => state.setting);
   const dispatch = useDispatch();
   // Add this function to fetch device logs and update user status
   // Add this function to fetch device logs from both APIs and update user status
@@ -238,18 +238,71 @@ const Setting = () => {
   const fetchDeviceLogsAndUpdateStatus = async () => {
     try {
       setIsRefreshing(true);
+      const today = new Date().toISOString().split('T')[0];
 
-      if (!response.ok) {
-        console.warn(`Device sync service unavailable (Status: ${response.status}). User creation/updates will proceed without device sync.`);
+      // Using the device log APIs (In and Out)
+      const IN_API_URL = `https://api.allorigins.win/raw?url=${encodeURIComponent(`http://139.167.179.193:90/api/v2/WebAPI/GetDeviceLogs?APIKey=205511032522&SerialNumber=E03C1CB34D83AA02&FromDate=${today}&ToDate=${today}`)}`;
+      const OUT_API_URL = `https://api.allorigins.win/raw?url=${encodeURIComponent(`http://139.167.179.193:90/api/v2/WebAPI/GetDeviceLogs?APIKey=205511032522&SerialNumber=E03C1CB36042AA02&FromDate=${today}&ToDate=${today}`)}`;
+
+      // Use try-catch for the fetch itself to handle connectivity issues
+      let allLogs = [];
+      try {
+        const [inResponse, outResponse] = await Promise.all([
+          fetch(IN_API_URL),
+          fetch(OUT_API_URL)
+        ]);
+
+        if (inResponse.ok && outResponse.ok) {
+          const inLogs = await inResponse.json();
+          const outLogs = await outResponse.json();
+          allLogs = [...inLogs, ...outLogs];
+        } else {
+          console.warn('One or more device sync APIs returned an error');
+          return;
+        }
+      } catch (err) {
+        console.warn('Device sync APIs unreachable (CORS or Network issue). Skipping background sync.');
         return;
       }
 
-      const data = await response.json();
-      console.log(data.message);
+      if (allLogs.length === 0) {
+        console.log('No device logs found for today.');
+        return;
+      }
+
+      // Sort logs by date (latest first)
+      allLogs.sort((a, b) => new Date(b.LogDate) - new Date(a.LogDate));
+
+      // Simple logic: Check latest punch for each employee
+      const employeeStatus = {};
+      allLogs.forEach(log => {
+        const employeeCode = log.EmployeeCode;
+        if (!employeeStatus[employeeCode]) {
+          const punchDirection = log.PunchDirection?.toLowerCase();
+          employeeStatus[employeeCode] = {
+            status: punchDirection === 'in' ? 'active' : 'inactive'
+          };
+        }
+      });
+
+      // Update users in database if status has changed
+      const updatePromises = Object.entries(employeeStatus).map(async ([employeeCode, statusInfo]) => {
+        const user = userData.find(u => u.employee_id === employeeCode);
+        if (user && user.status !== statusInfo.status) {
+          const { error } = await supabase
+            .from('users')
+            .update({ status: statusInfo.status })
+            .eq('id', user.id);
+
+          if (error) console.error(`Error updating status for ${user.user_name}:`, error);
+        }
+      });
+
+      await Promise.all(updatePromises);
       dispatch(userDetails());
+      console.log('Device sync completed successfully.');
     } catch (error) {
-      // Only log strictly if it's not a known network/service issue to reduce noise
-      console.warn('Device sync skipped due to network/service availability:', error.message);
+      console.warn('Device sync encountered an unexpected error:', error.message);
     } finally {
       setIsRefreshing(false);
     }
@@ -275,11 +328,16 @@ const Setting = () => {
       )
       .subscribe();
 
-    // Set up interval to check device logs every 30 seconds
-    const intervalId = setInterval(fetchDeviceLogsAndUpdateStatus, 30000);
+    // Set up interval to check device logs every 60 seconds (reduced frequency)
+    const intervalId = setInterval(fetchDeviceLogsAndUpdateStatus, 60000);
 
     // Initial fetch of device logs
     fetchDeviceLogsAndUpdateStatus();
+
+    // Fetch departments and dropdowns on mount
+    dispatch(departmentDetails());
+    dispatch(customDropdownDetails());
+    dispatch(givenByDetails()); // Fetch givenBy details on mount
 
     return () => {
       subscription.unsubscribe();
@@ -354,7 +412,7 @@ const Setting = () => {
     if (activeTab === 'users') {
       resetUserForm();
       setShowUserModal(true);
-    } else if (activeTab === 'departments') {
+    } else if (activeTab === 'departments' || activeTab === 'categories') {
       resetDeptForm();
       setShowDeptModal(true);
     }
@@ -373,7 +431,7 @@ const Setting = () => {
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedUsers(userData.map(user => user.id));
+      setSelectedUsers(filteredLeaveUsers.map(user => user.id));
     } else {
       setSelectedUsers([]);
     }
@@ -462,9 +520,16 @@ const Setting = () => {
     setActiveTab(tab);
     if (tab === 'users') {
       dispatch(userDetails());
-      dispatch(departmentDetails()); // Ensure departments are fetched
+      dispatch(departmentOnlyDetails());
     } else if (tab === 'departments') {
-      dispatch(departmentDetails());
+      // Fetch data based on activeDeptSubTab
+      if (activeDeptSubTab === 'departments') {
+        dispatch(departmentDetails());
+      } else if (activeDeptSubTab === 'givenBy') {
+        dispatch(givenByDetails());
+      }
+    } else if (tab === 'categories') {
+      dispatch(customDropdownDetails());
     }
   };
 
@@ -526,6 +591,8 @@ const Setting = () => {
   useEffect(() => {
     dispatch(userDetails());
     dispatch(departmentDetails()); // Fetch departments on mount
+    dispatch(givenByDetails()); // Fetch givenBy details on mount
+    dispatch(customDropdownDetails()); // Fetch custom dropdowns on mount
   }, [dispatch])
 
   // In your handleAddUser function:
@@ -572,46 +639,90 @@ const Setting = () => {
     }
   };
 
-  // Modified handleAddDepartment
-  const handleAddDepartment = async (e) => {
+  const handleUpdateDepartment = async (e) => {
     e.preventDefault();
-    const newDept = { ...deptForm };
 
-    try {
-      await dispatch(createDepartment(newDept)).unwrap();
-      resetDeptForm();
-      setShowDeptModal(false);
-      // setTimeout(() => window.location.reload(), 1000);
-    } catch (error) {
-      console.error('Error adding department:', error);
+    if (activeTab === 'categories') {
+      try {
+        await dispatch(updateCustomDropdown({
+          id: currentDeptId,
+          category: deptForm.name,
+          value: deptForm.givenBy
+        })).unwrap();
+        resetDeptForm();
+        setShowDeptModal(false);
+      } catch (error) {
+        console.error('Error updating category:', error);
+      }
+      return;
+    }
+
+    if (activeTab === 'departments') {
+      if (activeDeptSubTab === 'departments') {
+        const updatedDept = {
+          department: deptForm.name,
+          given_by: deptForm.givenBy
+        };
+        try {
+          await dispatch(updateDepartment({ id: currentDeptId, updatedDept })).unwrap();
+          resetDeptForm();
+          setShowDeptModal(false);
+        } catch (error) {
+          console.error('Error updating department:', error);
+        }
+      } else if (activeDeptSubTab === 'givenBy') {
+        alert('Updating "Assign From" entries is not supported via this modal. Please delete and recreate.');
+        return;
+      }
     }
   };
 
-  // Modified handleUpdateDepartment
-  const handleUpdateDepartment = async (e) => {
+  const handleAddDepartment = async (e) => {
     e.preventDefault();
-    const updatedDept = {
-      department: deptForm.name,
-      given_by: deptForm.givenBy
-    };
 
-    try {
-      await dispatch(updateDepartment({ id: currentDeptId, updatedDept })).unwrap();
-      resetDeptForm();
-      setShowDeptModal(false);
-      // setTimeout(() => window.location.reload(), 1000);
-    } catch (error) {
-      console.error('Error updating department:', error);
+    if (activeTab === 'categories') {
+      try {
+        await dispatch(createCustomDropdown({
+          category: deptForm.name,
+          value: deptForm.givenBy
+        })).unwrap();
+        resetDeptForm();
+        setShowDeptModal(false);
+      } catch (error) {
+        console.error('Error adding category:', error);
+      }
+      return;
+    }
+
+    if (activeTab === 'departments') {
+      if (activeDeptSubTab === 'givenBy') {
+        try {
+          await dispatch(createAssignFrom({ given_by: deptForm.name })).unwrap(); // Changed to createAssignFrom
+          resetDeptForm();
+          setShowDeptModal(false);
+        } catch (error) {
+          console.error('Error adding assign_from:', error);
+        }
+      } else { // activeDeptSubTab === 'departments'
+        try {
+          await dispatch(createDepartment({ department: deptForm.name, given_by: deptForm.givenBy })).unwrap(); // Pass both fields
+          resetDeptForm();
+          setShowDeptModal(false);
+        } catch (error) {
+          console.error('Error adding department:', error);
+        }
+      }
     }
   };
 
   // Modified handleDeleteUser
   const handleDeleteUser = async (userId) => {
-    try {
-      await dispatch(deleteUser(userId)).unwrap();
-      // setTimeout(() => window.location.reload(), 1000);
-    } catch (error) {
-      console.error('Error deleting user:', error);
+    if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+      try {
+        await dispatch(deleteUser(userId)).unwrap();
+      } catch (error) {
+        console.error('Error deleting user:', error);
+      }
     }
   };
 
@@ -651,13 +762,34 @@ const Setting = () => {
   };
 
   const handleEditDepartment = (deptId) => {
-    const dept = department.find(d => d.id === deptId);
-    setDeptForm({
-      name: dept.department,  // Match your API response field names
-      givenBy: dept.given_by
-    });
-    setCurrentDeptId(deptId);
-    setShowDeptModal(true);
+    if (activeTab === 'departments' && activeDeptSubTab === 'departments') {
+      const dept = department.find(d => d.id === deptId);
+      setDeptForm({
+        name: dept.department,
+        givenBy: dept.given_by
+      });
+      setCurrentDeptId(deptId);
+      setIsEditing(true); // Set editing mode
+      setShowDeptModal(true);
+    } else if (activeTab === 'departments' && activeDeptSubTab === 'givenBy') {
+      const item = givenBy.find(g => g.id === deptId); // Assuming givenBy items also have an 'id'
+      setDeptForm({
+        name: item.given_by,
+        givenBy: '' // givenBy table only has 'given_by' field, no secondary field
+      });
+      setCurrentDeptId(deptId);
+      setIsEditing(true);
+      setShowDeptModal(true);
+    } else if (activeTab === 'categories') {
+      const item = customDropdowns.find(c => c.id === deptId);
+      setDeptForm({
+        name: item.category,
+        givenBy: item.value
+      });
+      setCurrentDeptId(deptId);
+      setIsEditing(true);
+      setShowDeptModal(true);
+    }
   };
   // const handleUpdateUser = (e) => {
   //   e.preventDefault();
@@ -724,6 +856,7 @@ const Setting = () => {
       givenBy: ''
     });
     setCurrentDeptId(null);
+    setIsEditing(false); // Reset editing state for department modal
   };
 
 
@@ -772,22 +905,26 @@ const Setting = () => {
                 className={`flex px-4 py-3 text-sm font-medium ${activeTab === 'departments' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
                 onClick={() => {
                   handleTabChange('departments');
-                  dispatch(departmentOnlyDetails());
-                  dispatch(givenByDetails());
+                  dispatch(departmentDetails()); // Fetch departments when switching to this tab
+                  dispatch(givenByDetails()); // Fetch givenBy when switching to this tab
                 }}
               >
                 <Building size={18} />
                 Departments
               </button>
               <button
-                className={`flex px-4 py-3 text-sm font-medium ${activeTab === 'leave' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
-                onClick={() => {
-                  handleTabChange('leave');
-                  dispatch(userDetails());
-                }}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium ${activeTab === 'leave' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
+                onClick={() => handleTabChange('leave')}
               >
                 <Calendar size={18} />
-                Leave Management
+                Leave
+              </button>
+              <button
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium ${activeTab === 'categories' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
+                onClick={() => handleTabChange('categories')}
+              >
+                <Settings size={18} />
+                Categories
               </button>
             </div>
 
@@ -815,15 +952,26 @@ const Setting = () => {
             </button>
 
             {/* Add button - hide for leave tab */}
-            {activeTab !== 'leave' && (
+            {(activeTab === 'users' || activeTab === 'departments' || activeTab === 'categories') && (
               <button
-                onClick={handleAddButtonClick}
-                className="rounded-md gradient-bg py-2 px-4 text-white hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                onClick={() => {
+                  if (activeTab === 'categories') {
+                    // Logic for custom dropdown modal if needed, or repurposed Dept modal
+                    resetDeptForm();
+                    setShowDeptModal(true);
+                  } else {
+                    handleAddButtonClick();
+                  }
+                }}
+                className="rounded-md gradient-bg py-2 px-6 text-white hover:opacity-90 shadow-lg shadow-indigo-100 transition-all flex items-center gap-2"
               >
-                <div className="flex items-center">
-                  <Plus size={18} className="mr-2" />
-                  <span>{activeTab === 'users' ? 'Add User' : 'Add Department'}</span>
-                </div>
+                <Plus size={18} />
+                <span>
+                  {activeTab === 'users' ? 'New User' :
+                    activeTab === 'departments' ?
+                      (activeDeptSubTab === 'departments' ? 'New Department' : 'New Assign From') :
+                      'New Category'}
+                </span>
               </button>
             )}
           </div>
@@ -1145,9 +1293,17 @@ const Setting = () => {
                           <div className="flex space-x-2">
                             <button
                               onClick={() => handleEditUser(user?.id)}
-                              className="text-blue-600 hover:text-blue-900"
+                              className="p-1 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                              title="Edit User"
                             >
                               <Edit size={18} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(user?.id)}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                              title="Delete User"
+                            >
+                              <Trash2 size={18} />
                             </button>
                           </div>
                         </td>
@@ -1172,15 +1328,21 @@ const Setting = () => {
                 <div className="flex border border-purple-200 rounded-md overflow-hidden">
                   <button
                     className={`px-4 py-2 text-sm font-medium ${activeDeptSubTab === 'departments' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
-                    onClick={() => setActiveDeptSubTab('departments')}
+                    onClick={() => {
+                      setActiveDeptSubTab('departments');
+                      dispatch(departmentDetails()); // Fetch departments when switching sub-tab
+                    }}
                   >
                     Departments
                   </button>
                   <button
                     className={`px-4 py-2 text-sm font-medium ${activeDeptSubTab === 'givenBy' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
-                    onClick={() => setActiveDeptSubTab('givenBy')}
+                    onClick={() => {
+                      setActiveDeptSubTab('givenBy');
+                      dispatch(givenByDetails()); // Fetch givenBy when switching sub-tab
+                    }}
                   >
-                    Given By
+                    Assign From
                   </button>
                 </div>
               </div>
@@ -1214,34 +1376,45 @@ const Setting = () => {
                         Department Name
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Given By
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {department && department.length > 0 ? (
-                      // Get unique departments and show them
-                      Array.from(new Map(department.map(dept => [dept.department, dept])).values())
-                        .filter(dept => dept?.department && dept.department.trim() !== '')
-                        .map((dept, index) => (
-                          <tr key={dept.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{dept.department}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              <div className="flex space-x-2">
-                                <button
-                                  onClick={() => handleEditDepartment(dept.id)}
-                                  className="text-blue-600 hover:text-blue-900"
-                                >
-                                  <Edit size={18} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
+                      department.map((dept, index) => (
+                        <tr key={dept.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{dept.department}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{dept.given_by || 'N/A'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex space-x-2 justify-end">
+                              <button
+                                onClick={() => handleEditDepartment(dept.id)}
+                                className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"
+                              >
+                                <Edit size={16} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (window.confirm('Delete this department?')) {
+                                    dispatch(deleteDepartment(dept.id));
+                                  }
+                                }}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded-md"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
                     ) : (
                       <tr>
-                        <td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500">
+                        <td colSpan="4" className="px-6 py-4 text-center text-sm text-gray-500">
                           No departments found
                         </td>
                       </tr>
@@ -1257,44 +1430,35 @@ const Setting = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        ID
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Given By
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assign From</th>
+                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {department && department.length > 0 ? (
-                      // Get unique given_by values and show them
-                      Array.from(new Map(department.map(dept => [dept.given_by, dept])).values())
-                        .filter(dept => dept?.given_by && dept.given_by.trim() !== '')
-                        .map((dept, index) => (
-                          <tr key={dept.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{dept.given_by}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              <div className="flex space-x-2">
-                                <button
-                                  onClick={() => handleEditDepartment(dept.id)}
-                                  className="text-blue-600 hover:text-blue-900"
-                                >
-                                  <Edit size={18} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
+                    {givenBy && givenBy.length > 0 ? (
+                      givenBy.map((item, index) => (
+                        <tr key={item.id || index} className="hover:bg-gray-50"> {/* Use item.id if available, else index */}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.given_by}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex space-x-2 justify-end">
+                              <button onClick={() => handleEditDepartment(item.id)} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md">
+                                <Edit size={16} />
+                              </button>
+                              <button onClick={() => {
+                                if (window.confirm('Delete this entry?')) {
+                                  dispatch(deleteAssignFrom(item.id));
+                                }
+                              }} className="p-1 text-red-600 hover:bg-red-50 rounded-md">
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
                     ) : (
-                      <tr>
-                        <td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500">
-                          No given by data found
-                        </td>
-                      </tr>
+                      <tr><td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500">No data found</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1303,263 +1467,320 @@ const Setting = () => {
           </div>
         )}
 
+        {/* Categories Tab (Dropdown Management) */}
+        {activeTab === 'categories' && (
+          <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-purple-100">
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-8 py-6 flex justify-between items-center border-b border-purple-100">
+              <div>
+                <h2 className="text-xl font-bold text-indigo-900">Category Manager</h2>
+                <p className="text-sm text-indigo-600">Manage custom dropdown lists and task categories</p>
+              </div>
+            </div>
+
+            <div className="h-[calc(100vh-320px)] overflow-auto scrollbar-hide">
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead className="bg-gray-50/50 sticky top-0 backdrop-blur-sm">
+                  <tr>
+                    <th className="px-8 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Type / Activity</th>
+                    <th className="px-8 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Value / Option</th>
+                    <th className="px-8 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-50">
+                  {customDropdowns && customDropdowns.length > 0 ? (
+                    customDropdowns.map((item) => (
+                      <tr key={item.id} className="hover:bg-indigo-50/30 transition-colors group">
+                        <td className="px-8 py-4 text-sm font-semibold text-gray-700">{item.category}</td> {/* Changed from user_access */}
+                        <td className="px-8 py-4">
+                          <span className="px-3 py-1 bg-white border border-indigo-100 rounded-full text-xs font-bold text-indigo-700 shadow-sm">
+                            {item.value} {/* Changed from given_by */}
+                          </span>
+                        </td>
+                        <td className="px-8 py-4 text-right">
+                          <div className="flex space-x-2 justify-end">
+                            <button
+                              onClick={() => handleEditDepartment(item.id)}
+                              className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm('Delete this category option?')) {
+                                  dispatch(deleteCustomDropdown(item.id));
+                                }
+                              }}
+                              className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="3" className="px-8 py-20 text-center">
+                        <div className="flex flex-col items-center gap-2 text-gray-400">
+                          <Settings size={40} className="opacity-20 mb-2" />
+                          <p className="font-medium italic">No custom categories found</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+
         {/* User Modal */}
         {showUserModal && (
-          <div className="fixed z-50 inset-0 overflow-y-auto">
-            <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0" onClick={() => setShowUserModal(false)}>
-              <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-                <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity"
+              onClick={() => setShowUserModal(false)}
+            ></div>
+
+            <div className="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden transform transition-all border border-purple-100 flex flex-col max-h-[90vh]">
+              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 px-8 py-6 flex justify-between items-center border-b border-purple-100">
+                <h3 className="text-xl font-bold text-indigo-900">
+                  {isEditing ? 'Edit User Profile' : 'Create New User'}
+                </h3>
+                <button
+                  onClick={() => setShowUserModal(false)}
+                  className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-white rounded-full transition-all"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-              <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full sm:p-6" onClick={(e) => e.stopPropagation()}>
-                <div>
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900">
-                      {isEditing ? 'Edit User' : 'Create New User'}
-                    </h3>
+
+              <div className="p-8 overflow-y-auto custom-scrollbar">
+                <form onSubmit={isEditing ? handleUpdateUser : handleAddUser} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label htmlFor="username" className="block text-sm font-bold text-gray-700 ml-1">Username</label>
+                      <input
+                        type="text"
+                        name="username"
+                        id="username"
+                        value={userForm.username}
+                        onChange={handleUserInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                        placeholder="john_doe"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="email" className="block text-sm font-bold text-gray-700 ml-1">Email Address</label>
+                      <input
+                        type="email"
+                        name="email"
+                        id="email"
+                        value={userForm.email}
+                        onChange={handleUserInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                        placeholder="john@example.com"
+                      />
+                    </div>
+
+                    {!isEditing && (
+                      <div className="space-y-2">
+                        <label htmlFor="password" className="block text-sm font-bold text-gray-700 ml-1">Password</label>
+                        <input
+                          type="password"
+                          name="password"
+                          id="password"
+                          value={userForm.password}
+                          onChange={handleUserInputChange}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                          placeholder="••••••••"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label htmlFor="phone" className="block text-sm font-bold text-gray-700 ml-1">Phone Number</label>
+                      <input
+                        type="tel"
+                        name="phone"
+                        id="phone"
+                        value={userForm.phone}
+                        onChange={handleUserInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                        placeholder="+91 00000 00000"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="employee_id" className="block text-sm font-bold text-gray-700 ml-1">Employee ID</label>
+                      <input
+                        type="text"
+                        name="employee_id"
+                        id="employee_id"
+                        value={userForm.employee_id}
+                        onChange={handleUserInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                        placeholder="EMP001"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="role" className="block text-sm font-bold text-gray-700 ml-1">User Role</label>
+                      <select
+                        id="role"
+                        name="role"
+                        value={userForm.role}
+                        onChange={handleUserInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                      >
+                        <option value="user">Standard User</option>
+                        <option value="admin">Administrator</option>
+                        <option value="manager">Manager</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <label htmlFor="department" className="block text-sm font-bold text-gray-700 ml-1">Department Assigned</label>
+                      <select
+                        id="department"
+                        name="department"
+                        value={userForm.department}
+                        onChange={handleUserInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                      >
+                        <option value="">Choose a department...</option>
+                        {department && department.length > 0 ? (
+                          [...new Set(department.map(dept => dept.department))]
+                            .filter(Boolean)
+                            .map((deptName, index) => (
+                              <option key={index} value={deptName}>{deptName}</option>
+                            ))
+                        ) : null}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-6">
                     <button
+                      type="button"
                       onClick={() => setShowUserModal(false)}
-                      className="text-gray-400 hover:text-gray-500"
+                      className="px-6 py-2.5 text-sm font-bold text-gray-600 hover:text-gray-800 transition-colors"
                     >
-                      <X size={24} />
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-8 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all flex items-center gap-2"
+                    >
+                      <Save size={18} />
+                      {isEditing ? 'Save Changes' : 'Create User'}
                     </button>
                   </div>
-                  <div className="mt-6">
-                    <form onSubmit={isEditing ? handleUpdateUser : handleAddUser}>
-                      <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-                        <div className="sm:col-span-3">
-                          <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-                            Username
-                          </label>
-                          <input
-                            type="text"
-                            name="username"
-                            id="username"
-                            value={userForm.username}
-                            onChange={handleUserInputChange}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          />
-                        </div>
-
-                        <div className="sm:col-span-3">
-                          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                            Email
-                          </label>
-                          <input
-                            type="email"
-                            name="email"
-                            id="email"
-                            value={userForm.email}
-                            onChange={handleUserInputChange}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          />
-                        </div>
-
-                        {!isEditing && (
-                          <div className="sm:col-span-3">
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                              Password
-                            </label>
-                            <input
-                              type="password"
-                              name="password"
-                              id="password"
-                              value={userForm.password}
-                              onChange={handleUserInputChange}
-                              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                            />
-                          </div>
-                        )}
-
-                        <div className="sm:col-span-3">
-                          <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                            Phone
-                          </label>
-                          <input
-                            type="tel"
-                            name="phone"
-                            id="phone"
-                            value={userForm.phone}
-                            onChange={handleUserInputChange}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          />
-                        </div>
-
-
-
-                        <div className="sm:col-span-3">
-                          <label htmlFor="employee_id" className="block text-sm font-medium text-gray-700">
-                            Employee ID
-                          </label>
-                          <input
-                            type="text"
-                            name="employee_id"
-                            id="employee_id"
-                            value={userForm.employee_id}
-                            onChange={handleUserInputChange}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                            placeholder="Enter Employee ID"
-                          />
-                        </div>
-
-                        <div className="sm:col-span-3">
-                          <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-                            Role
-                          </label>
-                          <select
-                            id="role"
-                            name="role"
-                            value={userForm.role}
-                            onChange={handleUserInputChange}
-                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          >
-                            <option value="user">User</option>
-                            <option value="admin">Admin</option>
-                          </select>
-                        </div>
-
-                        <div className="sm:col-span-3">
-                          <label htmlFor="department" className="block text-sm font-medium text-gray-700">
-                            Department
-                          </label>
-                          <select
-                            id="department"
-                            name="department"
-                            value={userForm.department}
-                            onChange={handleUserInputChange}
-                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          >
-                            <option value="">Select Department</option>
-                            {department && department.length > 0 ? (
-                              // Get unique departments using Set
-                              [...new Set(department.map(dept => dept.department))]
-                                .filter(deptName => deptName) // Remove empty values
-                                .map((deptName, index) => (
-                                  <option key={index} value={deptName}>
-                                    {deptName}
-                                  </option>
-                                ))
-                            ) : (
-                              <option value="" disabled>Loading departments...</option>
-                            )}
-                          </select>
-                        </div>
-
-                        <div className="sm:col-span-3">
-                          <label htmlFor="status" className="block text-sm font-medium text-gray-700">
-                            Status
-                          </label>
-                          <select
-                            id="status"
-                            name="status"
-                            value={userForm.status}
-                            onChange={handleUserInputChange}
-                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          >
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="mt-6 flex justify-end space-x-3">
-                        <button
-                          type="button"
-                          onClick={() => setShowUserModal(false)}
-                          className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                        >
-                          <Save size={18} className="mr-2" />
-                          {isEditing ? 'Update User' : 'Save User'}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
+                </form>
               </div>
             </div>
           </div>
         )}
 
-        {/* Department Modal */}
+        {/* Department / Category Modal */}
         {showDeptModal && (
-          <div className="fixed z-50 inset-0 overflow-y-auto">
-            <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0" onClick={() => setShowDeptModal(false)}>
-              <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-                <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity"
+              onClick={() => setShowDeptModal(false)}
+            ></div>
+
+            <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-purple-100 transform transition-all">
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-6 flex justify-between items-center border-b border-purple-100">
+                <h3 className="text-xl font-bold text-purple-900">
+                  {activeTab === 'categories'
+                    ? (isEditing ? 'Edit Category' : 'Create New Category')
+                    : (activeDeptSubTab === 'givenBy'
+                      ? (isEditing ? 'Edit Assign From' : 'Create New Assign From')
+                      : (isEditing ? 'Edit Department' : 'Create New Department'))}
+                </h3>
+                <button
+                  onClick={() => setShowDeptModal(false)}
+                  className="p-2 text-gray-400 hover:text-purple-600 hover:bg-white rounded-full transition-all"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-              <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6" onClick={(e) => e.stopPropagation()}>
-                <div>
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900">
-                      {currentDeptId ? 'Edit Department' : 'Create New Department'}
-                    </h3>
+
+              <div className="p-8">
+                <form onSubmit={isEditing ? handleUpdateDepartment : handleAddDepartment} className="space-y-6">
+                  <div className="space-y-2">
+                    <label htmlFor="name" className="block text-sm font-bold text-gray-700 ml-1">
+                      {activeTab === 'categories' ? 'Category / Type' :
+                        activeDeptSubTab === 'givenBy' ? 'Assign From Name' : 'Department Name'}
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      id="name"
+                      value={deptForm.name}
+                      onChange={handleDeptInputChange}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                      placeholder={activeTab === 'categories' ? 'e.g. Activity Type' :
+                        activeDeptSubTab === 'givenBy' ? 'e.g. CEO' : 'e.g. Marketing'}
+                    />
+                  </div>
+
+                  {activeTab === 'categories' && (
+                    <div className="space-y-2">
+                      <label htmlFor="givenBy" className="block text-sm font-bold text-gray-700 ml-1">
+                        Value / Option
+                      </label>
+                      <input
+                        type="text"
+                        name="givenBy"
+                        id="givenBy"
+                        value={deptForm.givenBy}
+                        onChange={handleDeptInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                        placeholder="Enter value..."
+                      />
+                    </div>
+                  )}
+
+                  {activeTab === 'departments' && activeDeptSubTab === 'departments' && (
+                    <div className="space-y-2">
+                      <label htmlFor="givenBy" className="block text-sm font-bold text-gray-700 ml-1">
+                        Given By (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        id="givenBy"
+                        name="givenBy"
+                        value={deptForm.givenBy}
+                        onChange={handleDeptInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                        placeholder="e.g. CEO, Manager, System Admin"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-3 pt-4">
                     <button
+                      type="button"
                       onClick={() => setShowDeptModal(false)}
-                      className="text-gray-400 hover:text-gray-500"
+                      className="px-6 py-2.5 text-sm font-bold text-gray-600 hover:text-gray-800 transition-colors"
                     >
-                      <X size={24} />
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-8 py-2.5 bg-purple-600 text-white text-sm font-bold rounded-xl hover:bg-purple-700 shadow-lg shadow-purple-100 transition-all flex items-center gap-2"
+                    >
+                      <Save size={18} />
+                      {activeTab === 'categories'
+                        ? (currentDeptId ? 'Update Category' : 'Save Category')
+                        : (currentDeptId ? 'Update Department' : 'Save Department')}
                     </button>
                   </div>
-                  <div className="mt-6">
-                    <form onSubmit={currentDeptId ? handleUpdateDepartment : handleAddDepartment}>
-                      <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-                        <div className="sm:col-span-6">
-                          <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                            Department Name
-                          </label>
-                          <input
-                            type="text"
-                            name="name"
-                            id="name"
-                            value={deptForm.name}
-                            onChange={handleDeptInputChange}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          />
-                        </div>
-
-                        <div className="sm:col-span-6">
-                          <label htmlFor="givenBy" className="block text-sm font-medium text-gray-700">
-                            Given By
-                          </label>
-                          <input
-                            type="text"
-                            id="givenBy"
-                            name="givenBy"
-                            value={deptForm.givenBy}
-                            onChange={handleDeptInputChange}
-                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                            placeholder="Enter Given By"
-                          />
-                        </div>
-
-                      </div>
-
-                      <div className="mt-6 flex justify-end space-x-3">
-                        <button
-                          type="button"
-                          onClick={() => setShowDeptModal(false)}
-                          className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                        >
-                          <Save size={18} className="mr-2" />
-                          {currentDeptId ? 'Update Department' : 'Save Department'}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
+                </form>
               </div>
             </div>
           </div>
@@ -1570,74 +1791,3 @@ const Setting = () => {
 };
 
 export default Setting;
-
-
-
-
-
-
-
-
-
-
-// <div className="space-y-8">
-//   {/* Header and Tabs */}
-//   <div className="my-5">
-//     {/* Header */}
-//     <div className="flex justify-between items-center mb-6">
-//       <h1 className="text-xl md:text-2xl font-bold text-purple-600">User Management System</h1>
-//     </div>
-
-//     {/* Tabs and Add Button Container */}
-//     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-//       {/* Tabs */}
-//       <div className="flex border border-purple-200 rounded-md overflow-hidden self-start w-full sm:w-auto">
-//         <button
-//           className={`flex flex-1 justify-center items-center px-3 py-2 md:px-4 md:py-3 text-sm font-medium ${activeTab === 'users' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
-//           onClick={() => {
-//             handleTabChange('users');
-//             dispatch(userDetails());
-//           }}
-//         >
-//           <User size={16} className="mr-1 md:mr-2" />
-//           <span className="hidden xs:inline">Users</span>
-//         </button>
-//         <button
-//           className={`flex flex-1 justify-center items-center px-3 py-2 md:px-4 md:py-3 text-sm font-medium ${activeTab === 'departments' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
-//           onClick={() => {
-//             handleTabChange('departments');
-//             dispatch(departmentOnlyDetails());
-//             dispatch(givenByDetails());
-//           }}
-//         >
-//           <Building size={16} className="mr-1 md:mr-2" />
-//           <span className="hidden xs:inline">Departments</span>
-//         </button>
-//         <button
-//           className={`flex flex-1 justify-center items-center px-3 py-2 md:px-4 md:py-3 text-sm font-medium ${activeTab === 'leave' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
-//           onClick={() => {
-//             handleTabChange('leave');
-//             dispatch(userDetails());
-//           }}
-//         >
-//           <Calendar size={16} className="mr-1 md:mr-2" />
-//           <span className="hidden xs:inline">Leave</span>
-//         </button>
-//       </div>
-
-//       {/* Add button - hide for leave tab */}
-//       {activeTab !== 'leave' && (
-//         <button
-//           onClick={handleAddButtonClick}
-//           className="rounded-md gradient-bg py-2 px-3 md:px-4 text-white hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 w-full sm:w-auto"
-//         >
-//           <div className="flex items-center justify-center">
-//             <Plus size={16} className="mr-1 md:mr-2" />
-//             <span className="text-sm">
-//               {activeTab === 'users' ? 'Add User' : 'Add Department'}
-//             </span>
-//           </div>
-//         </button>
-//       )}
-//     </div>
-//   </div>

@@ -433,7 +433,7 @@ export default function QuickTask() {
                       </th>
                       {[
                         { key: 'department', label: 'Department' },
-                        { key: 'given_by', label: 'Given By' },
+                        { key: 'given_by', label: 'Assign From' },
                         { key: 'name', label: 'Name' },
                         { key: 'task_description', label: 'Task Description', minWidth: 'min-w-[300px]' },
                         { key: 'task_start_date', label: 'Start Date', bg: 'bg-yellow-50' },
@@ -675,7 +675,7 @@ export default function QuickTask() {
                     <tr>
                       {[
                         { label: 'Department' },
-                        { label: 'Given By' },
+                        { label: 'Assign From' },
                         { label: 'Name' },
                         { label: 'Task Description', minWidth: 'min-w-[300px]' },
                         { label: 'Start Date', bg: 'bg-yellow-50' },
