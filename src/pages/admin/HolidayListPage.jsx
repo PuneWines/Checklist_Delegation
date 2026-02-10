@@ -47,23 +47,44 @@ const HolidayListPage = () => {
         if (!newHoliday.holiday_date || !newHoliday.holiday_name) return;
 
         try {
+            setIsProcessing(true); // Using setIsSubmitting instead if that's what's available
             setIsSubmitting(true);
+
+            const selectedDate = newHoliday.holiday_date; // YYYY-MM-DD
+            const startOfDay = `${selectedDate}T00:00:00.000Z`;
+            const endOfDay = `${selectedDate}T23:59:59.999Z`;
+
+            // 1. Insert into holidays table
             const { error: holidayError } = await supabase
                 .from('holidays')
                 .insert([newHoliday]);
 
             if (holidayError) throw holidayError;
 
+            // 2. Remove from working_day_calender
             await supabase
                 .from('working_day_calender')
                 .delete()
-                .eq('working_date', newHoliday.holiday_date);
+                .eq('working_date', selectedDate);
+
+            // 3. Remove assigned tasks from all relevant tables for this specific day
+            // Tables: checklist, delegation, maintenance_tasks (column: task_start_date)
+            // Table: ea_tasks (column: planned_date)
+
+            await Promise.all([
+                supabase.from('checklist').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
+                supabase.from('delegation').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
+                supabase.from('maintenance_tasks').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
+                supabase.from('ea_tasks').delete().gte('planned_date', startOfDay).lte('planned_date', endOfDay)
+            ]);
+
+            console.log(`Cleaned up tasks for holiday: ${selectedDate}`);
 
             setNewHoliday({ holiday_date: '', holiday_name: '' });
             fetchHolidays();
         } catch (err) {
             console.error('Error adding holiday:', err);
-            alert('Error adding holiday.');
+            alert('Error adding holiday and cleaning up tasks.');
         } finally {
             setIsSubmitting(false);
         }

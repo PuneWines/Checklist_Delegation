@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { ClipboardList, Wrench, Hammer, Plus, ArrowUpRight, LayoutGrid } from "lucide-react";
+import { ClipboardList, Wrench, Hammer, Plus, ArrowUpRight, LayoutGrid, Users } from "lucide-react";
 
 export default function AssignTask() {
   const navigate = useNavigate();
@@ -11,7 +11,6 @@ export default function AssignTask() {
       label: "Checklist Operations",
       subLabel: "Daily Routine Tasks",
       icon: ClipboardList,
-      // ✅ FIXED: Removed "-task" to match App.js
       path: "/dashboard/checklist",
       color: "text-purple-600",
       bg: "bg-purple-50",
@@ -23,7 +22,6 @@ export default function AssignTask() {
       label: "Maintenance Schedule",
       subLabel: "Preventive Care",
       icon: Wrench,
-      // ✅ FIXED: Removed "-task" to match App.js
       path: "/dashboard/maintenance",
       color: "text-blue-600",
       bg: "bg-blue-50",
@@ -35,12 +33,22 @@ export default function AssignTask() {
       label: "Repair Tickets",
       subLabel: "Issue Resolution",
       icon: Hammer,
-      // ✅ FIXED: Removed "-task" to match App.js
       path: "/dashboard/repair",
       color: "text-orange-600",
       bg: "bg-orange-50",
       border: "hover:border-orange-500",
       ring: "hover:ring-orange-200"
+    },
+    {
+      id: "ea",
+      label: "EA Tasks",
+      subLabel: "Executive Assistant",
+      icon: Users,
+      path: "/dashboard/ea-task",
+      color: "text-green-600",
+      bg: "bg-green-50",
+      border: "hover:border-green-500",
+      ring: "hover:ring-green-200"
     }
   ];
 
@@ -60,7 +68,7 @@ export default function AssignTask() {
         </div>
 
         {/* Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {modules.map((mod) => (
             <button
               key={mod.id}

@@ -10,6 +10,7 @@ import AdminAssignTask from "./pages/admin/AssignTask"
 import ChecklistTask from "./pages/admin/ChecklistTask"     // New
 import MaintenanceTask from "./pages/admin/MaintenanceTask" // New
 import RepairTask from "./pages/admin/RepairTask"           // New
+import EATask from "./pages/admin/EATask"                   // New
 import CalendarPage from "./pages/admin/CalendarPage"       // New
 import QuickTask from "./pages/QuickTask"
 import Demo from "./pages/user/Demo"
@@ -122,6 +123,14 @@ function App() {
                     element={
                         <ProtectedRoute>
                             <RepairTask />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/dashboard/ea-task"
+                    element={
+                        <ProtectedRoute>
+                            <EATask />
                         </ProtectedRoute>
                     }
                 />

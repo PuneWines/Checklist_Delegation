@@ -132,15 +132,17 @@ export default function ChecklistTask() {
             });
         } else {
             let current = new Date(date);
+            const endDate = new Date(date);
+            endDate.setFullYear(endDate.getFullYear() + 1);
+
             const isHoliday = (d) => {
                 const dateStr = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
                 return holidays.includes(dateStr);
             };
 
-            // Generate 30 occurrences for preview
-            let generatedCount = 0;
             let attempts = 0;
-            while (generatedCount < 30 && attempts < 100) {
+            // Generate tasks for 1 year
+            while (current <= endDate && attempts < 1000) {
                 attempts++;
                 if (!isHoliday(current)) {
                     const dateStr = formatDate(current) + ` at ${time}`;
@@ -150,13 +152,12 @@ export default function ChecklistTask() {
                         dueDate: `${current.getFullYear()}-${(current.getMonth() + 1).toString().padStart(2, '0')}-${current.getDate().toString().padStart(2, '0')}T${time}:00`,
                         displayDate: dateStr
                     });
-                    generatedCount++;
                 }
 
                 if (freqKey === 'daily') current = addDays(current, 1);
                 else if (freqKey === 'weekly') current = addDays(current, 7);
                 else if (freqKey === 'monthly') current.setMonth(current.getMonth() + 1);
-                else break; // Should not happen with current freqKey logic but safe
+                else break;
             }
         }
         setGeneratedTasks(tasks);

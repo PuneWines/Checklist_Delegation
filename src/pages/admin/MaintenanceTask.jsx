@@ -36,6 +36,15 @@ export default function MaintenanceTask() {
     });
 
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [holidays, setHolidays] = useState([]);
+
+    useEffect(() => {
+        const fetchHolidays = async () => {
+            const { data } = await supabase.from('holidays').select('holiday_date');
+            if (data) setHolidays(data.map(h => h.holiday_date));
+        };
+        fetchHolidays();
+    }, []);
 
     useEffect(() => {
         dispatch(uniqueDepartmentData(username));
@@ -76,26 +85,85 @@ export default function MaintenanceTask() {
         }
 
         try {
-            // Generate unique task_id
-            const timestamp = Date.now();
-            const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-            const taskId = `MNT-${timestamp}-${randomSuffix}`;
+            const tasksToInsert = [];
+            const startDate = new Date(formData.startDate);
+            const freq = formData.frequency.toLowerCase();
 
-            // Format data for maintenance_tasks table (matching actual schema)
-            const taskData = {
-                task_id: taskId,
-                company_name: formData.department,
-                name: formData.doerName,
-                given_by: formData.givenBy,
-                task_start_date: `${formData.startDate}T${formData.startTime}:00`,
-                task_description: `${formData.machineName} - ${formData.workDescription} (Area: ${formData.machineArea}, Part: ${formData.partName})`,
-                freq: formData.frequency,
-                enable_reminders: formData.enableReminder,
-                status: null, // Pending tasks have null status
-                submission_date: null, // Not yet submitted
-            };
+            if (freq === 'one-time') {
+                const timestamp = Date.now();
+                const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+                const taskId = `MNT-${timestamp}-${randomSuffix}`;
 
-            await postMaintenanceTaskApi(taskData);
+                tasksToInsert.push({
+                    task_id: taskId,
+                    company_name: formData.department,
+                    name: formData.doerName,
+                    given_by: formData.givenBy,
+                    task_start_date: `${formData.startDate}T${formData.startTime}:00`,
+                    task_description: `${formData.machineName} - ${formData.workDescription} (Area: ${formData.machineArea}, Part: ${formData.partName})`,
+                    freq: formData.frequency,
+                    enable_reminder: formData.enableReminder,
+                    status: null,
+                    submission_date: null,
+                });
+            } else {
+                let current = new Date(startDate);
+                const endDate = new Date(startDate);
+                endDate.setFullYear(endDate.getFullYear() + 1);
+
+                const isHoliday = (d) => {
+                    const dStr = d.toISOString().split('T')[0];
+                    return holidays.includes(dStr);
+                };
+
+                const addDays = (date, days) => {
+                    const d = new Date(date);
+                    d.setDate(d.getDate() + days);
+                    return d;
+                };
+
+                let attempts = 0;
+                let counter = 0;
+                while (current <= endDate && attempts < 1000) {
+                    attempts++;
+                    if (!isHoliday(current)) {
+                        const timestamp = Date.now();
+                        const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+                        const taskId = `MNT-${timestamp}-${counter}-${randomSuffix}`;
+
+                        tasksToInsert.push({
+                            task_id: taskId,
+                            company_name: formData.department,
+                            name: formData.doerName,
+                            given_by: formData.givenBy,
+                            task_start_date: `${current.toISOString().split('T')[0]}T${formData.startTime}:00`,
+                            task_description: `${formData.machineName} - ${formData.workDescription} (Area: ${formData.machineArea}, Part: ${formData.partName})`,
+                            freq: formData.frequency,
+                            enable_reminder: formData.enableReminder,
+                            status: null,
+                            submission_date: null,
+                        });
+                        counter++;
+                    }
+
+                    if (freq === 'daily') current = addDays(current, 1);
+                    else if (freq === 'weekly') current = addDays(current, 7);
+                    else if (freq === 'monthly') current.setMonth(current.getMonth() + 1);
+                    else break;
+                }
+            }
+
+            // Using insert for multiple rows if needed, or loop through postMaintenanceTaskApi
+            // Given the pattern, let's use the API for each or update API to handle array.
+            // Since postMaintenanceTaskApi is already defined, let's use it properly.
+
+            if (tasksToInsert.length > 1) {
+                // Batch insert using supabase directly as the api might not support arrays
+                const { error } = await supabase.from('maintenance_tasks').insert(tasksToInsert);
+                if (error) throw error;
+            } else if (tasksToInsert.length === 1) {
+                await postMaintenanceTaskApi(tasksToInsert[0]);
+            }
 
             // Reset form
             setFormData({
@@ -113,7 +181,7 @@ export default function MaintenanceTask() {
                 requireAttachment: false
             });
 
-            alert("Maintenance task assigned successfully!");
+            alert(`Successfully assigned ${tasksToInsert.length} maintenance task(s)!`);
 
             // Navigate to task management page
             navigate('/dashboard/task-management');

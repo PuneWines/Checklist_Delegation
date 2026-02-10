@@ -8,6 +8,7 @@ import dashboardReducer from "./slice/dashboardSlice";
 import settingReducer from './slice/settingSlice'
 import maintenanceReducer from "./slice/maintenanceSlice";
 import repairReducer from "./slice/repairSlice";
+import eaReducer from "./slice/eaSlice";
 
 const store = configureStore({
     reducer: {
@@ -19,7 +20,8 @@ const store = configureStore({
         dashBoard: dashboardReducer,
         setting: settingReducer,
         maintenance: maintenanceReducer,
-        repair: repairReducer
+        repair: repairReducer,
+        ea: eaReducer
     }
 })
 

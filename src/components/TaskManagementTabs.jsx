@@ -1,12 +1,13 @@
 "use client"
 import React from 'react'
-import { ClipboardCheck, Hammer, Wrench, Activity } from 'lucide-react'
+import { ClipboardCheck, Hammer, Wrench, Activity, Users } from 'lucide-react'
 
 export default function TaskManagementTabs({ activeTab, setActiveTab }) {
     const tabs = [
         { id: 'checklist', label: 'Checklist', icon: ClipboardCheck, color: 'text-purple-600' },
         { id: 'maintenance', label: 'Maintenance', icon: Hammer, color: 'text-blue-600' },
         { id: 'repair', label: 'Repair', icon: Wrench, color: 'text-orange-600' },
+        { id: 'ea', label: 'EA Tasks', icon: Users, color: 'text-green-600' },
     ]
 
     return (

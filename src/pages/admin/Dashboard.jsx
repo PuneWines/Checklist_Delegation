@@ -28,6 +28,7 @@ import { fetchRepairDataSortByDate, fetchAllRepairTasks } from "../../redux/api/
 import DefaultView from "./dashboard/views/DefaultView.jsx"
 import MaintenanceView from "./dashboard/views/MaintenanceView.jsx"
 import RepairView from "./dashboard/views/RepairView.jsx"
+import EAView from "./dashboard/views/EAView.jsx"
 import TaskManagementTabs from "../../components/TaskManagementTabs.jsx"
 
 export default function AdminDashboard() {
@@ -50,7 +51,7 @@ export default function AdminDashboard() {
   const [batchSize] = useState(1000)
   const [departmentFilter, setDepartmentFilter] = useState("all")
   const [availableDepartments, setAvailableDepartments] = useState([])
-  const [mainTab, setMainTab] = useState("default") // "default", "maintenance", "repair"
+  const [mainTab, setMainTab] = useState("default") // "default", "maintenance", "repair", "ea"
 
   // State for department data
   const [departmentData, setDepartmentData] = useState({
@@ -1026,7 +1027,6 @@ export default function AdminDashboard() {
             if (tabId === 'checklist') {
               setMainTab("default")
               setDepartmentFilter("all")
-              // Optional: Ensure we are actually viewing checklist if they click checklist
               setDashboardType("checklist")
             } else if (tabId === 'maintenance') {
               setMainTab("maintenance")
@@ -1034,6 +1034,9 @@ export default function AdminDashboard() {
             } else if (tabId === 'repair') {
               setMainTab("repair")
               setDepartmentFilter("Repair")
+            } else if (tabId === 'ea') {
+              setMainTab("ea")
+              setDepartmentFilter("all")
             }
           }}
         />
@@ -1051,7 +1054,7 @@ export default function AdminDashboard() {
           setDepartmentFilter={setDepartmentFilter}
           availableDepartments={availableDepartments}
           isLoadingMore={isLoadingMore}
-          onDateRangeChange={handleDateRangeChange} // Add this prop
+          onDateRangeChange={handleDateRangeChange}
         />
 
         {mainTab === "default" && (
@@ -1084,6 +1087,10 @@ export default function AdminDashboard() {
 
         {mainTab === "repair" && (
           <RepairView stats={displayStats} tasks={departmentData.allTasks} />
+        )}
+
+        {mainTab === "ea" && (
+          <EAView />
         )}
       </div>
     </AdminLayout>

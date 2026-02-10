@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle2, ShieldAlert, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, List, CheckCircle2, ShieldAlert, Loader2, Plus, Trash2 } from 'lucide-react';
 import supabase from '../../SupabaseClient';
 
 const WorkingDayCalendarPage = () => {
@@ -26,6 +26,7 @@ const WorkingDayCalendarPage = () => {
                     .select('*')
                     .gte('working_date', startOfMonth)
                     .lte('working_date', endOfMonth)
+                    .order('working_date', { ascending: true })
             ]);
 
             if (holidaysRes.error && holidaysRes.error.code !== '42P01') throw holidaysRes.error;
@@ -52,6 +53,18 @@ const WorkingDayCalendarPage = () => {
                     .delete()
                     .eq('working_date', dateStr);
                 if (error) throw error;
+
+                // Also remove tasks for this specific day (Off Day)
+                const startOfDay = `${dateStr}T00:00:00.000Z`;
+                const endOfDay = `${dateStr}T23:59:59.999Z`;
+
+                await Promise.all([
+                    supabase.from('checklist').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
+                    supabase.from('delegation').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
+                    supabase.from('maintenance_tasks').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
+                    supabase.from('ea_tasks').delete().gte('planned_date', startOfDay).lte('planned_date', endOfDay)
+                ]);
+                console.log(`Cleaned up tasks for Off Day: ${dateStr}`);
             } else {
                 // Add to working days
                 const dateObj = new Date(dateStr);
@@ -81,9 +94,6 @@ const WorkingDayCalendarPage = () => {
         }
     };
 
-    const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-    const firstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
-
     const prevMonth = () => {
         setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
     };
@@ -96,62 +106,41 @@ const WorkingDayCalendarPage = () => {
     const month = currentDate.getMonth();
     const monthName = currentDate.toLocaleString('default', { month: 'long' });
 
-    const totalDays = daysInMonth(year, month);
-    const startDay = firstDayOfMonth(year, month);
+    // Function to convert English day names to Hindi
+    const getDayInHindi = (englishDay) => {
+        const dayMap = {
+            'Sunday': 'रविवार',
+            'Monday': 'सोमवार',
+            'Tuesday': 'मंगलवार',
+            'Wednesday': 'बुधवार',
+            'Thursday': 'गुरुवार',
+            'Friday': 'शुक्रवार',
+            'Saturday': 'शनिवार'
+        };
+        const hindiDay = dayMap[englishDay] || englishDay;
+        return `${hindiDay} (${englishDay})`;
+    };
 
-    const dayCells = [];
-    for (let i = 0; i < startDay; i++) {
-        dayCells.push(<div key={`empty-${i}`} className="aspect-square bg-gray-50 border-r border-b border-gray-200"></div>);
-    }
+    // Get all days in the month
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const allDaysInMonth = [];
 
-    for (let i = 1; i <= totalDays; i++) {
+    for (let i = 1; i <= daysInMonth; i++) {
         const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+        const dateObj = new Date(dateString);
         const holiday = holidays.find(h => h.holiday_date === dateString);
         const workingDay = workingDays.find(w => w.working_date === dateString);
-        const isHoliday = !!holiday;
-        const isWorking = !!workingDay;
-        const isToday = new Date().toISOString().split('T')[0] === dateString;
+        const englishDayName = dateObj.toLocaleDateString('en-GB', { weekday: 'long' });
 
-        dayCells.push(
-            <div
-                key={i}
-                onClick={() => toggleWorkingDay(dateString, isWorking, isHoliday)}
-                className={`aspect-square border-r border-b border-gray-200 p-2 relative cursor-pointer transition-colors ${isHoliday ? 'bg-red-50' :
-                    isWorking ? 'bg-white hover:bg-green-50/50' :
-                        'bg-gray-100 hover:bg-gray-200'
-                    }`}
-            >
-                <div className="flex justify-between items-start">
-                    <span className={`text-xs font-bold ${isHoliday ? 'text-red-700 underline' :
-                        isToday ? 'text-blue-700' :
-                            'text-gray-700'
-                        }`}>
-                        {i}
-                    </span>
-                    {isToday && (
-                        <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-                    )}
-                </div>
-
-                <div className="mt-2 text-center">
-                    {isHoliday ? (
-                        <p className="text-[9px] font-bold text-red-800 uppercase leading-tight truncate px-1">
-                            {holiday.holiday_name}
-                        </p>
-                    ) : (
-                        <p className={`text-[8px] font-bold uppercase tracking-widest ${isWorking ? 'text-green-600' : 'text-gray-400'}`}>
-                            {isWorking ? 'Working' : 'Off Day'}
-                        </p>
-                    )}
-                </div>
-
-                {isProcessing && (
-                    <div className="absolute inset-0 bg-white/40 flex items-center justify-center">
-                        <Loader2 size={12} className="animate-spin text-blue-600" />
-                    </div>
-                )}
-            </div>
-        );
+        allDaysInMonth.push({
+            date: dateString,
+            day: i,
+            dayName: getDayInHindi(englishDayName),
+            isHoliday: !!holiday,
+            isWorking: !!workingDay,
+            holidayName: holiday?.holiday_name,
+            weekNum: workingDay?.week_num
+        });
     }
 
     return (
@@ -161,10 +150,10 @@ const WorkingDayCalendarPage = () => {
                 <div className="bg-white border-b border-gray-200 pb-5 flex flex-col md:flex-row justify-between items-center gap-4">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-blue-700 rounded text-white font-bold">
-                            <CalendarIcon size={20} />
+                            <List size={20} />
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold text-gray-900 leading-tight tracking-tight uppercase">Working Day Calendar</h1>
+                            <h1 className="text-xl font-bold text-gray-900 leading-tight tracking-tight uppercase">Working Days List</h1>
                             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                                 Manage Operational Availability
                             </p>
@@ -184,29 +173,111 @@ const WorkingDayCalendarPage = () => {
                     </div>
 
                     <div className="flex gap-4">
-                        <LegendItem label="Working" color="bg-white border border-gray-200" />
+                        <LegendItem label="Working" color="bg-green-50 border border-green-200" />
                         <LegendItem label="Holiday" color="bg-red-50 border border-red-200" />
                         <LegendItem label="Off Day" color="bg-gray-100 border border-gray-300" />
                     </div>
                 </div>
 
-                {/* Calendar Grid */}
+                {/* Working Days List */}
                 <div className="bg-white border border-gray-200 rounded shadow-sm overflow-hidden">
-                    <div className="grid grid-cols-7 bg-gray-100 border-b border-gray-200">
-                        {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
-                            <div key={day} className="py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-widest border-r border-gray-200 last:border-0">
-                                {day}
-                            </div>
-                        ))}
+                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                        <h2 className="text-sm font-bold text-gray-700 uppercase">
+                            Days in {monthName} {year} ({workingDays.length} Working Days)
+                        </h2>
                     </div>
 
-                    <div className="grid grid-cols-7 relative border-l border-t border-gray-200">
-                        {loading && (
-                            <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center font-bold text-blue-700 uppercase tracking-[0.3em]">
-                                Loading Data...
-                            </div>
-                        )}
-                        {dayCells}
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm border-collapse">
+                            <thead>
+                                <tr className="bg-gray-100 border-b border-gray-200">
+                                    <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase">Date</th>
+                                    <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase">Day</th>
+                                    <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase">Week #</th>
+                                    <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase">Status</th>
+                                    <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-4 py-10 text-center text-gray-400 italic">
+                                            <Loader2 className="inline animate-spin mr-2" size={16} />
+                                            Loading data...
+                                        </td>
+                                    </tr>
+                                ) : allDaysInMonth.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-4 py-10 text-center text-gray-400 font-bold">
+                                            NO RECORDS FOUND
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    allDaysInMonth.map((dayInfo) => (
+                                        <tr
+                                            key={dayInfo.date}
+                                            className={`hover:bg-gray-50 transition-colors ${dayInfo.isHoliday ? 'bg-red-50/30' :
+                                                dayInfo.isWorking ? 'bg-green-50/20' :
+                                                    'bg-gray-50/30'
+                                                }`}
+                                        >
+                                            <td className="px-4 py-3">
+                                                <div className="font-bold text-gray-900">
+                                                    {new Date(dayInfo.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 font-medium text-gray-700">
+                                                {dayInfo.dayName}
+                                            </td>
+                                            <td className="px-4 py-3 font-medium text-gray-700">
+                                                {dayInfo.weekNum || '-'}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {dayInfo.isHoliday ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs font-bold rounded">
+                                                        <ShieldAlert size={12} />
+                                                        {dayInfo.holidayName}
+                                                    </span>
+                                                ) : dayInfo.isWorking ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-bold rounded">
+                                                        <CheckCircle2 size={12} />
+                                                        Working Day
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-700 text-xs font-bold rounded">
+                                                        Off Day
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                {!dayInfo.isHoliday && (
+                                                    <button
+                                                        onClick={() => toggleWorkingDay(dayInfo.date, dayInfo.isWorking, dayInfo.isHoliday)}
+                                                        disabled={isProcessing}
+                                                        className={`px-3 py-1.5 text-xs font-bold rounded transition-colors flex items-center gap-1 ml-auto ${dayInfo.isWorking
+                                                            ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                                            : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                                            } disabled:opacity-50`}
+                                                    >
+                                                        {dayInfo.isWorking ? (
+                                                            <>
+                                                                <Trash2 size={12} />
+                                                                Remove
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Plus size={12} />
+                                                                Add
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
@@ -219,7 +290,7 @@ const WorkingDayCalendarPage = () => {
                         <div>
                             <h3 className="text-xs font-bold text-gray-900 uppercase mb-1">Interactive Management</h3>
                             <p className="text-[10px] font-medium text-gray-500 leading-relaxed uppercase">
-                                Click any day to toggle between a Working Day and an Off Day.
+                                Click Add/Remove buttons to toggle between Working Day and Off Day.
                             </p>
                         </div>
                     </div>

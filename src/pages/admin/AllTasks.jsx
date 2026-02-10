@@ -16,12 +16,13 @@ import {
   Save,
   Loader2,
   Camera,
+  Users,
 } from "lucide-react";
 import { updateRepairData } from "../../redux/api/repairApi";
 
 const AllTasks = () => {
   // Active tab state
-  const [activeTab, setActiveTab] = useState("checklist"); // checklist, maintenance, repair
+  const [activeTab, setActiveTab] = useState("checklist"); // checklist, maintenance, repair, ea
   const [showHistory, setShowHistory] = useState(false);
 
   // Data states
@@ -34,6 +35,7 @@ const AllTasks = () => {
   const [successMessage, setSuccessMessage] = useState("");
   const [remarksData, setRemarksData] = useState({});
   const [statusData, setStatusData] = useState({});
+  const [extendedDateData, setExtendedDateData] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -243,6 +245,19 @@ const AllTasks = () => {
             { id: "action", label: "Action" },
           ];
           break;
+        case "ea":
+          tableName = "ea_tasks";
+          dateColumn = "planned_date";
+          completionField = "status";
+          nameField = "doer_name";
+          headers = [
+            { id: "task_id", label: "Task ID" },
+            { id: "doer_name", label: "Doer Name" },
+            { id: "phone_number", label: "Phone Number" },
+            { id: "planned_date", label: "Planned Date" },
+            { id: "status", label: "Status" },
+          ];
+          break;
         default: // checklist
           tableName = "checklist";
           dateColumn = "task_start_date";
@@ -272,12 +287,16 @@ const AllTasks = () => {
       if (showHistory) {
         if (activeTab === "repair") {
           query = query.neq("status", "Pending").order("submission_date", { ascending: false });
+        } else if (activeTab === "ea") {
+          query = query.in("status", ["done", "extended"]).order("created_at", { ascending: false });
         } else {
           query = query.not(completionField, "is", null).order(completionField, { ascending: false });
         }
       } else {
         if (activeTab === "repair") {
           query = query.eq("status", "Pending").order(dateColumn, { ascending: false });
+        } else if (activeTab === "ea") {
+          query = query.eq("status", "pending").order(dateColumn, { ascending: true });
         } else {
           query = query.is(completionField, null).order(dateColumn, { ascending: false });
         }
@@ -518,11 +537,25 @@ const AllTasks = () => {
       return;
     }
 
+    // Validate EA tasks with extended status must have extended date
+    if (activeTab === "ea") {
+      const selectedArray = Array.from(selectedItems);
+      for (const id of selectedArray) {
+        if (statusData[id] === "extended" && !extendedDateData[id]) {
+          alert("Please provide an Extended Date for tasks with 'Extend' status");
+          return;
+        }
+      }
+    }
+
     setIsSubmitting(true);
     setSuccessMessage("");
 
     try {
-      const tableName = activeTab === "checklist" ? "checklist" : activeTab === "maintenance" ? "maintenance_tasks" : "repair_tasks";
+      const tableName = activeTab === "checklist" ? "checklist" :
+        activeTab === "maintenance" ? "maintenance_tasks" :
+          activeTab === "ea" ? "ea_tasks" :
+            "repair_tasks";
       const completionField = "submission_date";
 
       const selectedArray = Array.from(selectedItems);
@@ -536,18 +569,59 @@ const AllTasks = () => {
         const remarksField = activeTab === "checklist" ? "remark" : "remarks";
         const imageField = activeTab === "checklist" ? "image" : (activeTab === "maintenance" ? "uploaded_image_url" : "image_url");
 
-        const updates = {
-          [completionField]: new Date().toISOString(),
-          [remarksField]: remarksData[id] || null,
-          status: statusData[id] || (activeTab === "checklist" ? "yes" : "Done")
-        };
+        // Handle EA tasks differently
+        if (activeTab === "ea") {
+          const originalTask = tasks.find(t => t.task_id === id);
+          const taskStatus = statusData[id] || "done";
 
-        if (imageUrl) {
-          updates[imageField] = imageUrl;
+          // Insert into ea_tasks_done for history
+          const { error: doneError } = await supabase.from("ea_tasks_done").insert([{
+            task_id: id,
+            doer_name: originalTask.doer_name,
+            phone_number: originalTask.phone_number,
+            planned_date: originalTask.planned_date,
+            task_description: originalTask.task_description,
+            status: taskStatus,
+            remarks: remarksData[id] || null,
+            given_by: originalTask.given_by,
+            extended_date: taskStatus === "extended" ? extendedDateData[id] : null
+          }]);
+
+          if (doneError) throw doneError;
+
+          // Update main task
+          if (taskStatus === "extended" && extendedDateData[id]) {
+            // If extended, update planned_date and keep status as pending
+            const { error: updateError } = await supabase.from(tableName).update({
+              planned_date: new Date(extendedDateData[id]).toISOString(),
+              extended_date: new Date(extendedDateData[id]).toISOString(),
+              status: "pending",
+              updated_at: new Date().toISOString()
+            }).eq("task_id", id);
+            if (updateError) throw updateError;
+          } else {
+            // If done, mark as done
+            const { error: updateError } = await supabase.from(tableName).update({
+              status: "done",
+              updated_at: new Date().toISOString()
+            }).eq("task_id", id);
+            if (updateError) throw updateError;
+          }
+        } else {
+          // Original logic for other task types
+          const updates = {
+            [completionField]: new Date().toISOString(),
+            [remarksField]: remarksData[id] || null,
+            status: statusData[id] || (activeTab === "checklist" ? "yes" : "Done")
+          };
+
+          if (imageUrl) {
+            updates[imageField] = imageUrl;
+          }
+
+          const { error: updateError } = await supabase.from(tableName).update(updates).eq("task_id", id);
+          if (updateError) throw updateError;
         }
-
-        const { error: updateError } = await supabase.from(tableName).update(updates).eq("task_id", id);
-        if (updateError) throw updateError;
 
         // --- Handle Recurring Task Regeneration ---
         const originalTask = tasks.find(t => t.task_id === id);
@@ -606,6 +680,7 @@ const AllTasks = () => {
       setRemarksData({});
       setUploadedImages({});
       setStatusData({});
+      setExtendedDateData({});
       fetchData();
     } catch (err) {
       console.error("Submission error:", err);
@@ -620,6 +695,7 @@ const AllTasks = () => {
     { id: "checklist", label: "Checklist", icon: ClipboardList },
     { id: "maintenance", label: "Maintenance", icon: Wrench },
     { id: "repair", label: "Repair", icon: Hammer },
+    { id: "ea", label: "EA Tasks", icon: Users },
   ];
 
   return (
@@ -799,7 +875,10 @@ const AllTasks = () => {
                         {header.label}
                       </th>
                     ))}
-                    {!showHistory && activeTab !== "repair" && (
+                    {!showHistory && activeTab === "ea" && (
+                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Extended Date</th>
+                    )}
+                    {!showHistory && activeTab !== "repair" && activeTab !== "ea" && (
                       <>
                         <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
                         <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Image</th>
@@ -871,7 +950,7 @@ const AllTasks = () => {
                                       )
                                       : formatDateWithTime(task[header.id])
                                     : header.id === "status"
-                                      ? !showHistory && (activeTab === "maintenance" || activeTab === "checklist")
+                                      ? !showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea")
                                         ? (
                                           <select
                                             value={statusData[task.task_id] || ""}
@@ -881,11 +960,20 @@ const AllTasks = () => {
                                             style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
                                           >
                                             <option value="">Select Status</option>
-                                            <option value={activeTab === 'checklist' ? 'yes' : 'Done'}>Done</option>
-                                            <option value={activeTab === 'checklist' ? 'no' : 'Not Done'}>Not Done</option>
+                                            {activeTab === "ea" ? (
+                                              <>
+                                                <option value="done">Done</option>
+                                                <option value="extended">Extend</option>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <option value={activeTab === 'checklist' ? 'yes' : 'Done'}>Done</option>
+                                                <option value={activeTab === 'checklist' ? 'no' : 'Not Done'}>Not Done</option>
+                                              </>
+                                            )}
                                           </select>
                                         )
-                                        : <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task[header.id] === "Done" || task[header.id] === "yes" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>
+                                        : <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" ? "bg-green-100 text-green-800" : task[header.id] === "extended" ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-800"}`}>
                                           {task[header.id]}
                                         </span>
                                       : (header.id === "enable_reminders" || header.id === "require_attachment" || header.id === "enable_reminder")
@@ -895,7 +983,19 @@ const AllTasks = () => {
                                           : task[header.id] || "—"}
                               </td>
                             ))}
-                            {!showHistory && (
+                            {!showHistory && activeTab === "ea" && (
+                              <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                <input
+                                  type="date"
+                                  placeholder="Extended Date"
+                                  value={extendedDateData[task.task_id] || ""}
+                                  onChange={(e) => setExtendedDateData((prev) => ({ ...prev, [task.task_id]: e.target.value }))}
+                                  className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
+                                  disabled={!selectedItems.has(task.task_id) || statusData[task.task_id] !== 'extended'}
+                                />
+                              </td>
+                            )}
+                            {!showHistory && activeTab !== "ea" && (
                               <>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
                                   <input
