@@ -92,8 +92,18 @@ export const fetchDashboardDataApi = async (
       throw error;
     }
 
-    console.log(`Fetched ${data?.length || 0} records for ${taskView} view`);
-    return data || [];
+    // Filter out holidays from the results
+    const { data: holidays } = await supabase.from('holidays').select('holiday_date');
+    const holidayDates = holidays ? holidays.map(h => h.holiday_date) : [];
+
+    const filteredData = (data || []).filter(task => {
+      if (!task.task_start_date) return true;
+      const dateStr = task.task_start_date.split('T')[0];
+      return !holidayDates.includes(dateStr);
+    });
+
+    console.log(`Fetched ${filteredData.length} records for ${taskView} view (after holiday filter)`);
+    return filteredData;
 
   } catch (error) {
     console.error("Error from Supabase:", error);

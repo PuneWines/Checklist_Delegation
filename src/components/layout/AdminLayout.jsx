@@ -26,7 +26,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isDataSubmenuOpen, setIsDataSubmenuOpen] = useState(false);
+  const [isHolidaySubmenuOpen, setIsHolidaySubmenuOpen] = useState(false);
   const [username, setUsername] = useState("");
   const [userRole, setUserRole] = useState("");
   const [userEmail, setUserEmail] = useState("");
@@ -53,6 +53,13 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     // Check if this is the super admin (username = 'admin')
     setIsSuperAdmin(storedUsername === "admin");
   }, [navigate]);
+
+  // Set initial submenu state based on current location
+  useEffect(() => {
+    if (location.pathname.includes("/dashboard/holiday") || location.pathname.includes("/dashboard/working-day")) {
+      setIsHolidaySubmenuOpen(true);
+    }
+  }, [location.pathname]);
 
   // Handle logout
   const handleLogout = () => {
@@ -110,6 +117,29 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       active: location.pathname === "/dashboard/calendar",
       showFor: ["admin", "user"],
     },
+    {
+      label: "Holiday",
+      icon: CalendarIcon, // Or a specific holiday icon
+      showFor: ["admin", "user"],
+      isSubmenu: true,
+      isOpen: isHolidaySubmenuOpen,
+      setIsOpen: setIsHolidaySubmenuOpen,
+      active: location.pathname.includes("/dashboard/holiday") || location.pathname.includes("/dashboard/working-day"),
+      subItems: [
+        {
+          href: "/dashboard/holiday-list",
+          label: "Holiday List",
+          active: location.pathname === "/dashboard/holiday-list",
+          showFor: ["admin"], // Holiday management for admin
+        },
+        {
+          href: "/dashboard/working-day-calendar",
+          label: "Working Day Calendar",
+          active: location.pathname === "/dashboard/working-day-calendar",
+          showFor: ["admin", "user"],
+        }
+      ]
+    },
     // {
     //   href: "/dashboard/mis-report",
     //   label: "MIS Report",
@@ -135,7 +165,18 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
   // Filter routes based on user role and super admin status
   const getAccessibleRoutes = () => {
     const userRole = localStorage.getItem("role") || "user";
-    return routes.filter((route) => route.showFor.includes(userRole));
+    return routes
+      .filter((route) => route.showFor.includes(userRole))
+      .map(route => {
+        if (route.subItems) {
+          return {
+            ...route,
+            subItems: route.subItems.filter(sub => sub.showFor.includes(userRole))
+          };
+        }
+        return route;
+      })
+      .filter(route => !route.isSubmenu || (route.subItems && route.subItems.length > 0));
   };
 
   // Submenu logic removed
@@ -167,19 +208,60 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
           <ul className="space-y-1">
             {accessibleRoutes.map((route) => (
               <li key={route.label}>
-                <Link
-                  to={route.href}
-                  className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${route.active
-                    ? "bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700"
-                    : "text-gray-700 hover:bg-blue-50"
-                    }`}
-                >
-                  <route.icon
-                    className={`h-4 w-4 ${route.active ? "text-blue-600" : ""
+                {route.isSubmenu ? (
+                  <div className="flex flex-col">
+                    <button
+                      onClick={() => route.setIsOpen(!route.isOpen)}
+                      className={`flex items-center justify-between w-full rounded-md px-3 py-2 text-sm font-medium transition-colors ${route.active
+                        ? "bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700"
+                        : "text-gray-700 hover:bg-blue-50"
+                        }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <route.icon
+                          className={`h-4 w-4 ${route.active ? "text-blue-600" : ""}`}
+                        />
+                        {route.label}
+                      </div>
+                      {route.isOpen ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </button>
+                    {route.isOpen && (
+                      <ul className="mt-1 ml-4 space-y-1 border-l-2 border-blue-50 pl-2">
+                        {route.subItems.map((sub) => (
+                          <li key={sub.label}>
+                            <Link
+                              to={sub.href}
+                              className={`flex items-center gap-3 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${sub.active
+                                ? "text-blue-700 bg-blue-50"
+                                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                                }`}
+                            >
+                              {sub.label}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : (
+                  <Link
+                    to={route.href}
+                    className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${route.active
+                      ? "bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700"
+                      : "text-gray-700 hover:bg-blue-50"
                       }`}
-                  />
-                  {route.label}
-                </Link>
+                  >
+                    <route.icon
+                      className={`h-4 w-4 ${route.active ? "text-blue-600" : ""
+                        }`}
+                    />
+                    {route.label}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
@@ -298,20 +380,62 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
               <ul className="space-y-1">
                 {accessibleRoutes.map((route) => (
                   <li key={route.label}>
-                    <Link
-                      to={route.href}
-                      className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${route.active
-                        ? "bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700"
-                        : "text-gray-700 hover:bg-blue-50"
-                        }`}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <route.icon
-                        className={`h-4 w-4 ${route.active ? "text-blue-600" : ""
+                    {route.isSubmenu ? (
+                      <div className="flex flex-col">
+                        <button
+                          onClick={() => route.setIsOpen(!route.isOpen)}
+                          className={`flex items-center justify-between w-full rounded-md px-3 py-2 text-sm font-medium transition-colors ${route.active
+                            ? "bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700"
+                            : "text-gray-700 hover:bg-blue-50"
+                            }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <route.icon
+                              className={`h-4 w-4 ${route.active ? "text-blue-600" : ""}`}
+                            />
+                            {route.label}
+                          </div>
+                          {route.isOpen ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </button>
+                        {route.isOpen && (
+                          <ul className="mt-1 ml-4 space-y-1 border-l-2 border-blue-50 pl-2">
+                            {route.subItems.map((sub) => (
+                              <li key={sub.label}>
+                                <Link
+                                  to={sub.href}
+                                  className={`flex items-center gap-3 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${sub.active
+                                    ? "text-blue-700 bg-blue-50"
+                                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                                    }`}
+                                  onClick={() => setIsMobileMenuOpen(false)}
+                                >
+                                  {sub.label}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ) : (
+                      <Link
+                        to={route.href}
+                        className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${route.active
+                          ? "bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700"
+                          : "text-gray-700 hover:bg-blue-50"
                           }`}
-                      />
-                      {route.label}
-                    </Link>
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <route.icon
+                          className={`h-4 w-4 ${route.active ? "text-blue-600" : ""
+                            }`}
+                        />
+                        {route.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>

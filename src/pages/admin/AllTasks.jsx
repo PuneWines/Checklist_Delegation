@@ -56,6 +56,21 @@ const AllTasks = () => {
   const [userRole, setUserRole] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [holidaysList, setHolidaysList] = useState([]);
+
+  // Fetch holidays on mount
+  useEffect(() => {
+    const fetchHolidays = async () => {
+      try {
+        const { data, error } = await supabase.from('holidays').select('holiday_date');
+        if (error) throw error;
+        if (data) setHolidaysList(data.map(h => h.holiday_date));
+      } catch (err) {
+        console.error("Error fetching holidays:", err);
+      }
+    };
+    fetchHolidays();
+  }, []);
 
 
   // Check user credentials
@@ -124,6 +139,11 @@ const AllTasks = () => {
     let date = new Date(currentDateStr);
     if (isNaN(date.getTime())) return null;
 
+    const isHoliday = (d) => {
+      const dateStr = d.toISOString().split('T')[0];
+      return holidaysList.includes(dateStr);
+    };
+
     const freqLower = frequency.toLowerCase();
 
     switch (freqLower) {
@@ -147,6 +167,15 @@ const AllTasks = () => {
         break;
       default:
         return null;
+    }
+
+    // Skip holidays for daily, weekly, monthly tasks
+    if (['daily', 'weekly', 'monthly', 'quarterly', 'half-yearly', 'yearly'].includes(freqLower)) {
+      let attempts = 0;
+      while (isHoliday(date) && attempts < 365) {
+        date.setDate(date.getDate() + 1);
+        attempts++;
+      }
     }
 
     return date.toISOString();
@@ -299,6 +328,18 @@ const AllTasks = () => {
 
       if (!matchesSearch) return false;
 
+      // Filter to only show tasks for today or overdue (past)
+      // This addresses the user request to NOT show tomorrow's tasks
+      if (activeTab === "checklist" || activeTab === "maintenance") {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const taskDate = task[dateColumn] ? new Date(task[dateColumn]) : null;
+        if (taskDate) {
+          taskDate.setHours(0, 0, 0, 0);
+          if (taskDate > today) return false; // Hide future tasks
+        }
+      }
+
       // Deduplication logic for checklist tasks
       if (activeTab === "checklist") {
         const key = `${task.task_description}-${task.name}`;
@@ -308,7 +349,7 @@ const AllTasks = () => {
 
       return true;
     });
-  }, [tasks, searchTerm, activeTab]);
+  }, [tasks, searchTerm, activeTab, holidaysList]);
 
   const filteredHistoryTasks = useMemo(() => {
     const completionField = "submission_date";
