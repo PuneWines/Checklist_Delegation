@@ -44,7 +44,7 @@ export default function MaintenanceTask() {
         startDate: "",
         startTime: "09:00",
         frequency: "daily",
-        enableReminder: false,
+        enableReminder: true,
         requireAttachment: false
     });
 
@@ -141,12 +141,8 @@ export default function MaintenanceTask() {
             }
 
             if (freq === 'one-time') {
-                const timestamp = Date.now();
-                const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-                const taskId = `MNT-${timestamp}-${randomSuffix}`;
-
+                // tasks.push({ ... }) removed task_id
                 tasks.push({
-                    task_id: taskId,
                     department: formData.department,
                     name: formData.doerName,
                     given_by: formData.givenBy,
@@ -174,14 +170,7 @@ export default function MaintenanceTask() {
                 };
 
                 const addTask = (date) => {
-                    const timestamp = Date.now();
-                    const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-                    // Use a deterministic counter or just random ID. The original had a counter.
-                    // We'll generate a unique ID here.
-                    const taskId = `MNT-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-
                     tasks.push({
-                        task_id: taskId,
                         department: formData.department,
                         name: formData.doerName,
                         given_by: formData.givenBy,

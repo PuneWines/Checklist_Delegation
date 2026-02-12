@@ -401,7 +401,7 @@ function DelegationDataPage() {
       const checked = e.target.checked;
 
       if (checked) {
-        const allIds = delegation.map((item) => item.task_id);
+        const allIds = delegation.map((item) => item.id);
         setSelectedItems(new Set(allIds));
 
         const newStatusData = {};
@@ -486,7 +486,7 @@ function DelegationDataPage() {
     }
 
     const missingRequiredImages = selectedItemsArray.filter((id) => {
-      const item = delegation.find((account) => account.task_id === id);
+      const item = delegation.find((account) => account.id === id);
       const requiresAttachment =
         item.require_attachment &&
         item.require_attachment.toUpperCase() === "YES";
@@ -541,14 +541,14 @@ function DelegationDataPage() {
 
     try {
       const selectedData = selectedItemsArray.map((id) => {
-        const item = delegation.find((account) => account.task_id === id);
+        const item = delegation.find((account) => account.id === id);
 
         const dbStatus = statusData[id] === "Done" ? "done" :
           statusData[id] === "Extend date" ? "extend" :
             statusData[id];
 
         return {
-          task_id: item.task_id,
+          id: item.id,
           department: item.department || '',
           given_by: item.given_by || '',
           name: item.name,
@@ -803,11 +803,11 @@ function DelegationDataPage() {
                       <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         Task ID
                       </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Timestamp
-                      </th>
                       <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
                         Task
+                      </th>
+                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Timestamp
                       </th>
                       <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         Status
@@ -837,13 +837,7 @@ function DelegationDataPage() {
                         <tr key={index} className="hover:bg-gray-50">
                           <td className="px-3 sm:px-6 py-2 sm:py-4">
                             <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {history.task_id || "—"}
-                            </div>
-                          </td>
-                          <td className="px-3 sm:px-6 py-2 sm:py-4">
-                            <div className="text-xs sm:text-sm font-medium text-gray-900 whitespace-normal break-words">
-                              {formatDateTimeForDisplay(history.created_at) ||
-                                "—"}
+                              {history.id || "—"}
                             </div>
                           </td>
                           <td className="px-3 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
@@ -852,6 +846,12 @@ function DelegationDataPage() {
                               title={history.task_description}
                             >
                               {history.task_description || "—"}
+                            </div>
+                          </td>
+                          <td className="px-3 sm:px-6 py-2 sm:py-4">
+                            <div className="text-xs sm:text-sm font-medium text-gray-900 whitespace-normal break-words">
+                              {formatDateTimeForDisplay(history.created_at) ||
+                                "—"}
                             </div>
                           </td>
                           <td className="px-3 sm:px-6 py-2 sm:py-4">
@@ -957,6 +957,9 @@ function DelegationDataPage() {
                     <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       Task ID
                     </th>
+                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
+                      Task Description
+                    </th>
                     <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       Department
                     </th>
@@ -965,9 +968,6 @@ function DelegationDataPage() {
                     </th>
                     <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       Name
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
-                      Task Description
                     </th>
                     <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-yellow-50">
                       Start Date
@@ -992,7 +992,7 @@ function DelegationDataPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredDelegationTasks.length > 0 ? (
                     filteredDelegationTasks.map((account, index) => {
-                      const isSelected = selectedItems.has(account.task_id);
+                      const isSelected = selectedItems.has(account.id);
                       const rowColorClass = getRowColor(account.color_code_for);
                       const sequenceNumber = index + 1;
                       return (
@@ -1007,13 +1007,21 @@ function DelegationDataPage() {
                               className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                               checked={isSelected}
                               onChange={(e) =>
-                                handleCheckboxClick(e, account.task_id)
+                                handleCheckboxClick(e, account.id)
                               }
                             />
                           </td>
                           <td className="px-2 sm:px-6 py-2 sm:py-4">
                             <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {account.task_id || "—"}
+                              {account.id || "—"}
+                            </div>
+                          </td>
+                          <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
+                            <div
+                              className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
+                              title={account.task_description}
+                            >
+                              {account.task_description || "—"}
                             </div>
                           </td>
                           <td className="px-2 sm:px-6 py-2 sm:py-4">
@@ -1031,14 +1039,6 @@ function DelegationDataPage() {
                               {account.name || "—"}
                             </div>
                           </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
-                            <div
-                              className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
-                              title={account.task_description}
-                            >
-                              {account.task_description || "—"}
-                            </div>
-                          </td>
                           <td className="px-2 sm:px-6 py-2 sm:py-4 bg-yellow-50">
                             <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
                               {formatDateTimeForDisplay(
@@ -1054,10 +1054,10 @@ function DelegationDataPage() {
                           <td className="px-2 sm:px-6 py-2 sm:py-4 bg-blue-50">
                             <select
                               disabled={!isSelected}
-                              value={statusData[account.task_id] || ""}
+                              value={statusData[account.id] || ""}
                               onChange={(e) =>
                                 handleStatusChange(
-                                  account.task_id,
+                                  account.id,
                                   e.target.value
                                 )
                               }
@@ -1073,12 +1073,12 @@ function DelegationDataPage() {
                               type="date"
                               disabled={
                                 !isSelected ||
-                                statusData[account.task_id] !== "Extend date"
+                                statusData[account.id] !== "Extend date"
                               }
-                              value={nextTargetDate[account.task_id] || ""}
+                              value={nextTargetDate[account.id] || ""}
                               onChange={(e) => {
                                 handleNextTargetDateChange(
-                                  account.task_id,
+                                  account.id,
                                   e.target.value
                                 );
                               }}
@@ -1089,11 +1089,11 @@ function DelegationDataPage() {
                             <textarea
                               placeholder="Enter remarks"
                               disabled={!isSelected}
-                              value={remarksData[account.task_id] || ""}
+                              value={remarksData[account.id] || ""}
                               onChange={(e) =>
                                 setRemarksData((prev) => ({
                                   ...prev,
-                                  [account.task_id]: e.target.value,
+                                  [account.id]: e.target.value,
                                 }))
                               }
                               className="border rounded-md px-2 py-1 w-full border-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm resize-none whitespace-normal"
@@ -1101,18 +1101,18 @@ function DelegationDataPage() {
                             />
                           </td>
                           <td className="px-2 sm:px-6 py-2 sm:py-4 bg-orange-50">
-                            {uploadedImages[account.task_id] ? (
+                            {uploadedImages[account.id] ? (
                               <div className="flex items-center">
                                 <img
                                   src={URL.createObjectURL(
-                                    uploadedImages[account.task_id]
+                                    uploadedImages[account.id]
                                   )}
                                   alt="Receipt"
                                   className="h-8 w-8 sm:h-10 sm:w-10 object-cover rounded-md mr-2 flex-shrink-0"
                                 />
                                 <div className="flex flex-col min-w-0">
                                   <span className="text-xs text-gray-500 whitespace-normal break-words">
-                                    {uploadedImages[account.task_id].name}
+                                    {uploadedImages[account.id].name}
                                   </span>
                                   <span className="text-xs text-green-600">
                                     Ready
@@ -1142,7 +1142,7 @@ function DelegationDataPage() {
                               </div>
                             ) : (
                               <label
-                                htmlFor={`file-upload-${account.task_id}`}
+                                htmlFor={`file-upload-${account.id}`}
                                 className={`flex items-center cursor-pointer ${account.require_attachment?.toUpperCase() ===
                                   "YES"
                                   ? "text-red-600 font-medium"
@@ -1161,10 +1161,10 @@ function DelegationDataPage() {
                                   className="hidden"
                                   accept="image/*"
                                   onChange={(e) =>
-                                    handleImageUpload(account.task_id, e)
+                                    handleImageUpload(account.id, e)
                                   }
                                   disabled={!isSelected}
-                                  id={`file-upload-${account.task_id}`}
+                                  id={`file-upload-${account.id}`}
                                 />
                               </label>
                             )}

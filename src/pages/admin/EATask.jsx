@@ -1,14 +1,21 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { Users, Phone, Calendar, FileText, Save, ArrowLeft, Loader2 } from "lucide-react";
+import { Users, Phone, Calendar, FileText, Save, ArrowLeft, Loader2, Mic, Square, Trash2 } from "lucide-react";
+import { ReactMediaRecorder } from "react-media-recorder";
 import supabase from "../../SupabaseClient";
 import { useDispatch, useSelector } from "react-redux";
 import { userDetails } from "../../redux/slice/settingSlice";
 import CalendarComponent from "../../components/CalendarComponent";
 
 const formatDateLong = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
-const formatDateISO = (date) => date ? date.toISOString().split('T')[0] : "";
+const formatDateISO = (date) => {
+    if (!date) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 export default function EATask() {
     const navigate = useNavigate();
@@ -24,6 +31,7 @@ export default function EATask() {
         task_description: ""
     });
     const [showCalendar, setShowCalendar] = useState(false);
+    const [recordedAudio, setRecordedAudio] = useState(null);
 
     // Autocomplete states
     const [doerSuggestions, setDoerSuggestions] = useState([]);
@@ -133,14 +141,44 @@ export default function EATask() {
         e.preventDefault();
 
         // Validation
-        if (!formData.doer_name || !formData.planned_date || !formData.task_description) {
-            alert("Please fill in all required fields");
+        if (!formData.doer_name || !formData.planned_date || (!formData.task_description && !recordedAudio)) {
+            alert("Please fill in all required fields (Including Task Description or Voice Note)");
             return;
         }
 
         setIsSubmitting(true);
 
         try {
+            let audioUrl = "";
+            let descriptionWrapper = (desc) => desc;
+
+            // Upload audio if exists
+            if (recordedAudio && recordedAudio.blob) {
+                try {
+                    const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
+                    const { data: uploadData, error: uploadError } = await supabase.storage
+                        .from('audio-recordings')
+                        .upload(fileName, recordedAudio.blob, {
+                            contentType: recordedAudio.blob.type || 'audio/webm',
+                            upsert: false
+                        });
+
+                    if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
+
+                    const { data: publicUrlData } = supabase.storage
+                        .from('audio-recordings')
+                        .getPublicUrl(fileName);
+
+                    audioUrl = publicUrlData.publicUrl;
+                    descriptionWrapper = (desc) => audioUrl; // Store ONLY the URL if voice note exists
+                } catch (audioErr) {
+                    console.error(audioErr);
+                    alert(`Failed to upload audio: ${audioErr.message}`);
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+
             const givenBy = localStorage.getItem("user-name") || "Admin";
             const tasksToInsert = [];
 
@@ -155,7 +193,7 @@ export default function EATask() {
                 doer_name: formData.doer_name,
                 phone_number: formData.phone_number,
                 planned_date: startDate.toISOString(),
-                task_description: formData.task_description,
+                task_description: descriptionWrapper(formData.task_description),
                 status: 'pending',
                 given_by: givenBy
             });
@@ -176,6 +214,7 @@ export default function EATask() {
                 planned_time: "09:00",
                 task_description: ""
             });
+            setRecordedAudio(null);
 
             // Refresh doers list
             fetchUniqueDoers();
@@ -343,19 +382,84 @@ export default function EATask() {
 
                         </div>
 
-                        {/* Task Description */}
+                        {/* Task Description & Audio Recording */}
                         <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                Task Description <span className="text-red-500">*</span>
-                            </label>
-                            <textarea
-                                name="task_description"
-                                value={formData.task_description}
-                                onChange={handleInputChange}
-                                required
-                                rows="5"
-                                placeholder="Describe the task instructions in detail..."
-                                className="w-full p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none resize-none bg-gray-50 focus:bg-white transition-all text-sm font-medium"
+                            <ReactMediaRecorder
+                                audio
+                                onStop={(blobUrl, blob) => {
+                                    setRecordedAudio({ blobUrl, blob });
+                                }}
+                                render={({ status, startRecording, stopRecording, mediaBlobUrl, clearBlobUrl }) => (
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-semibold text-gray-700">
+                                            Task Description <span className="text-red-500">*</span>
+                                        </label>
+
+                                        {/* Default View: Input with Mic */}
+                                        {status !== 'recording' && !recordedAudio && (
+                                            <div className="relative">
+                                                <textarea
+                                                    name="task_description"
+                                                    value={formData.task_description}
+                                                    onChange={handleInputChange}
+                                                    rows="5"
+                                                    placeholder="Describe the task instructions in detail..."
+                                                    className="w-full p-4 pr-12 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none resize-none bg-gray-50 focus:bg-white transition-all text-sm font-medium"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={startRecording}
+                                                    className="absolute bottom-3 right-3 p-2 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all shadow-sm group"
+                                                    title="Record Voice Note"
+                                                >
+                                                    <Mic className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Recording View */}
+                                        {status === 'recording' && (
+                                            <div className="flex flex-col items-center justify-center p-8 bg-red-50 border border-red-100 rounded-xl space-y-4 animate-pulse">
+                                                <div className="p-4 bg-red-100 rounded-full shadow-inner">
+                                                    <Mic className="w-8 h-8 text-red-600" />
+                                                </div>
+                                                <p className="text-red-600 font-bold text-lg">Recording Voice Note...</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={stopRecording}
+                                                    className="flex items-center gap-2 px-6 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors font-bold shadow-lg"
+                                                >
+                                                    <Square className="w-4 h-4" /> Stop Recording
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Recorded View (Player) */}
+                                        {recordedAudio && status !== 'recording' && (
+                                            <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">Voice Note Attached</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            clearBlobUrl();
+                                                            setRecordedAudio(null);
+                                                        }}
+                                                        className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-bold"
+                                                    >
+                                                        <Trash2 className="w-3 h-3" /> Remove
+                                                    </button>
+                                                </div>
+                                                <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-purple-100 shadow-sm">
+                                                    <audio src={recordedAudio.blobUrl} controls className="w-full h-8" />
+                                                </div>
+                                                <p className="text-xs text-center text-gray-500 mt-2">
+                                                    Note: Task description hidden while voice note is attached.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             />
                         </div>
 

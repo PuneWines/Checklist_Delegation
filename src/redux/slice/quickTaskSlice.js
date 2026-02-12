@@ -154,7 +154,7 @@ const quickTaskSlice = createSlice({
       .addCase(deleteChecklistTask.fulfilled, (state, action) => {
         state.loading = false;
         state.quickTask = state.quickTask.filter(
-          task => !action.payload.includes(task.task_id)
+          task => !action.payload.includes(task.id)
         );
       })
       .addCase(deleteChecklistTask.rejected, (state, action) => {
@@ -168,7 +168,7 @@ const quickTaskSlice = createSlice({
       .addCase(deleteDelegationTask.fulfilled, (state, action) => {
         state.loading = false;
         state.delegationTasks = state.delegationTasks.filter(
-          task => !action.payload.includes(task.task_id)
+          task => !action.payload.includes(task.id)
         );
       })
       .addCase(deleteDelegationTask.rejected, (state, action) => {
@@ -200,7 +200,7 @@ const quickTaskSlice = createSlice({
         // Update all matching tasks in the state
         if (Array.isArray(updatedTasks)) {
           updatedTasks.forEach(updatedTask => {
-            const index = state.quickTask.findIndex(task => task.task_id === updatedTask.task_id);
+            const index = state.quickTask.findIndex(task => task.id === updatedTask.id);
             if (index !== -1) {
               state.quickTask[index] = updatedTask;
             }

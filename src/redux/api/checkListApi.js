@@ -52,7 +52,8 @@ export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchT
     }
 
     console.log("Fetched successfully", data);
-    return { data, totalCount: count };
+    const mappedData = (data || []).map(row => ({ ...row, id: row.task_id }));
+    return { data: mappedData, totalCount: count };
 
   } catch (error) {
     console.log("Error from Supabase", error);
@@ -101,7 +102,7 @@ export const fetchChechListDataForHistory = async (page = 1, searchTerm = '') =>
     }
 
     console.log("Fetched successfully", data);
-    return data;
+    return (data || []).map(row => ({ ...row, id: row.task_id }));
 
   } catch (error) {
     console.log("Error from Supabase", error);
@@ -162,7 +163,7 @@ export const updateChecklistData = async (submissionData) => {
 
       // Prepare update object
       return {
-        task_id: item.taskId,
+        task_id: item.taskId || item.id,
         status: item.status?.toLowerCase(), // Convert to lowercase for DB enum
         remark: item.remarks,
         submission_date: new Date().toISOString(),
@@ -204,7 +205,7 @@ export const postChecklistAdminDoneAPI = async (selectedHistoryItems) => {
 
     // Prepare the updates
     const updates = selectedHistoryItems.map(item => ({
-      task_id: item.task_id, // Assuming each item has an 'id' field
+      task_id: item.id || item.task_id, // Assuming each item has an 'id' or 'task_id' field
       admin_done: "Done",
       // You can add other fields to update if needed
     }));

@@ -3,7 +3,52 @@ import { useState, useEffect, useMemo } from "react"
 import AdminLayout from "../../components/layout/AdminLayout"
 import { useDispatch, useSelector } from "react-redux"
 import { maintenanceData, maintenanceHistoryData, updateMaintenance } from "../../redux/slice/maintenanceSlice"
-import { Search, History, ArrowLeft, CheckCircle2, X, Upload, Save, Loader2 } from "lucide-react"
+import { Search, History, ArrowLeft, CheckCircle2, X, Upload, Save, Loader2, Play, Pause } from "lucide-react"
+import { useRef } from "react"
+
+const isAudioUrl = (url) => {
+    if (typeof url !== 'string') return false;
+    return url.startsWith('http') && (
+        url.includes('audio-recordings') ||
+        url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
+    );
+};
+
+const AudioPlayer = ({ url }) => {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const audioRef = useRef(null);
+
+    const togglePlay = () => {
+        if (isPlaying) {
+            audioRef.current.pause();
+        } else {
+            audioRef.current.play();
+        }
+        setIsPlaying(!isPlaying);
+    };
+
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        const handleEnded = () => setIsPlaying(false);
+        audio.addEventListener('ended', handleEnded);
+        return () => audio.removeEventListener('ended', handleEnded);
+    }, []);
+
+    return (
+        <div className="flex items-center gap-2">
+            <button
+                onClick={togglePlay}
+                className="p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-colors shadow-sm"
+            >
+                {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+            </button>
+            <span className="text-xs font-medium text-purple-700">Voice Note</span>
+            <audio ref={audioRef} src={url} className="hidden" />
+        </div>
+    );
+};
 
 export default function MaintenanceDataPage({ showLayout = true }) {
     const [searchTerm, setSearchTerm] = useState("")
@@ -49,7 +94,7 @@ export default function MaintenanceDataPage({ showLayout = true }) {
 
     const handleSelectAll = (e) => {
         if (e.target.checked) {
-            const allIds = filteredData.map(item => item.task_id);
+            const allIds = filteredData.map(item => item.id);
             setSelectedItems(new Set(allIds));
         } else {
             setSelectedItems(new Set());
@@ -68,10 +113,10 @@ export default function MaintenanceDataPage({ showLayout = true }) {
         setIsSubmitting(true)
         try {
             const submissionData = selectedIds.map(id => {
-                const item = maintenance.find(t => t.task_id === id)
+                const item = maintenance.find(t => t.id === id)
                 const img = uploadedImages[id]
                 return {
-                    taskId: item.task_id,
+                    taskId: item.id,
                     status: additionalData[id] === 'yes' ? 'Done' : 'Issue',
                     remarks: remarksData[id] || (additionalData[id] === 'no' ? 'Issue reported' : ''),
                     image: img ? { name: img.file.name, type: img.file.type, previewUrl: img.previewUrl } : null
@@ -184,26 +229,26 @@ export default function MaintenanceDataPage({ showLayout = true }) {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">
                             {filteredData.map((item, idx) => {
-                                const isSelected = selectedItems.has(item.task_id);
+                                const isSelected = selectedItems.has(item.id);
                                 return (
-                                    <tr key={item.task_id || idx} className={`hover:bg-gray-50 transition-colors ${isSelected ? "bg-purple-50" : ""}`}>
+                                    <tr key={item.id || idx} className={`hover:bg-gray-50 transition-colors ${isSelected ? "bg-purple-50" : ""}`}>
                                         <td className="px-3 py-4 align-top w-10">
                                             {!showHistory && (
                                                 <input
                                                     type="checkbox"
                                                     checked={isSelected}
-                                                    onChange={(e) => handleCheckboxClick(e, item.task_id)}
+                                                    onChange={(e) => handleCheckboxClick(e, item.id)}
                                                     className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                                                 />
                                             )}
                                         </td>
-                                        <td className="px-3 py-4 text-sm font-medium text-gray-900 whitespace-nowrap align-top">#{item.task_id}</td>
+                                        <td className="px-3 py-4 text-sm font-medium text-gray-900 whitespace-nowrap align-top">#{item.id}</td>
                                         <td className="px-3 py-4 text-sm text-gray-600 whitespace-nowrap align-top">{item.machine_name || "-"}</td>
                                         <td className="px-3 py-4 text-sm text-gray-600 whitespace-nowrap align-top">{item.given_by || "-"}</td>
                                         <td className="px-3 py-4 text-sm text-gray-600 whitespace-nowrap align-top">{item.name || "-"}</td>
                                         <td className="px-3 py-4 text-sm text-gray-800 align-top min-w-[250px]">
                                             <div className="whitespace-normal break-words leading-relaxed">
-                                                {item.task_description}
+                                                {isAudioUrl(item.task_description) ? <AudioPlayer url={item.task_description} /> : item.task_description}
                                             </div>
                                         </td>
                                         <td className="px-3 py-4 text-sm text-gray-600 whitespace-nowrap align-top bg-yellow-50">
@@ -237,10 +282,10 @@ export default function MaintenanceDataPage({ showLayout = true }) {
                                             ) : (
                                                 <select
                                                     className={`w-full text-sm border rounded p-1.5 outline-none focus:border-gray-400 cursor-pointer
-                                                        ${additionalData[item.task_id] === 'yes' ? 'bg-green-50 border-green-300 text-green-700' :
-                                                            additionalData[item.task_id] === 'no' ? 'bg-red-50 border-red-300 text-red-700' : 'border-gray-300 text-gray-600'}`}
-                                                    value={additionalData[item.task_id] || ""}
-                                                    onChange={e => setAdditionalData(prev => ({ ...prev, [item.task_id]: e.target.value }))}
+                                                        ${additionalData[item.id] === 'yes' ? 'bg-green-50 border-green-300 text-green-700' :
+                                                            additionalData[item.id] === 'no' ? 'bg-red-50 border-red-300 text-red-700' : 'border-gray-300 text-gray-600'}`}
+                                                    value={additionalData[item.id] || ""}
+                                                    onChange={e => setAdditionalData(prev => ({ ...prev, [item.id]: e.target.value }))}
                                                     disabled={!isSelected}
                                                 >
                                                     <option value="">Select...</option>
@@ -253,14 +298,16 @@ export default function MaintenanceDataPage({ showLayout = true }) {
                                         {/* Remarks */}
                                         <td className="px-3 py-4 align-top">
                                             {showHistory ? (
-                                                <span className="text-sm text-gray-500 italic block min-w-[150px]">{item.remarks || "-"}</span>
+                                                <span className="text-sm text-gray-500 italic block min-w-[150px]">
+                                                    {isAudioUrl(item.remarks) ? <AudioPlayer url={item.remarks} /> : (item.remarks || "-")}
+                                                </span>
                                             ) : (
                                                 <textarea
                                                     rows={1}
                                                     className="w-full text-sm border border-gray-300 rounded p-1.5 focus:border-purple-500 outline-none resize-none overflow-hidden focus:ring-1 focus:ring-purple-200 transition-shadow"
                                                     placeholder="Add remarks..."
-                                                    value={remarksData[item.task_id] || ""}
-                                                    onChange={e => setRemarksData(prev => ({ ...prev, [item.task_id]: e.target.value }))}
+                                                    value={remarksData[item.id] || ""}
+                                                    onChange={e => setRemarksData(prev => ({ ...prev, [item.id]: e.target.value }))}
                                                     disabled={!isSelected}
                                                 />
                                             )}
@@ -278,12 +325,12 @@ export default function MaintenanceDataPage({ showLayout = true }) {
                                                 <div className="flex items-center gap-2">
                                                     <label className={`
                                                         cursor-pointer flex items-center justify-center p-1.5 rounded-md border transition-all duration-200
-                                                        ${uploadedImages[item.task_id] ? 'bg-green-50 border-green-300 text-green-700 shadow-sm' : 'border-gray-300 text-gray-500 hover:bg-gray-50 hover:border-purple-300 hover:text-purple-600'}
+                                                        ${uploadedImages[item.id] ? 'bg-green-50 border-green-300 text-green-700 shadow-sm' : 'border-gray-300 text-gray-500 hover:bg-gray-50 hover:border-purple-300 hover:text-purple-600'}
                                                     `}>
                                                         <Upload className="w-4 h-4" />
-                                                        <input type="file" className="hidden" onChange={e => handleImageUpload(item.task_id, e)} disabled={!isSelected} />
+                                                        <input type="file" className="hidden" onChange={e => handleImageUpload(item.id, e)} disabled={!isSelected} />
                                                     </label>
-                                                    {uploadedImages[item.task_id] && (
+                                                    {uploadedImages[item.id] && (
                                                         <span className="text-xs text-green-600 font-medium truncate max-w-[80px]">Attached</span>
                                                     )}
                                                 </div>

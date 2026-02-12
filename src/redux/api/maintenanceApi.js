@@ -19,7 +19,7 @@ export const fetchMaintenanceDataSortByDate = async (page = 1, limit = 50, searc
 
         if (searchTerm && searchTerm.trim() !== '') {
             const searchValue = searchTerm.trim();
-            query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
+            query = query.or(`name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
         }
 
         if (role === 'user' && username) {
@@ -64,7 +64,7 @@ export const fetchMaintenanceDataForHistory = async (page = 1, searchTerm = '') 
 
         if (searchTerm && searchTerm.trim() !== '') {
             const searchValue = searchTerm.trim();
-            query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
+            query = query.or(`name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
         }
 
         if (role === 'user' && username) {
@@ -118,7 +118,7 @@ export const fetchAllMaintenanceTasksForDashboard = async (page = 1, limit = 100
 
         console.log(`DEBUG: fetchAllMaintenanceTasksForDashboard Result: ${data?.length || 0} tasks found. Total count: ${count}`);
         if (data?.length > 0) {
-            console.log("DEBUG: Sample Task IDs:", data.slice(0, 3).map(t => t.task_id));
+            console.log("DEBUG: Sample Task IDs:", data.slice(0, 3).map(t => t.id));
         }
 
         return { data, totalCount: count };
@@ -160,7 +160,7 @@ export const updateMaintenanceData = async (submissionData) => {
             }
 
             return {
-                task_id: item.taskId,
+                id: item.taskId,
                 status: item.status, // 'Done' or 'Issue'
                 remarks: item.remarks, // Note: Schema might be 'remarks' or 'remark' - check assumption. Schema likely 'remarks' if copied from checklist pattern, or check previous code.
                 submission_date: new Date().toISOString(),
@@ -170,7 +170,7 @@ export const updateMaintenanceData = async (submissionData) => {
 
         const { data, error } = await supabase
             .from('maintenance_tasks')
-            .upsert(updates, { onConflict: ['task_id'] });
+            .upsert(updates, { onConflict: ['id'] });
 
         if (error) throw error;
         return data;
@@ -198,6 +198,22 @@ export const postMaintenanceTaskApi = async (taskData) => {
         return data;
     } catch (error) {
         console.error("Exception in postMaintenanceTaskApi:", error);
+        throw error;
+    }
+};
+
+export const deleteMaintenanceTasksApi = async (tasks) => {
+    try {
+        const ids = tasks.map(t => t.id || t.taskId);
+        const { data, error } = await supabase
+            .from('maintenance_tasks')
+            .delete()
+            .in('id', ids);
+
+        if (error) throw error;
+        return ids;
+    } catch (error) {
+        console.error("Error deleting maintenance tasks:", error);
         throw error;
     }
 };

@@ -88,7 +88,7 @@ export default function TaskNavigationTabs({
         }
 
         return {
-          id: task.task_id,
+          id: task.id,
           title: task.task_description,
           assignedTo: task.name || "Unassigned",
           taskStartDate: formatDateToDDMMYYYY(taskStartDate),

@@ -85,8 +85,8 @@ const repairSlice = createSlice({
             state.loading = false;
             // Optimistic update: Remove submitted items from 'repair' list
             if (Array.isArray(action.payload)) {
-                const updatedIds = action.payload.map(item => item.task_id);
-                state.repair = state.repair.filter(task => !updatedIds.includes(task.task_id));
+                const updatedIds = action.payload.map(item => item.id);
+                state.repair = state.repair.filter(task => !updatedIds.includes(task.id));
             }
         });
         builder.addCase(updateRepair.rejected, (state, action) => {

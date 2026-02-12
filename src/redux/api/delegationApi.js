@@ -14,7 +14,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
         try {
           // Step 1: Insert into delegation_done table
           const delegationDoneData = {
-            task_id: taskData.task_id,
+            task_id: taskData.id || taskData.task_id,
             status: taskData.status, // Should be 'done' or 'extend'
             next_extend_date: taskData.next_extend_date || null,
             reason: taskData.reason || '',
@@ -46,15 +46,15 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
 
           // Step 2: Handle image upload if exists
           let imageUrl = taskData.image_url;
-          const taskImage = uploadedImages[taskData.task_id];
+          const taskImage = uploadedImages[taskData.id];
 
           if (taskImage) {
             try {
-              console.log('Uploading image for task:', taskData.task_id);
+              console.log('Uploading image for task:', taskData.id);
 
               // Create a unique filename
               const timestamp = Date.now();
-              const fileName = `delegation_${taskData.task_id}_${timestamp}_${taskImage.name}`;
+              const fileName = `delegation_${taskData.id}_${timestamp}_${taskImage.name}`;
 
               // Upload to Supabase storage
               const { data: uploadData, error: uploadError } = await supabase.storage
@@ -116,7 +116,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
           const { data: updateData, error: updateError } = await supabase
             .from('delegation')
             .update(delegationUpdate)
-            .eq('task_id', taskData.task_id)
+            .eq('task_id', taskData.id || taskData.task_id)
             .select()
             .single();
 
@@ -128,7 +128,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
           console.log('Successfully updated delegation:', updateData);
 
           results.push({
-            task_id: taskData.task_id,
+            id: taskData.id,
             status: 'success',
             delegation_done: doneData,
             delegation_updated: updateData,
@@ -136,9 +136,9 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
           });
 
         } catch (taskError) {
-          console.error(`Error processing task ${taskData.task_id}:`, taskError);
+          console.error(`Error processing task ${taskData.id}:`, taskError);
           results.push({
-            task_id: taskData.task_id,
+            id: taskData.id,
             status: 'error',
             error: taskError.message
           });
@@ -257,7 +257,7 @@ export const fetchDelegationDataSortByDate = async () => {
     }
 
     console.log("Fetched successfully", data);
-    return data;
+    return (data || []).map(row => ({ ...row, id: row.task_id }));
 
   } catch (error) {
     console.log("Error from Supabase", error);
@@ -295,7 +295,7 @@ export const fetchDelegation_DoneDataSortByDate = async () => {
     }
 
     console.log("Fetched successfully", data);
-    return data;
+    return (data || []).map(row => ({ ...row, id: row.task_id }));
 
   } catch (error) {
     console.log("Error from Supabase", error);

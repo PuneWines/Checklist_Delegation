@@ -1,6 +1,53 @@
 import React, { useMemo, useState } from "react"
 import { isToday, isThisWeek, isThisMonth } from "date-fns"
-import { Settings, Calendar, CheckCircle, Clock, AlertTriangle, IndianRupee, FileText } from "lucide-react"
+import { Settings, Calendar, CheckCircle, Clock, AlertTriangle, IndianRupee, FileText, Play, Pause } from "lucide-react"
+import { useRef, useEffect } from "react"
+
+const isAudioUrl = (url) => {
+    if (typeof url !== 'string') return false;
+    return url.startsWith('http') && (
+        url.includes('audio-recordings') ||
+        url.includes('voice-notes') ||
+        url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
+    );
+};
+
+const AudioPlayer = ({ url }) => {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const audioRef = useRef(null);
+
+    const togglePlay = (e) => {
+        e.stopPropagation();
+        if (isPlaying) {
+            audioRef.current.pause();
+        } else {
+            audioRef.current.play();
+        }
+        setIsPlaying(!isPlaying);
+    };
+
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        const handleEnded = () => setIsPlaying(false);
+        audio.addEventListener('ended', handleEnded);
+        return () => audio.removeEventListener('ended', handleEnded);
+    }, []);
+
+    return (
+        <div className="flex items-center gap-2 py-1">
+            <button
+                onClick={togglePlay}
+                className="p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-colors shadow-sm"
+            >
+                {isPlaying ? <Pause size={12} /> : <Play size={12} />}
+            </button>
+            <span className="text-[10px] font-bold text-purple-700 uppercase tracking-tight">Voice Note</span>
+            <audio ref={audioRef} src={url} className="hidden" />
+        </div>
+    );
+};
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
 
 const StatCard = ({ icon: Icon, label, value, color }) => (
@@ -26,14 +73,24 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
         return tasks.filter(task => {
             if (!task.originalTaskStartDate) return false;
             const taskDate = new Date(task.originalTaskStartDate);
+            taskDate.setHours(0, 0, 0, 0);
 
+            const hasSubmission = task.submission_date !== null && task.submission_date !== undefined;
+            const isOverdue = taskDate < today;
+            const isTaskToday = isToday(taskDate);
+
+            // Hide pending tasks that are in the future (upcoming)
+            if (!hasSubmission && !isTaskToday && !isOverdue) {
+                return false;
+            }
+
+            // Apply time range filters (today, week, month, all)
             if (maintFilter === 'today') {
-                const isOverdue = taskDate < today;
-                return isToday(taskDate) || isOverdue;
+                return isTaskToday || isOverdue;
             }
             if (maintFilter === 'week') return isThisWeek(taskDate, { weekStartsOn: 1 });
             if (maintFilter === 'month') return isThisMonth(taskDate);
-            return true; // Use 'all' if needed, but the request says today/week/month
+            return true; // 'all' - currently shows everything except upcoming pending
         });
     }, [tasks, maintFilter]);
 
@@ -282,7 +339,7 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Task ID</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Department</th>
+
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Machine Name</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Part Name</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Part Area</th>
@@ -302,24 +359,16 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                             {filteredTasks.length > 0 ? (
                                 filteredTasks.map((task, index) => (
                                     <tr key={task.id || index} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">#{task.id}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.department}</td>
+                                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.id}</td>
+
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.machine_name}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.part_name}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.part_area}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.given_by}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.assignedTo}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600">
-                                            {(task.task_description || task.title) && (
-                                                (task.task_description || task.title).startsWith('http') &&
-                                                ((task.task_description || task.title).includes('voice-notes') || (task.task_description || task.title).includes('.webm'))
-                                            ) ? (
-                                                <audio
-                                                    controls
-                                                    src={task.task_description || task.title}
-                                                    className="h-8 w-48"
-                                                    title="Voice Note"
-                                                />
+                                            {isAudioUrl(task.task_description || task.title) ? (
+                                                <AudioPlayer url={task.task_description || task.title} />
                                             ) : (
                                                 <div className="line-clamp-2" title={task.task_description || task.title}>
                                                     {task.task_description || task.title}
@@ -347,7 +396,9 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                                 {task.status}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">{task.remarks}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600">
+                                            {isAudioUrl(task.remarks) ? <AudioPlayer url={task.remarks} /> : task.remarks}
+                                        </td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
                                             {task.uploaded_image_url ? (
                                                 <a href={task.uploaded_image_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center justify-center gap-1">
@@ -359,7 +410,7 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="12" className="px-4 py-8 text-center text-gray-500 text-sm">
+                                    <td colSpan="14" className="px-4 py-8 text-center text-gray-500 text-sm">
                                         No maintenance tasks found.
                                     </td>
                                 </tr>

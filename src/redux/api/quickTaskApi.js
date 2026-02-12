@@ -69,7 +69,7 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
 
     // Final client-side deduplication (should be minimal now)
     const finalSeen = new Set();
-    const finalData = (data || []).filter(row => {
+    const finalData = (data || []).map(row => ({...row, id: row.task_id})).filter(row => {
       if (finalSeen.has(row.task_description)) {
         console.log("Final duplicate found:", row.task_description);
         return false;
@@ -159,7 +159,7 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
 
     // Final client-side deduplication
     const finalSeen = new Set();
-    const finalData = (data || []).filter(row => {
+    const finalData = (data || []).map(row => ({...row, id: row.task_id})).filter(row => {
       if (finalSeen.has(row.task_description)) {
         console.log("Final delegation duplicate found:", row.task_description);
         return false;
@@ -195,7 +195,8 @@ export const deleteChecklistTasksApi = async (tasks) => {
   return tasks;
 };
 
-export const deleteDelegationTasksApi = async (taskIds) => {
+export const deleteDelegationTasksApi = async (tasks) => {
+  const taskIds = tasks.map(t => t.id || t.taskId || t.task_id);
   const { error } = await supabase
     .from("delegation")
     .delete()

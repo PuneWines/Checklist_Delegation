@@ -40,9 +40,9 @@ const CalendarPage = () => {
             ]);
 
             const normalizedTasks = [
-                ...(checklistRes.data || []).map(t => ({ ...t, cat: 'CK', title: t.tasks || t.task_description, date: t.task_start_date, type: 'checklist' })),
-                ...(maintenanceRes.data || []).map(t => ({ ...t, cat: 'MT', title: t.task_description || t.task_id, date: t.task_start_date, type: 'maintenance' })),
-                ...(repairRes.data || []).map(t => ({ ...t, cat: 'RP', title: t.issue_description || t.task_id, date: t.created_at, type: 'repair' }))
+                ...(checklistRes.data || []).map(t => ({ ...t, id: t.task_id, cat: 'CK', title: t.tasks || t.task_description, date: t.task_start_date, type: 'checklist' })),
+                ...(maintenanceRes.data || []).map(t => ({ ...t, cat: 'MT', title: t.task_description || t.id, date: t.task_start_date, type: 'maintenance' })),
+                ...(repairRes.data || []).map(t => ({ ...t, cat: 'RP', title: t.issue_description || t.id, date: t.created_at, type: 'repair' }))
             ];
 
             setTasks(normalizedTasks);
@@ -67,7 +67,7 @@ const CalendarPage = () => {
     };
 
     const handleEditClick = (task) => {
-        setEditingTaskId(task.task_id);
+        setEditingTaskId(task.id);
         setEditForm({
             status: task.status || '',
             remark: task.remark || task.remarks || ''
@@ -93,14 +93,15 @@ const CalendarPage = () => {
                 updates.remarks = editForm.remark;
             }
 
-            const { error } = await supabase.from(tableName).update(updates).eq('task_id', task.task_id);
+            const pkField = task.type === 'checklist' ? 'task_id' : 'id';
+            const { error } = await supabase.from(tableName).update(updates).eq(pkField, task.id);
             if (error) throw error;
 
             setEditingTaskId(null);
             fetchTasks(); // Refresh data
 
             // Update local state for the modal
-            setSelectedTasks(prev => prev.map(t => t.task_id === task.task_id ? { ...t, ...updates, remark: editForm.remark, remarks: editForm.remark } : t));
+            setSelectedTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updates, remark: editForm.remark, remarks: editForm.remark } : t));
         } catch (err) {
             console.error('Update error:', err);
             alert('Update failed');
@@ -274,11 +275,11 @@ const CalendarPage = () => {
                             ) : (
                                 <div className="space-y-3">
                                     {selectedTasks.map((task) => (
-                                        <div key={task.task_id} className="border border-gray-200 rounded p-4 flex flex-col relative overflow-hidden">
+                                        <div key={task.id} className="border border-gray-200 rounded p-4 flex flex-col relative overflow-hidden">
                                             <div className={`absolute top-0 left-0 w-2 h-full ${task.cat === 'CK' ? 'bg-blue-600' : task.cat === 'MT' ? 'bg-orange-600' : 'bg-red-600'}`}></div>
                                             <div className="pl-4">
                                                 <div className="flex justify-between items-start mb-2">
-                                                    <span className="text-[10px] font-bold text-gray-400 uppercase">ID: #{task.task_id}</span>
+                                                    <span className="text-[10px] font-bold text-gray-400 uppercase">ID: #{task.id}</span>
                                                     <span className={`text-[9px] font-bold px-2 py-0.5 rounded-sm uppercase ${['completed', 'yes', 'Done'].includes(task.status) ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                                                         {task.status || 'Pending'}
                                                     </span>
@@ -290,7 +291,7 @@ const CalendarPage = () => {
                                                     <div>Type: <span className="text-gray-900 font-bold">{task.type}</span></div>
                                                 </div>
 
-                                                {editingTaskId === task.task_id ? (
+                                                {editingTaskId === task.id ? (
                                                     <div className="mt-4 p-4 bg-gray-50 border border-gray-200 space-y-4">
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <div>

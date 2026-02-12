@@ -270,7 +270,7 @@ export default function AdminDashboard() {
         }
 
         return {
-          id: task.task_id,
+          id: task.id,
           title: task.task_description,
           assignedTo: task.name || "Unassigned",
           taskStartDate: formatDateToDDMMYYYY(taskStartDate),
@@ -669,7 +669,7 @@ export default function AdminDashboard() {
           }
 
           const mappedTask = {
-            id: task.task_id,
+            id: task.id,
             title: task.task_description || task.issue_description || "No Description",
             task_description: task.task_description || task.issue_description,
             assignedTo: task.name || task.assigned_person || "Unassigned",

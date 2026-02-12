@@ -34,7 +34,7 @@ export default function RepairPendingPage({ showLayout = true }) {
         return sourceData.filter(item => {
             const matchesPerson = searchPerson
                 ? (item.assigned_person?.toLowerCase().includes(searchPerson.toLowerCase()) ||
-                    item.task_id?.toString().includes(searchPerson) ||
+                    item.id?.toString().includes(searchPerson) ||
                     item.machine_name?.toLowerCase().includes(searchPerson.toLowerCase()) ||
                     item.filled_by?.toLowerCase().includes(searchPerson.toLowerCase()))
                 : true;
@@ -67,7 +67,7 @@ export default function RepairPendingPage({ showLayout = true }) {
         setIsSubmitting(true);
         try {
             await dispatch(updateRepair([{
-                taskId: selectedTask.task_id,
+                taskId: selectedTask.id,
                 status: updateForm.status,
                 partReplaced: updateForm.partReplaced,
                 billAmount: updateForm.billAmount,
@@ -173,8 +173,8 @@ export default function RepairPendingPage({ showLayout = true }) {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">
                             {filteredData.map((item) => (
-                                <tr key={item.task_id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="py-4 px-4 align-top text-sm font-medium text-gray-900">#{item.task_id}</td>
+                                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="py-4 px-4 align-top text-sm font-medium text-gray-900">#{item.id}</td>
                                     <td className="py-4 px-4 align-top text-sm font-medium text-gray-800">{item.machine_name}</td>
                                     <td className="py-4 px-4 align-top text-sm text-gray-600">{item.filled_by}</td>
                                     <td className="py-4 px-4 align-top text-sm text-gray-600">
@@ -235,7 +235,7 @@ export default function RepairPendingPage({ showLayout = true }) {
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden animate-fade-in border border-purple-100">
                         <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-purple-100 flex justify-between items-center">
-                            <h3 className="text-sm font-bold text-purple-800 uppercase">Update Ticket #{selectedTask.task_id}</h3>
+                            <h3 className="text-sm font-bold text-purple-800 uppercase">Update Ticket #{selectedTask.id}</h3>
                             <button onClick={() => setIsModalOpen(false)} className="text-purple-400 hover:text-purple-600"><X className="w-5 h-5" /></button>
                         </div>
                         <form onSubmit={handleUpdateSubmit} className="p-6">

@@ -103,7 +103,10 @@ export const fetchDashboardDataApi = async (
     });
 
     console.log(`Fetched ${filteredData.length} records for ${taskView} view (after holiday filter)`);
-    return filteredData;
+    return filteredData.map(task => ({
+      ...task,
+      id: task.id || task.task_id
+    }));
 
   } catch (error) {
     console.error("Error from Supabase:", error);
@@ -747,7 +750,10 @@ export const fetchChecklistDataByDateRangeApi = async (
     }
 
     console.log(`✅ Fetched ${data?.length || 0} records for date range ${startDate} to ${endDate}`);
-    return data || [];
+    return (data || []).map(task => ({
+      ...task,
+      id: task.id || task.task_id
+    }));
 
   } catch (error) {
     console.error("Error from Supabase:", error);

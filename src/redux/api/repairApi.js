@@ -16,7 +16,8 @@ export const fetchRepairDataSortByDate = async (page = 1, limit = 50, searchTerm
         // Search logic updated for new columns
         if (searchTerm && searchTerm.trim() !== '') {
             const val = searchTerm.trim();
-            query = query.or(`task_id.ilike.%${val}%,machine_name.ilike.%${val}%,issue_description.ilike.%${val}%,filled_by.ilike.%${val}%`);
+            // Using cast for integer id search if possible, or just focus on other fields
+            query = query.or(`machine_name.ilike.%${val}%,issue_description.ilike.%${val}%,filled_by.ilike.%${val}%`);
         }
 
         const { data, error, count } = await query;
@@ -53,13 +54,11 @@ export const fetchAllRepairTasks = async (page = 1, limit = 1000) => {
 // --- CREATE NEW REPAIR REQUEST ---
 export const postRepairTaskApi = async (formData) => {
     try {
-        // Generate a simple ID like "REP-173822"
-        const uniqueId = `REP-${Date.now().toString().slice(-6)}`;
-
+        const taskId = `REPAIR-${Date.now()}`;
         const { data, error } = await supabase
             .from('repair_tasks')
             .insert({
-                task_id: uniqueId,
+                task_id: taskId,                        // Added unique task_id
                 filled_by: formData.filledBy,           // Matches "Form Filled By"
                 assigned_person: formData.assignedPerson, // Matches "To Assign Person"
                 machine_name: formData.machineName,     // Matches "Machine Name"
@@ -94,7 +93,7 @@ export const updateRepairData = async (updates) => {
                     bill_copy_url: item.billCopyUrl || null,
                     submission_date: new Date().toISOString()
                 })
-                .eq('task_id', item.taskId)
+                .eq('id', item.taskId)
                 .select();
 
             if (error) throw error;
@@ -124,7 +123,7 @@ export const fetchRepairDataForHistory = async (page = 1, searchTerm = '') => {
 
         if (searchTerm && searchTerm.trim() !== '') {
             const val = searchTerm.trim();
-            query = query.or(`task_id.ilike.%${val}%,machine_name.ilike.%${val}%,issue_description.ilike.%${val}%,filled_by.ilike.%${val}%`);
+            query = query.or(`machine_name.ilike.%${val}%,issue_description.ilike.%${val}%,filled_by.ilike.%${val}%`);
         }
 
         const { data, error } = await query;

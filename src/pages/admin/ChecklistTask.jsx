@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-    ClipboardList, Calendar, X, Search
+    ClipboardList, Calendar, X, Search, Mic, Square, Trash2
 } from "lucide-react";
+import { ReactMediaRecorder } from "react-media-recorder";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { useDispatch, useSelector } from "react-redux";
 import { assignTaskInTable, uniqueDepartmentData, uniqueDoerNameData, uniqueGivenByData } from "../../redux/slice/assignTaskSlice";
@@ -35,9 +36,10 @@ export default function ChecklistTask() {
         doer: "",
         description: "",
         frequency: "One Time (No Recurrence)",
-        enableReminders: false,
+        enableReminders: true,
         requireAttachment: false,
     });
+    const [recordedAudio, setRecordedAudio] = useState(null);
     const [holidays, setHolidays] = useState([]);
 
     // Fetch holidays on mount
@@ -64,8 +66,8 @@ export default function ChecklistTask() {
     const addDays = (date, days) => { const d = new Date(date); d.setDate(d.getDate() + days); return d; };
 
     const generateTasksPreview = async () => {
-        if (!date || !time || !formData.doer || !formData.description || !formData.department) {
-            alert("Please fill in all required fields (Department, Given By, Doer, Date, Time, Description).");
+        if (!date || !time || !formData.doer || (!formData.description && !recordedAudio) || !formData.department) {
+            alert("Please fill in all required fields (Department, Given By, Doer, Date, Time, Description/Voice Note).");
             return;
         }
 
@@ -181,12 +183,42 @@ export default function ChecklistTask() {
     const handleAssignTask = async () => {
         setIsSubmitting(true);
         try {
-            // Flatten data for API
+            let audioUrl = "";
+            let descriptionWrapper = (desc) => desc;
+
+            // Upload audio if exists
+            if (recordedAudio && recordedAudio.blob) {
+                try {
+                    const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
+                    const { data: uploadData, error: uploadError } = await supabase.storage
+                        .from('audio-recordings')
+                        .upload(fileName, recordedAudio.blob, {
+                            contentType: recordedAudio.blob.type || 'audio/webm',
+                            upsert: false
+                        });
+
+                    if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
+
+                    const { data: publicUrlData } = supabase.storage
+                        .from('audio-recordings')
+                        .getPublicUrl(fileName);
+
+                    audioUrl = publicUrlData.publicUrl;
+                    descriptionWrapper = (desc) => audioUrl; // Store ONLY the URL if voice note exists
+                } catch (audioErr) {
+                    console.error(audioErr);
+                    alert(`Failed to upload audio: ${audioErr.message}`);
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+
+            // Flatten data for API with potential audio URL
             const tasksToSubmit = generatedTasks.map(t => ({
                 department: t.department,
                 givenBy: t.givenBy,
                 doer: t.doer,
-                description: t.description,
+                description: descriptionWrapper(t.description),
                 frequency: t.frequency,
                 enableReminders: t.enableReminders,
                 requireAttachment: t.requireAttachment,
@@ -194,7 +226,10 @@ export default function ChecklistTask() {
                 status: "pending"
             }));
 
-            const result = await dispatch(assignTaskInTable(tasksToSubmit));
+            const result = await dispatch(assignTaskInTable({
+                tasks: tasksToSubmit,
+                table: "checklist"
+            }));
 
             // Check if the submission was successful
             if (result.error) {
@@ -289,17 +324,83 @@ export default function ChecklistTask() {
                                 </div>
                             </div>
 
-                            {/* Description */}
+                            {/* Description & Audio Recording */}
                             <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1.5">Task Description</label>
-                                <textarea
-                                    name="description"
-                                    rows="4"
-                                    placeholder="Enter task description..."
-                                    value={formData.description}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm resize-none"
-                                ></textarea>
+                                <ReactMediaRecorder
+                                    audio
+                                    onStop={(blobUrl, blob) => {
+                                        setRecordedAudio({ blobUrl, blob });
+                                    }}
+                                    render={({ status, startRecording, stopRecording, mediaBlobUrl, clearBlobUrl }) => (
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-bold text-gray-700">Task Description <span className="text-red-500">*</span></label>
+
+                                            {/* Default View: Input with Mic */}
+                                            {status !== 'recording' && !recordedAudio && (
+                                                <div className="relative">
+                                                    <textarea
+                                                        name="description"
+                                                        rows="4"
+                                                        placeholder="Enter task description..."
+                                                        value={formData.description}
+                                                        onChange={handleChange}
+                                                        className="w-full px-3 py-2.5 pr-12 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm resize-none"
+                                                    ></textarea>
+                                                    <button
+                                                        type="button"
+                                                        onClick={startRecording}
+                                                        className="absolute bottom-3 right-3 p-2 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all shadow-sm group"
+                                                        title="Record Voice Note"
+                                                    >
+                                                        <Mic className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {/* Recording View */}
+                                            {status === 'recording' && (
+                                                <div className="flex flex-col items-center justify-center p-8 bg-red-50 border border-red-100 rounded-xl space-y-4 animate-pulse">
+                                                    <div className="p-4 bg-red-100 rounded-full shadow-inner">
+                                                        <Mic className="w-8 h-8 text-red-600" />
+                                                    </div>
+                                                    <p className="text-red-600 font-bold text-lg">Recording Voice Note...</p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={stopRecording}
+                                                        className="flex items-center gap-2 px-6 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors font-bold shadow-lg"
+                                                    >
+                                                        <Square className="w-4 h-4" /> Stop Recording
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {/* Recorded View (Player) */}
+                                            {recordedAudio && status !== 'recording' && (
+                                                <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">Voice Note Attached</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                clearBlobUrl();
+                                                                setRecordedAudio(null);
+                                                            }}
+                                                            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-bold"
+                                                        >
+                                                            <Trash2 className="w-3 h-3" /> Remove
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-purple-100 shadow-sm">
+                                                        <audio src={recordedAudio.blobUrl} controls className="w-full h-8" />
+                                                    </div>
+                                                    <p className="text-xs text-center text-gray-500 mt-2">
+                                                        Note: Task description hidden while voice note is attached.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                />
                             </div>
 
                             {/* Date, Time, Frequency */}

@@ -17,9 +17,55 @@ import {
   Loader2,
   Camera,
   Users,
+  Play,
+  Pause,
 } from "lucide-react";
 import TaskManagementTabs from "../../components/TaskManagementTabs";
 import { updateRepairData } from "../../redux/api/repairApi";
+
+const isAudioUrl = (url) => {
+  if (typeof url !== 'string') return false;
+  return url.startsWith('http') && (
+    url.includes('audio-recordings') ||
+    url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
+  );
+};
+
+const AudioPlayer = ({ url }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef(null);
+
+  const togglePlay = () => {
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleEnded = () => setIsPlaying(false);
+    audio.addEventListener('ended', handleEnded);
+    return () => audio.removeEventListener('ended', handleEnded);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={togglePlay}
+        className="p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-colors shadow-sm"
+      >
+        {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+      </button>
+      <span className="text-xs font-medium text-purple-700">Voice Note</span>
+      <audio ref={audioRef} src={url} className="hidden" />
+    </div>
+  );
+};
 
 const AllTasks = () => {
   // Active tab state
@@ -205,12 +251,12 @@ const AllTasks = () => {
           completionField = "submission_date";
           if (showHistory) {
             headers = [
-              { id: "task_id", label: "Task ID" },
+              { id: "id", label: "Task ID" },
+              { id: "task_description", label: "Task Description" },
               { id: "department", label: "Department" },
               { id: "machine_name", label: "Machine Name" },
               { id: "part_name", label: "Part Name" },
               { id: "part_area", label: "Part Area" },
-              { id: "task_description", label: "Task Description" },
               { id: "task_start_date", label: "Task Start Date & Time" },
               { id: "freq", label: "Freq" },
               { id: "require_attachment", label: "Require Attachment" },
@@ -219,14 +265,14 @@ const AllTasks = () => {
             ];
           } else {
             headers = [
-              { id: "task_id", label: "Task ID" },
+              { id: "id", label: "Task ID" },
+              { id: "task_description", label: "Task Description" },
               { id: "department", label: "Department" },
               { id: "machine_name", label: "Machine Name" },
               { id: "part_name", label: "Part Name" },
               { id: "part_area", label: "Part Area" },
               { id: "given_by", label: "Given By" },
               { id: "name", label: "Name" },
-              { id: "task_description", label: "Task Description" },
               { id: "task_start_date", label: "Task Start Date & Time" },
               { id: "freq", label: "Freq" },
               { id: "enable_reminders", label: "Enable Reminders" },
@@ -242,12 +288,12 @@ const AllTasks = () => {
           nameField = "assigned_person";
           if (showHistory) {
             headers = [
-              { id: "task_id", label: "Task ID" },
+              { id: "id", label: "Task ID" },
+              { id: "issue_description", label: "Issue Detail" },
               { id: "submission_date", label: "Submission Date" },
               { id: "filled_by", label: "Form Filled By" },
               { id: "assigned_person", label: "Assigned To" },
               { id: "machine_name", label: "Machine Name" },
-              { id: "issue_description", label: "Issue Detail" },
               { id: "status", label: "Status" },
               { id: "part_replaced", label: "Part Replaced" },
               { id: "bill_amount", label: "Bill Amount" },
@@ -256,11 +302,11 @@ const AllTasks = () => {
           } else {
             headers = [
               { id: "action", label: "Action" },
-              { id: "task_id", label: "Task ID" },
+              { id: "id", label: "Task ID" },
+              { id: "issue_description", label: "Issue Detail" },
               { id: "filled_by", label: "Form Filled By" },
               { id: "assigned_person", label: "Assigned To" },
               { id: "machine_name", label: "Machine Name" },
-              { id: "issue_description", label: "Issue Detail" },
               { id: "status", label: "Status" },
               { id: "part_replaced", label: "Part Replaced" },
               { id: "bill_amount", label: "Bill Amount" },
@@ -273,7 +319,8 @@ const AllTasks = () => {
           completionField = "status";
           nameField = "doer_name";
           headers = [
-            { id: "task_id", label: "Task ID" },
+            { id: "id", label: "Task ID" },
+            { id: "task_description", label: "Task Description" },
             { id: "doer_name", label: "Doer Name" },
             { id: "phone_number", label: "Phone Number" },
             { id: "planned_date", label: "Planned Date" },
@@ -285,11 +332,11 @@ const AllTasks = () => {
           dateColumn = "task_start_date";
           completionField = "submission_date";
           headers = [
-            { id: "task_id", label: "Task ID" },
+            { id: "id", label: "Task ID" },
+            { id: "task_description", label: "Task Description" },
             { id: "department", label: "Department Name" },
             { id: "given_by", label: "Given By" },
             { id: "name", label: "Name" },
-            { id: "task_description", label: "Task Description" },
             { id: "task_start_date", label: "Task Start Date & Time" },
             { id: "frequency", label: "Freq" },
             { id: "enable_reminder", label: "Enable Reminders" },
@@ -329,10 +376,16 @@ const AllTasks = () => {
       if (fetchError) throw fetchError;
 
       if (data) {
+        // Map task_id to id for consistency if id doesn't exist
+        const mappedData = data.map(item => ({
+          ...item,
+          id: item.id || item.task_id
+        }));
+
         if (showHistory) {
-          setHistoryData(data);
+          setHistoryData(mappedData);
         } else {
-          setTasks(data);
+          setTasks(mappedData);
         }
       }
     } catch (err) {
@@ -349,7 +402,7 @@ const AllTasks = () => {
 
   // Filtering Logic
   const filteredPendingTasks = useMemo(() => {
-    const dateColumn = activeTab === "repair" ? "created_at" : "task_start_date";
+    const dateColumn = activeTab === "repair" ? "created_at" : (activeTab === "ea" ? "planned_date" : "task_start_date");
 
     // First, sort tasks by date to ensure we handle them in order
     const sortedTasks = [...tasks].sort((a, b) => {
@@ -371,19 +424,21 @@ const AllTasks = () => {
 
       // Filter to only show tasks for today or overdue (past)
       // This addresses the user request to NOT show tomorrow's tasks
-      if (activeTab === "checklist" || activeTab === "maintenance") {
+      if (activeTab === "checklist" || activeTab === "maintenance" || activeTab === "ea") {
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        today.setHours(23, 59, 59, 999); // Allow all tasks for today
         const taskDate = task[dateColumn] ? new Date(task[dateColumn]) : null;
         if (taskDate) {
-          taskDate.setHours(0, 0, 0, 0);
-          if (taskDate > today) return false; // Hide future tasks
+          // If the task date is in the future (beyond today), hide it
+          if (taskDate > today) return false;
         }
       }
 
       // Deduplication logic for checklist tasks
       if (activeTab === "checklist") {
-        const key = `${task.task_description}-${task.name}`;
+        // Include date in key to avoid hiding different occurrences of the same recurring task
+        const taskDate = task[dateColumn] ? new Date(task[dateColumn]).toDateString() : "";
+        const key = `${task.task_description}-${task.name}-${taskDate}`;
         if (seen.has(key)) return false;
         seen.add(key);
       }
@@ -454,7 +509,7 @@ const AllTasks = () => {
   const handleSelectAll = useCallback(
     (e) => {
       if (e.target.checked) {
-        setSelectedItems(new Set(filteredPendingTasks.map((t) => t.task_id)));
+        setSelectedItems(new Set(filteredPendingTasks.map((t) => t.id)));
       } else {
         setSelectedItems(new Set());
         setRemarksData({});
@@ -513,7 +568,7 @@ const AllTasks = () => {
       // Upload Work Photo if selected
       if (updateForm.workPhoto) {
         const fileExt = updateForm.workPhoto.name.split('.').pop();
-        const fileName = `work_${selectedUpdateTask.task_id}_${Date.now()}.${fileExt}`;
+        const fileName = `work_${selectedUpdateTask.id}_${Date.now()}.${fileExt}`;
         const { data, error } = await supabase.storage.from('repair').upload(fileName, updateForm.workPhoto);
         if (error) throw error;
         const { data: { publicUrl } } = supabase.storage.from('repair').getPublicUrl(fileName);
@@ -523,7 +578,7 @@ const AllTasks = () => {
       // Upload Bill Copy if selected
       if (updateForm.billCopy) {
         const fileExt = updateForm.billCopy.name.split('.').pop();
-        const fileName = `bill_${selectedUpdateTask.task_id}_${Date.now()}.${fileExt}`;
+        const fileName = `bill_${selectedUpdateTask.id}_${Date.now()}.${fileExt}`;
         const { data, error } = await supabase.storage.from('repair').upload(fileName, updateForm.billCopy);
         if (error) throw error;
         const { data: { publicUrl } } = supabase.storage.from('repair').getPublicUrl(fileName);
@@ -531,7 +586,7 @@ const AllTasks = () => {
       }
 
       await updateRepairData([{
-        taskId: selectedUpdateTask.task_id,
+        taskId: selectedUpdateTask.id,
         status: updateForm.status,
         partReplaced: updateForm.partReplaced || null,
         billAmount: updateForm.billAmount ? parseFloat(updateForm.billAmount) : null, // Fix empty string issue
@@ -595,7 +650,7 @@ const AllTasks = () => {
 
         // Handle EA tasks differently
         if (activeTab === "ea") {
-          const originalTask = tasks.find(t => t.task_id === id);
+          const originalTask = tasks.find(t => t.id === id);
           const taskStatus = statusData[id] || "done";
 
           // Insert into ea_tasks_done for history
@@ -621,14 +676,14 @@ const AllTasks = () => {
               extended_date: new Date(extendedDateData[id]).toISOString(),
               status: "pending",
               updated_at: new Date().toISOString()
-            }).eq("task_id", id);
+            }).eq("id", id);
             if (updateError) throw updateError;
           } else {
             // If done, mark as done
             const { error: updateError } = await supabase.from(tableName).update({
               status: "done",
               updated_at: new Date().toISOString()
-            }).eq("task_id", id);
+            }).eq("id", id);
             if (updateError) throw updateError;
           }
         } else {
@@ -638,17 +693,16 @@ const AllTasks = () => {
             [remarksField]: remarksData[id] || null,
             status: statusData[id] || (activeTab === "checklist" ? "yes" : "Done")
           };
-
           if (imageUrl) {
             updates[imageField] = imageUrl;
           }
 
-          const { error: updateError } = await supabase.from(tableName).update(updates).eq("task_id", id);
+          const { error: updateError } = await supabase.from(tableName).update(updates).eq("id", id);
           if (updateError) throw updateError;
         }
 
         // --- Handle Recurring Task Regeneration ---
-        const originalTask = tasks.find(t => t.task_id === id);
+        const originalTask = tasks.find(t => t.id === id);
         const frequency = (originalTask?.frequency || originalTask?.freq || "").toLowerCase();
 
         if (originalTask && frequency && frequency !== "one-time" && frequency !== "no") {
@@ -889,52 +943,69 @@ const AllTasks = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {(showHistory ? filteredHistoryTasks : filteredPendingTasks).length > 0 ? (
                     (showHistory ? filteredHistoryTasks : filteredPendingTasks).map((task) => (
-                      <tr key={task.task_id} className="hover:bg-gray-50">
+                      <tr key={task.id} className="hover:bg-gray-50">
                         {!showHistory && activeTab !== "repair" && (
                           <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                             <input
                               type="checkbox"
-                              checked={selectedItems.has(task.task_id)}
-                              onChange={(e) => handleSelectItem(task.task_id, e.target.checked)}
+                              checked={selectedItems.has(task.id)}
+                              onChange={(e) => handleSelectItem(task.id, e.target.checked)}
                               className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
                             />
                           </td>
                         )}
                         {activeTab === "repair" ? (
                           <>
-                            {!showHistory && (
-                              <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                <button onClick={() => openUpdateModal(task)} className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1">
-                                  <Edit className="h-3 w-3" /> Process
-                                </button>
-                              </td>
-                            )}
-                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.task_id}</td>
-                            {showHistory && (
-                              <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                {task.submission_date ? new Date(task.submission_date).toLocaleString() : "—"}
-                              </td>
-                            )}
-                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.filled_by}</td>
-                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.assigned_person}</td>
-                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.machine_name}</td>
-                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">{task.issue_description}</td>
-                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
-                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === "Pending" ? "bg-yellow-100 text-yellow-800" : task.status === "Completed" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
-                                {task.status}
-                              </span>
-                            </td>
-                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.part_replaced || "—"}</td>
-                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.bill_amount ? `₹${task.bill_amount}` : "—"}</td>
-                            {showHistory && (
-                              <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">{task.remarks || "—"}</td>
+                            {!showHistory ? (
+                              <>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                  <button onClick={() => openUpdateModal(task)} className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1">
+                                    <Edit className="h-3 w-3" /> Process
+                                  </button>
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{task.id}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
+                                  {isAudioUrl(task.issue_description) ? <AudioPlayer url={task.issue_description} /> : task.issue_description}
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.filled_by}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.assigned_person}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.machine_name}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
+                                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === "Pending" ? "bg-yellow-100 text-yellow-800" : task.status === "Completed" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                                    {task.status}
+                                  </span>
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.part_replaced || "—"}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.bill_amount ? `₹${task.bill_amount}` : "—"}</td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{task.id}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
+                                  {isAudioUrl(task.issue_description) ? <AudioPlayer url={task.issue_description} /> : task.issue_description}
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                  {task.submission_date ? new Date(task.submission_date).toLocaleString() : "—"}
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.filled_by}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.assigned_person}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.machine_name}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
+                                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === "Pending" ? "bg-yellow-100 text-yellow-800" : task.status === "Completed" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                                    {task.status}
+                                  </span>
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.part_replaced || "—"}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.bill_amount ? `₹${task.bill_amount}` : "—"}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">{task.remarks || "—"}</td>
+                              </>
                             )}
                           </>
                         ) : (
                           <>
                             {tableHeaders.map((header) => (
                               <td key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 ${header.id === 'task_description' || header.id === 'issue_description' ? 'min-w-[200px] whitespace-normal' : 'whitespace-nowrap'} ${header.id === 'task_start_date' ? 'bg-yellow-50' : ''}`}>
-                                {header.id === "task_start_date" || header.id === "created_at"
+                                {header.id === "task_start_date" || header.id === "created_at" || header.id === "planned_date"
                                   ? (
                                     <div className="flex flex-col">
                                       <span className="font-bold text-gray-900">{formatDate(task[header.id])}</span>
@@ -954,9 +1025,9 @@ const AllTasks = () => {
                                       ? !showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea")
                                         ? (
                                           <select
-                                            value={statusData[task.task_id] || ""}
-                                            onChange={(e) => setStatusData(prev => ({ ...prev, [task.task_id]: e.target.value }))}
-                                            disabled={!selectedItems.has(task.task_id)}
+                                            value={statusData[task.id] || ""}
+                                            onChange={(e) => setStatusData(prev => ({ ...prev, [task.id]: e.target.value }))}
+                                            disabled={!selectedItems.has(task.id)}
                                             className="block w-full py-1.5 pl-3 pr-8 text-xs sm:text-sm text-gray-700 bg-white border border-gray-200 rounded-md focus:border-purple-500 focus:outline-none disabled:bg-gray-50/50 disabled:text-gray-400 appearance-none shadow-sm cursor-pointer hover:border-gray-300 transition-colors"
                                             style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
                                           >
@@ -981,7 +1052,9 @@ const AllTasks = () => {
                                         ? (task[header.id] ? "Yes" : "No")
                                         : header.id === "machine_name"
                                           ? (task.machine_name || (task.task_description ? task.task_description.split(' - ')[0] : "—"))
-                                          : task[header.id] || "—"}
+                                          : isAudioUrl(task[header.id])
+                                            ? <AudioPlayer url={task[header.id]} />
+                                            : task[header.id] || "—"}
                               </td>
                             ))}
                             {!showHistory && activeTab === "ea" && (
@@ -989,10 +1062,10 @@ const AllTasks = () => {
                                 <input
                                   type="date"
                                   placeholder="Extended Date"
-                                  value={extendedDateData[task.task_id] || ""}
-                                  onChange={(e) => setExtendedDateData((prev) => ({ ...prev, [task.task_id]: e.target.value }))}
+                                  value={extendedDateData[task.id] || ""}
+                                  onChange={(e) => setExtendedDateData((prev) => ({ ...prev, [task.id]: e.target.value }))}
                                   className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
-                                  disabled={!selectedItems.has(task.task_id) || statusData[task.task_id] !== 'extended'}
+                                  disabled={!selectedItems.has(task.id) || statusData[task.id] !== 'extended'}
                                 />
                               </td>
                             )}
@@ -1002,33 +1075,33 @@ const AllTasks = () => {
                                   <input
                                     type="text"
                                     placeholder="Enter remarks"
-                                    value={remarksData[task.task_id] || ""}
-                                    onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.task_id]: e.target.value }))}
+                                    value={remarksData[task.id] || ""}
+                                    onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
                                     className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
-                                    disabled={!selectedItems.has(task.task_id)}
+                                    disabled={!selectedItems.has(task.id)}
                                   />
                                 </td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 bg-emerald-50/30">
                                   <div className="flex flex-col gap-2">
-                                    <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.task_id) ? "text-purple-600 hover:text-purple-800" : "text-gray-400 cursor-not-allowed"}`}>
+                                    <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-purple-600 hover:text-purple-800" : "text-gray-400 cursor-not-allowed"}`}>
                                       <Upload className="h-3.5 w-3.5" />
-                                      <span>{uploadedImages[task.task_id] ? "File Selected" : "Upload Receipt"}</span>
+                                      <span>{uploadedImages[task.id] ? "File Selected" : "Upload Receipt"}</span>
                                       <input
                                         type="file"
                                         className="hidden"
-                                        onChange={(e) => handleImageUpload(task.task_id, e)}
-                                        disabled={!selectedItems.has(task.task_id)}
+                                        onChange={(e) => handleImageUpload(task.id, e)}
+                                        disabled={!selectedItems.has(task.id)}
                                       />
                                     </label>
-                                    <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.task_id) ? "text-cyan-500 hover:text-cyan-700" : "text-gray-400 cursor-not-allowed"}`}>
+                                    <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-cyan-500 hover:text-cyan-700" : "text-gray-400 cursor-not-allowed"}`}>
                                       <Camera className="h-3.5 w-3.5" />
                                       <span>Take Photo</span>
                                       <input
                                         type="file"
                                         accept="image/*"
                                         className="hidden"
-                                        onChange={(e) => handleImageUpload(task.task_id, e)}
-                                        disabled={!selectedItems.has(task.task_id)}
+                                        onChange={(e) => handleImageUpload(task.id, e)}
+                                        disabled={!selectedItems.has(task.id)}
                                       />
                                     </label>
                                   </div>
@@ -1037,7 +1110,9 @@ const AllTasks = () => {
                             )}
                             {showHistory && (
                               <>
-                                <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">{task.remark || task.remarks || "—"}</td>
+                                <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">
+                                  {isAudioUrl(task.remark || task.remarks) ? <AudioPlayer url={task.remark || task.remarks} /> : (task.remark || task.remarks || "—")}
+                                </td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
                                   {task.image || task.uploaded_image_url || task.image_url ? (
                                     <a href={task.image || task.uploaded_image_url || task.image_url} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">View</a>
@@ -1071,7 +1146,7 @@ const AllTasks = () => {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden animate-fade-in border border-purple-100">
             <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-purple-100 flex justify-between items-center">
-              <h3 className="text-sm font-bold text-purple-800 uppercase">Update Ticket #{selectedUpdateTask.task_id}</h3>
+              <h3 className="text-sm font-bold text-purple-800 uppercase">Update Ticket #{selectedUpdateTask.id}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-purple-400 hover:text-purple-600"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleRepairUpdateSubmit} className="p-6">

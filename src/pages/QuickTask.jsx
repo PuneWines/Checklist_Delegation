@@ -1,13 +1,58 @@
 "use client"
 import { useEffect, useState, useCallback, useRef } from "react";
 import { format } from 'date-fns';
-import { Search, ChevronDown, Filter, Trash2, Edit, Save, X } from "lucide-react";
+import { Search, ChevronDown, Filter, Trash2, Edit, Save, X, Play, Pause } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import DelegationPage from "./delegation-data";
 import { useDispatch, useSelector } from "react-redux";
 import { deleteChecklistTask, uniqueChecklistTaskData, uniqueDelegationTaskData, updateChecklistTask, fetchUsers, resetChecklistPagination, resetDelegationPagination } from "../redux/slice/quickTaskSlice";
-import { maintenanceData } from "../redux/slice/maintenanceSlice";
+import { maintenanceData, deleteMaintenanceTask } from "../redux/slice/maintenanceSlice";
 
+const isAudioUrl = (url) => {
+  if (typeof url !== 'string') return false;
+  return url.startsWith('http') && (
+    url.includes('audio-recordings') ||
+    url.includes('voice-notes') ||
+    url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
+  );
+};
+
+const AudioPlayer = ({ url }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef(null);
+
+  const togglePlay = (e) => {
+    e.stopPropagation();
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleEnded = () => setIsPlaying(false);
+    audio.addEventListener('ended', handleEnded);
+    return () => audio.removeEventListener('ended', handleEnded);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <button
+        onClick={togglePlay}
+        className="p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-colors shadow-sm"
+      >
+        {isPlaying ? <Pause size={12} /> : <Play size={12} />}
+      </button>
+      <span className="text-[10px] font-bold text-purple-700 uppercase tracking-tight">Voice Note</span>
+      <audio ref={audioRef} src={url} className="hidden" />
+    </div>
+  );
+};
 
 export default function QuickTask() {
   const [tasks, setTasks] = useState([]);
@@ -91,9 +136,9 @@ export default function QuickTask() {
 
   // Edit functionality
   const handleEditClick = (task) => {
-    setEditingTaskId(task.task_id);
+    setEditingTaskId(task.id);
     setEditFormData({
-      task_id: task.task_id,
+      id: task.id,
       department: task.department || '',
       given_by: task.given_by || '',
       name: task.name || '',
@@ -112,10 +157,10 @@ export default function QuickTask() {
   };
 
   const handleSaveEdit = async () => {
-    if (!editFormData.task_id) return;
+    if (!editFormData.id) return;
 
     // Find the original task data for matching
-    const originalTask = quickTask.find(task => task.task_id === editFormData.task_id);
+    const originalTask = quickTask.find(task => task.id === editFormData.id);
     if (!originalTask) return;
 
     setIsSaving(true);
@@ -152,8 +197,8 @@ export default function QuickTask() {
 
   // Change your checkbox to store whole row instead of only id
   const handleCheckboxChange = (task) => {
-    if (selectedTasks.find(t => t.task_id === task.task_id)) {
-      setSelectedTasks(selectedTasks.filter(t => t.task_id !== task.task_id));
+    if (selectedTasks.find(t => t.id === task.id)) {
+      setSelectedTasks(selectedTasks.filter(t => t.id !== task.id));
     } else {
       setSelectedTasks([...selectedTasks, task]);
     }
@@ -161,10 +206,15 @@ export default function QuickTask() {
 
   // Select all
   const handleSelectAll = () => {
-    if (selectedTasks.length === filteredChecklistTasks.length) {
+    const currentTasks =
+      activeTab === 'checklist' ? filteredChecklistTasks :
+        activeTab === 'maintenance' ? filteredMaintenance :
+          activeTab === 'delegation' ? filteredDelegationTasks : [];
+
+    if (selectedTasks.length === currentTasks.length && currentTasks.length > 0) {
       setSelectedTasks([]);
     } else {
-      setSelectedTasks(filteredChecklistTasks); // store full rows
+      setSelectedTasks(currentTasks); // store full rows
     }
   };
 
@@ -175,7 +225,14 @@ export default function QuickTask() {
     setIsDeleting(true);
     try {
       console.log("Deleting rows:", selectedTasks);
-      await dispatch(deleteChecklistTask(selectedTasks)).unwrap();
+      if (activeTab === 'checklist') {
+        await dispatch(deleteChecklistTask(selectedTasks)).unwrap();
+      } else if (activeTab === 'maintenance') {
+        await dispatch(deleteMaintenanceTask(selectedTasks)).unwrap();
+      } else if (activeTab === 'delegation') {
+        await dispatch(deleteDelegationTask(selectedTasks)).unwrap();
+        dispatch(uniqueDelegationTaskData({}));
+      }
       setSelectedTasks([]);
     } catch (error) {
       console.error("Failed to delete tasks:", error);
@@ -224,6 +281,16 @@ export default function QuickTask() {
     setDropdownOpen({ ...dropdownOpen, frequency: false });
   };
 
+  const filteredDelegationTasks = delegationTasks.filter(task => {
+    const freqFilterPass = !freqFilter || task.frequency === freqFilter;
+    const searchTermPass = !searchTerm || (
+      task.task_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.given_by?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    return freqFilterPass && searchTermPass;
+  });
+
   // Keep allFrequencies as is (or modify if you want to fetch frequencies from elsewhere)
   const allFrequencies = [
     ...new Set([
@@ -239,7 +306,19 @@ export default function QuickTask() {
     const searchTermPass = !searchTerm || task.task_description
       ?.toLowerCase()
       .includes(searchTerm.toLowerCase());
-    return freqFilterPass && searchTermPass;
+
+    // Today and Overdue Filter (Hide Upcoming)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const taskDate = task.task_start_date ? new Date(task.task_start_date) : null;
+    let isUpcoming = false;
+    if (taskDate) {
+      const taskDay = new Date(taskDate);
+      taskDay.setHours(0, 0, 0, 0);
+      if (taskDay > today) isUpcoming = true;
+    }
+
+    return freqFilterPass && searchTermPass && !isUpcoming;
   }).sort((a, b) => {
     if (!sortConfig.key) return 0;
     if (a[sortConfig.key] < b[sortConfig.key]) {
@@ -318,6 +397,7 @@ export default function QuickTask() {
                   }`}
                 onClick={() => {
                   setActiveTab('checklist');
+                  setSelectedTasks([]);
                   dispatch(resetChecklistPagination());
                   dispatch(uniqueChecklistTaskData({ page: 0, pageSize: 50 }));
                 }}
@@ -331,6 +411,7 @@ export default function QuickTask() {
                   }`}
                 onClick={() => {
                   setActiveTab('delegation');
+                  setSelectedTasks([]);
                   dispatch(resetDelegationPagination());
                   dispatch(uniqueDelegationTaskData({ page: 0, pageSize: 50 }));
                 }}
@@ -344,6 +425,7 @@ export default function QuickTask() {
                   }`}
                 onClick={() => {
                   setActiveTab('maintenance');
+                  setSelectedTasks([]);
                   dispatch(maintenanceData(1));
                 }}
               >
@@ -396,7 +478,7 @@ export default function QuickTask() {
                 )}
               </div>
             </div>
-            {selectedTasks.length > 0 && activeTab === 'checklist' && (
+            {(selectedTasks.length > 0 && (activeTab === 'checklist' || activeTab === 'maintenance' || activeTab === 'delegation')) && (
               <button
                 onClick={handleDeleteSelected}
                 disabled={isDeleting}
@@ -508,7 +590,7 @@ export default function QuickTask() {
 
                           {/* Department */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {editingTaskId === task.task_id ? (
+                            {editingTaskId === task.id ? (
                               <input
                                 type="text"
                                 value={editFormData.department}
@@ -522,7 +604,7 @@ export default function QuickTask() {
 
                           {/* Given By */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.task_id ? (
+                            {editingTaskId === task.id ? (
                               <input
                                 type="text"
                                 value={editFormData.given_by}
@@ -536,7 +618,7 @@ export default function QuickTask() {
 
                           {/* Name */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.task_id ? (
+                            {editingTaskId === task.id ? (
                               <input
                                 type="text"
                                 value={editFormData.name}
@@ -550,7 +632,7 @@ export default function QuickTask() {
 
                           {/* Task Description */}
                           <td className="px-6 py-4 text-sm text-gray-500 min-w-[300px] max-w-[400px]">
-                            {editingTaskId === task.task_id ? (
+                            {editingTaskId === task.id ? (
                               <textarea
                                 value={editFormData.task_description}
                                 onChange={(e) => handleInputChange('task_description', e.target.value)}
@@ -559,14 +641,18 @@ export default function QuickTask() {
                               />
                             ) : (
                               <div className="whitespace-normal break-words">
-                                {task.task_description}
+                                {isAudioUrl(task.task_description) ? (
+                                  <AudioPlayer url={task.task_description} />
+                                ) : (
+                                  task.task_description
+                                )}
                               </div>
                             )}
                           </td>
 
                           {/* Task Start Date */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-yellow-50">
-                            {editingTaskId === task.task_id ? (
+                            {editingTaskId === task.id ? (
                               <input
                                 type="datetime-local"
                                 value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
@@ -585,7 +671,7 @@ export default function QuickTask() {
 
                           {/* Frequency */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.task_id ? (
+                            {editingTaskId === task.id ? (
                               <select
                                 value={editFormData.frequency}
                                 onChange={(e) => handleInputChange('frequency', e.target.value)}
@@ -610,7 +696,7 @@ export default function QuickTask() {
 
                           {/* Enable Reminders */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.task_id ? (
+                            {editingTaskId === task.id ? (
                               <select
                                 value={editFormData.enable_reminder}
                                 onChange={(e) => handleInputChange('enable_reminder', e.target.value)}
@@ -627,7 +713,7 @@ export default function QuickTask() {
 
                           {/* Require Attachment */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.task_id ? (
+                            {editingTaskId === task.id ? (
                               <select
                                 value={editFormData.require_attachment}
                                 onChange={(e) => handleInputChange('require_attachment', e.target.value)}
@@ -645,7 +731,7 @@ export default function QuickTask() {
                           {/* Actions */}
                           {/* Actions */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.task_id ? (
+                            {editingTaskId === task.id ? (
                               <div className="flex gap-2">
                                 <button
                                   onClick={handleSaveEdit}
@@ -708,8 +794,16 @@ export default function QuickTask() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0 z-20">
                     <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedTasks.length === filteredMaintenance.length && filteredMaintenance.length > 0}
+                          onChange={handleSelectAll}
+                          className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                        />
+                      </th>
                       {[
-                        { label: 'Department' },
+                        { label: 'Task ID' },
                         { label: 'Machine Name' },
                         { label: 'Part Name' },
                         { label: 'Part Area' },
@@ -734,15 +828,27 @@ export default function QuickTask() {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredMaintenance.length > 0 ? (
                       filteredMaintenance.map((task, index) => (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{task.department || task.company_name}</td>
+                        <tr key={index} className={`hover:bg-gray-50 ${selectedTasks.find(t => t.id === task.id) ? "bg-purple-50" : ""}`}>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={!!selectedTasks.find(t => t.id === task.id)}
+                              onChange={() => handleCheckboxChange(task)}
+                              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            />
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.id}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.machine_name}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.part_name}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.part_area}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.given_by}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.name}</td>
                           <td className="px-6 py-4 text-sm text-gray-500 min-w-[200px] max-w-[400px]">
-                            <div className="whitespace-normal break-words">{task.task_description}</div>
+                            {isAudioUrl(task.task_description) ? (
+                              <AudioPlayer url={task.task_description} />
+                            ) : (
+                              <div className="whitespace-normal break-words">{task.task_description}</div>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-yellow-50">
                             {formatTimestampToDDMMYYYY(task.task_start_date)}
@@ -772,7 +878,7 @@ export default function QuickTask() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={9} className="px-6 py-4 text-center text-gray-500">
+                        <td colSpan={12} className="px-6 py-4 text-center text-gray-500">
                           No maintenance tasks found
                         </td>
                       </tr>
@@ -786,6 +892,17 @@ export default function QuickTask() {
               searchTerm={searchTerm}
               freqFilter={freqFilter}
               setFreqFilter={setFreqFilter}
+              externalSelectedTasks={selectedTasks}
+              onSelectionChange={(taskOrAll, allTasks) => {
+                if (taskOrAll === 'ALL') {
+                  if (selectedTasks.length === allTasks.length) setSelectedTasks([]);
+                  else setSelectedTasks(allTasks);
+                } else {
+                  handleCheckboxChange(taskOrAll);
+                }
+              }}
+              onDelete={handleDeleteSelected}
+              isExternalDeleting={isDeleting}
             />
           )}
         </>

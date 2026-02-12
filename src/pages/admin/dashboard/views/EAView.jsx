@@ -290,7 +290,7 @@ export default function EAView() {
                                 eaTasks.slice(0, 8).map((task) => {
                                     const styles = getStatusStyles(task.status, task.planned_date);
                                     return (
-                                        <tr key={task.task_id} className="hover:bg-gray-50/50 group transition-colors">
+                                        <tr key={task.id} className="hover:bg-gray-50/50 group transition-colors">
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center font-bold text-gray-600 text-[10px] uppercase border border-gray-200 shadow-sm group-hover:bg-white transition-colors">

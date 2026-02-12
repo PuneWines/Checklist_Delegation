@@ -19,12 +19,14 @@ export const uniqueDoerNameData = createAsyncThunk('fetch/doerName', async (depa
 }
 );
 
-export const assignTaskInTable = createAsyncThunk('post/delegation', async (generatedTasks) => {
-  const assignTask = await pushAssignTaskApi(generatedTasks);
-
-  return assignTask;
-}
-);
+export const assignTaskInTable = createAsyncThunk('post/delegation', async ({ tasks, table }, { rejectWithValue }) => {
+  try {
+    const assignTask = await pushAssignTaskApi(tasks, table);
+    return assignTask;
+  } catch (error) {
+    return rejectWithValue(error.message);
+  }
+});
 
 
 

@@ -1,8 +1,54 @@
 "use client"
-import { useState, useEffect, useCallback, useMemo } from "react"
-import { CheckCircle2, Trash2, X } from "lucide-react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { CheckCircle2, Trash2, X, Search, Play, Pause } from "lucide-react"
 import { useDispatch, useSelector } from "react-redux"
 import { deleteDelegationTask, uniqueDelegationTaskData } from "../redux/slice/quickTaskSlice"
+
+const isAudioUrl = (url) => {
+  if (typeof url !== 'string') return false;
+  return url.startsWith('http') && (
+    url.includes('audio-recordings') ||
+    url.includes('voice-notes') ||
+    url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
+  );
+};
+
+const AudioPlayer = ({ url }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef(null);
+
+  const togglePlay = (e) => {
+    e.stopPropagation();
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleEnded = () => setIsPlaying(false);
+    audio.addEventListener('ended', handleEnded);
+    return () => audio.removeEventListener('ended', handleEnded);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <button
+        onClick={togglePlay}
+        className="p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-colors shadow-sm"
+      >
+        {isPlaying ? <Pause size={12} /> : <Play size={12} />}
+      </button>
+      <span className="text-[10px] font-bold text-purple-700 uppercase tracking-tight">Voice Note</span>
+      <audio ref={audioRef} src={url} className="hidden" />
+    </div>
+  );
+};
 
 const CONFIG = {
   PAGE_CONFIG: {
@@ -11,33 +57,57 @@ const CONFIG = {
   },
 }
 
-function DelegationPage({ searchTerm = "", freqFilter = "", setFreqFilter, departmentFilter = "", showLayout = true }) {
+function DelegationPage({
+  searchTerm = "",
+  freqFilter = "",
+  setFreqFilter,
+  departmentFilter = "",
+  showLayout = true,
+  externalSelectedTasks = null,
+  onSelectionChange = null,
+  onDelete = null,
+  isExternalDeleting = false
+}) {
   const [successMessage, setSuccessMessage] = useState("")
   const [error, setError] = useState(null)
   const [userRole, setUserRole] = useState("")
   const [username, setUsername] = useState("")
   const [isInitialized, setIsInitialized] = useState(false)
-  const [selectedTasks, setSelectedTasks] = useState([])
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [internalSelectedTasks, setInternalSelectedTasks] = useState([])
+  const [internalIsDeleting, setInternalIsDeleting] = useState(false)
+
+  const isControlled = externalSelectedTasks !== null;
+  const selectedTasks = isControlled ? externalSelectedTasks : internalSelectedTasks;
+  const isDeleting = isControlled ? isExternalDeleting : internalIsDeleting;
 
   const { delegationTasks, loading } = useSelector((state) => state.quickTask)
   const dispatch = useDispatch()
 
   // Handle checkbox selection
-  const handleCheckboxChange = (taskId) => {
-    if (selectedTasks.includes(taskId)) {
-      setSelectedTasks(selectedTasks.filter(task_id => task_id !== taskId))
+  const handleCheckboxChange = (task) => {
+    if (isControlled) {
+      if (onSelectionChange) onSelectionChange(task);
+      return;
+    }
+    const taskId = task.id;
+    if (internalSelectedTasks.find(t => t.id === taskId)) {
+      setInternalSelectedTasks(internalSelectedTasks.filter(t => t.id !== taskId))
     } else {
-      setSelectedTasks([...selectedTasks, taskId])
+      setInternalSelectedTasks([...internalSelectedTasks, task])
     }
   }
 
   // Select all checkboxes
   const handleSelectAll = () => {
-    if (selectedTasks.length === filteredTasks.length) {
-      setSelectedTasks([])
+    if (isControlled) {
+      // In controlled mode, we expect the parent to handle "Select All"
+      if (onSelectionChange) onSelectionChange('ALL', filteredTasks);
+      return;
+    }
+    if (internalSelectedTasks.length === filteredTasks.length) {
+      setInternalSelectedTasks([])
     } else {
-      setSelectedTasks(filteredTasks.map(task => task.task_id))
+      setInternalSelectedTasks(filteredTasks)
     }
   }
 
@@ -45,10 +115,15 @@ function DelegationPage({ searchTerm = "", freqFilter = "", setFreqFilter, depar
   const handleDeleteSelected = async () => {
     if (selectedTasks.length === 0) return
 
-    setIsDeleting(true)
+    if (isControlled && onDelete) {
+      onDelete();
+      return;
+    }
+
+    setInternalIsDeleting(true)
     try {
       await dispatch(deleteDelegationTask(selectedTasks)).unwrap()
-      setSelectedTasks([])
+      setInternalSelectedTasks([])
       setSuccessMessage("Tasks deleted successfully")
       dispatch(uniqueDelegationTaskData({}))
 
@@ -57,7 +132,7 @@ function DelegationPage({ searchTerm = "", freqFilter = "", setFreqFilter, depar
       console.error("Failed to delete tasks:", error)
       setError("Failed to delete tasks")
     } finally {
-      setIsDeleting(false)
+      setInternalIsDeleting(false)
     }
   }
 
@@ -106,6 +181,20 @@ function DelegationPage({ searchTerm = "", freqFilter = "", setFreqFilter, depar
       filtered = filtered.filter(task => task.department?.toLowerCase().includes(departmentFilter.toLowerCase()))
     }
 
+    // Today and Overdue Filter (Hide Upcoming)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    filtered = filtered.filter(task => {
+      const taskDate = task.task_start_date ? new Date(task.task_start_date) : null;
+      if (taskDate) {
+        const taskDay = new Date(taskDate);
+        taskDay.setHours(0, 0, 0, 0);
+        return taskDay <= today; // Only show today and past
+      }
+      return true; // Show tasks without dates (e.g. manual entries)
+    });
+
     return filtered
   }, [delegationTasks, searchTerm, freqFilter, departmentFilter])
 
@@ -144,7 +233,7 @@ function DelegationPage({ searchTerm = "", freqFilter = "", setFreqFilter, depar
               </p>
             </div>
 
-            {selectedTasks.length > 0 && (
+            {selectedTasks.length > 0 && !isControlled && (
               <button
                 onClick={handleDeleteSelected}
                 disabled={isDeleting}
@@ -209,7 +298,7 @@ function DelegationPage({ searchTerm = "", freqFilter = "", setFreqFilter, depar
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredTasks.length > 0 ? (
                   filteredTasks.map((task, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
+                    <tr key={index} className={`hover:bg-gray-50 ${selectedTasks.find(t => t.id === task.id) ? "bg-purple-50" : ""}`}>
                       <td className="px-2 sm:px-3 py-2 sm:py-4 w-16">
                         <div className="text-xs sm:text-sm font-medium text-gray-900 text-center">
                           {index + 1}
@@ -218,13 +307,13 @@ function DelegationPage({ searchTerm = "", freqFilter = "", setFreqFilter, depar
                       <td className="px-4 py-4 whitespace-nowrap">
                         <input
                           type="checkbox"
-                          checked={selectedTasks.includes(task.task_id)}
-                          onChange={() => handleCheckboxChange(task.task_id)}
+                          checked={!!selectedTasks.find(t => t.id === task.id)}
+                          onChange={() => handleCheckboxChange(task)}
                           className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {task.task_id || "—"}
+                        {task.id || "—"}
                       </td>
                       {!departmentFilter && (
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -239,7 +328,11 @@ function DelegationPage({ searchTerm = "", freqFilter = "", setFreqFilter, depar
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500 min-w-[300px] max-w-[400px]">
                         <div className="whitespace-normal break-words underline-offset-2">
-                          {task.task_description || "—"}
+                          {isAudioUrl(task.task_description) ? (
+                            <AudioPlayer url={task.task_description} />
+                          ) : (
+                            task.task_description || "—"
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-yellow-50">

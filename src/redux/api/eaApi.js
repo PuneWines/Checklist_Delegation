@@ -10,7 +10,7 @@ export const fetchEATasks = async () => {
             .order('planned_date', { ascending: true });
 
         if (error) throw error;
-        return data || [];
+        return (data || []).map(row => ({ ...row, id: row.task_id }));
     } catch (err) {
         console.error('Error fetching EA tasks:', err);
         return [];
@@ -26,7 +26,7 @@ export const fetchEATasksHistory = async () => {
             .order('submission_date', { ascending: false });
 
         if (error) throw error;
-        return data || [];
+        return (data || []).map(row => ({ ...row, id: row.task_id }));
     } catch (err) {
         console.error('Error fetching EA task history:', err);
         return [];
@@ -73,7 +73,7 @@ export const completeEATask = async (task, remarks = '', imageUrl = '') => {
         const { data: doneData, error: doneError } = await supabase
             .from('ea_tasks_done')
             .insert([{
-                task_id: task.task_id,
+                task_id: task.id,
                 doer_name: task.doer_name,
                 phone_number: task.phone_number,
                 planned_date: task.planned_date,
@@ -91,7 +91,7 @@ export const completeEATask = async (task, remarks = '', imageUrl = '') => {
         const { error: updateError } = await supabase
             .from('ea_tasks')
             .update({ status: 'done' })
-            .eq('task_id', task.task_id);
+            .eq('task_id', task.id || task.task_id);
 
         if (updateError) throw updateError;
 
@@ -109,7 +109,7 @@ export const extendEATask = async (task, newPlannedDate, remarks = '') => {
         const { data: doneData, error: doneError } = await supabase
             .from('ea_tasks_done')
             .insert([{
-                task_id: task.task_id,
+                task_id: task.id,
                 doer_name: task.doer_name,
                 phone_number: task.phone_number,
                 planned_date: task.planned_date,
@@ -130,7 +130,7 @@ export const extendEATask = async (task, newPlannedDate, remarks = '') => {
                 status: 'pending',
                 updated_at: new Date().toISOString()
             })
-            .eq('task_id', task.task_id);
+            .eq('task_id', task.id || task.task_id);
 
         if (updateError) throw updateError;
 

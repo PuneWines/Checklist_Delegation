@@ -1,6 +1,18 @@
 
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { fetchMaintenanceDataSortByDate, fetchMaintenanceDataForHistory, updateMaintenanceData } from "../api/maintenanceApi";
+import { fetchMaintenanceDataSortByDate, fetchMaintenanceDataForHistory, updateMaintenanceData, deleteMaintenanceTasksApi } from "../api/maintenanceApi";
+
+export const deleteMaintenanceTask = createAsyncThunk(
+    "deleteMaintenanceTask",
+    async (tasks, { rejectWithValue }) => {
+        try {
+            const response = await deleteMaintenanceTasksApi(tasks);
+            return response;
+        } catch (error) {
+            return rejectWithValue(error.message);
+        }
+    }
+);
 
 export const maintenanceData = createAsyncThunk("maintenanceData", async (page = 1, { rejectWithValue }) => {
     try {
@@ -87,6 +99,20 @@ const maintenanceSlice = createSlice({
             // We can filter out updated items from 'maintenance' state locally to update UI immediately
             // or rely on reload. 
             // Let's rely on reload or refetch as per existing patterns.
+        });
+
+        // Delete
+        builder.addCase(deleteMaintenanceTask.pending, (state) => {
+            state.loading = true;
+        });
+        builder.addCase(deleteMaintenanceTask.fulfilled, (state, action) => {
+            state.loading = false;
+            const deletedIds = action.payload;
+            state.maintenance = state.maintenance.filter(task => !deletedIds.includes(task.id));
+        });
+        builder.addCase(deleteMaintenanceTask.rejected, (state, action) => {
+            state.loading = false;
+            state.error = action.payload;
         });
     }
 });

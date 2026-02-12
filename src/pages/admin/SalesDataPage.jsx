@@ -57,7 +57,7 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      const allIds = filteredData.map(item => item.task_id);
+      const allIds = filteredData.map(item => item.id);
       setSelectedItems(new Set(allIds));
     } else {
       setSelectedItems(new Set());
@@ -83,10 +83,10 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
     setIsSubmitting(true);
     try {
       const submissionData = selectedIds.map(id => {
-        const item = checklist.find(t => t.task_id === id);
+        const item = checklist.find(t => t.id === id);
         const img = uploadedImages[id];
         return {
-          taskId: item.task_id,
+          taskId: item.id,
           department: item.department,
           givenBy: item.given_by,
           name: item.name,
@@ -273,12 +273,12 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
               {filteredData.map((item, idx) => {
-                const isSelected = selectedItems.has(item.task_id);
-                const isHistorySelected = selectedHistoryItems.includes(item.task_id);
+                const isSelected = selectedItems.has(item.id);
+                const isHistorySelected = selectedHistoryItems.includes(item.id);
 
                 return (
                   <tr
-                    key={item.task_id || idx}
+                    key={item.id || idx}
                     className={`hover:bg-gray-50 transition-colors ${isSelected || isHistorySelected ? 'bg-purple-50' : ''}`}
                   >
                     <td className="px-3 py-4 align-top w-10">
@@ -286,7 +286,7 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={(e) => handleCheckboxClick(e, item.task_id)}
+                          onChange={(e) => handleCheckboxClick(e, item.id)}
                           className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                         />
                       ) : (
@@ -295,8 +295,8 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
                             type="checkbox"
                             checked={isHistorySelected}
                             onChange={(e) => {
-                              if (e.target.checked) setSelectedHistoryItems(p => [...p, item.task_id])
-                              else setSelectedHistoryItems(p => p.filter(id => id !== item.task_id))
+                              if (e.target.checked) setSelectedHistoryItems(p => [...p, item.id])
+                              else setSelectedHistoryItems(p => p.filter(id => id !== item.id))
                             }}
                             className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                           />
@@ -304,7 +304,7 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
                       )}
                     </td>
                     <td className="px-3 py-4 text-sm font-medium text-gray-900 whitespace-nowrap align-top">
-                      #{item.task_id}
+                      #{item.id}
                     </td>
                     <td className="px-3 py-4 text-sm text-gray-600 whitespace-nowrap align-top">
                       {item.department || "-"}
@@ -351,10 +351,10 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
                       ) : (
                         <select
                           className={`w-full text-sm border rounded p-1.5 outline-none focus:border-gray-400 cursor-pointer
-                            ${additionalData[item.task_id] === 'yes' ? 'bg-green-50 border-green-300 text-green-700' :
-                              additionalData[item.task_id] === 'no' ? 'bg-red-50 border-red-300 text-red-700' : 'border-gray-300 text-gray-600'}`}
-                          value={additionalData[item.task_id] || ""}
-                          onChange={e => setAdditionalData(p => ({ ...p, [item.task_id]: e.target.value }))}
+                            ${additionalData[item.id] === 'yes' ? 'bg-green-50 border-green-300 text-green-700' :
+                              additionalData[item.id] === 'no' ? 'bg-red-50 border-red-300 text-red-700' : 'border-gray-300 text-gray-600'}`}
+                          value={additionalData[item.id] || ""}
+                          onChange={e => setAdditionalData(p => ({ ...p, [item.id]: e.target.value }))}
                           disabled={!isSelected}
                         >
                           <option value="">Select...</option>
@@ -373,8 +373,8 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
                           rows={1}
                           className="w-full text-sm border border-gray-300 rounded p-1.5 focus:border-purple-500 outline-none resize-none overflow-hidden focus:ring-1 focus:ring-purple-200 transition-shadow"
                           placeholder="Add remarks..."
-                          value={remarksData[item.task_id] || ""}
-                          onChange={e => setRemarksData(p => ({ ...p, [item.task_id]: e.target.value }))}
+                          value={remarksData[item.id] || ""}
+                          onChange={e => setRemarksData(p => ({ ...p, [item.id]: e.target.value }))}
                           disabled={!isSelected}
                         />
                       )}
@@ -392,12 +392,12 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
                         <div className="flex items-center gap-2">
                           <label className={`
                               cursor-pointer flex items-center justify-center p-1.5 rounded-md border transition-all duration-200
-                              ${uploadedImages[item.task_id] ? 'bg-green-50 border-green-300 text-green-700 shadow-sm' : 'border-gray-300 text-gray-500 hover:bg-gray-50 hover:border-purple-300 hover:text-purple-600'}
+                              ${uploadedImages[item.id] ? 'bg-green-50 border-green-300 text-green-700 shadow-sm' : 'border-gray-300 text-gray-500 hover:bg-gray-50 hover:border-purple-300 hover:text-purple-600'}
                            `}>
                             <Upload className="w-4 h-4" />
-                            <input type="file" className="hidden" onChange={e => handleImageUpload(item.task_id, e)} disabled={!isSelected} />
+                            <input type="file" className="hidden" onChange={e => handleImageUpload(item.id, e)} disabled={!isSelected} />
                           </label>
-                          {uploadedImages[item.task_id] && (
+                          {uploadedImages[item.id] && (
                             <span className="text-xs text-green-600 font-medium truncate max-w-[80px]">Attached</span>
                           )}
                         </div>

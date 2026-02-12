@@ -86,16 +86,20 @@ export const fetchUniqueDoerNameDataApi = async (department) => {
 
 
 
-export const pushAssignTaskApi = async (generatedTasks) => {
-  // Determine which table to use based on frequency
-  const firstTaskFrequency = generatedTasks[0]?.frequency?.toLowerCase() || "";
-  const isOneTime = firstTaskFrequency === "one-time" ||
-    firstTaskFrequency.includes("one time") ||
-    firstTaskFrequency.includes("no recurrence");
+export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
+  // Determine which table to use. Use targetTable if provided, 
+  // otherwise fallback to frequency-based logic.
+  let submitTable = targetTable;
 
-  const submitTable = isOneTime ? "delegation" : "checklist";
+  if (!submitTable) {
+    const firstTaskFrequency = generatedTasks[0]?.frequency?.toLowerCase() || "";
+    const isOneTime = firstTaskFrequency === "one-time" ||
+      firstTaskFrequency.includes("one time") ||
+      firstTaskFrequency.includes("no recurrence");
+    submitTable = isOneTime ? "delegation" : "checklist";
+  }
+
   console.log("Submitting to table:", submitTable, "Frequency:", generatedTasks[0]?.frequency);
-
 
   const tasksData = generatedTasks.map((task) => ({
     department: task.department,
@@ -106,13 +110,14 @@ export const pushAssignTaskApi = async (generatedTasks) => {
     frequency: task.frequency,
     enable_reminder: task.enableReminders ? "yes" : "no",
     require_attachment: task.requireAttachment ? "yes" : "no",
+    status: submitTable === 'checklist' ? null : (task.status || 'pending')
   }));
-
 
   try {
     const { data, error } = await supabase
       .from(submitTable)
-      .insert(tasksData);
+      .insert(tasksData)
+      .select(); // Added select() to return inserted data
 
     if (error) {
       console.error("Error when posting data:", error);
