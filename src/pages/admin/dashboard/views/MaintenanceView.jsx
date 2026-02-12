@@ -27,7 +27,10 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
             if (!task.originalTaskStartDate) return false;
             const taskDate = new Date(task.originalTaskStartDate);
 
-            if (maintFilter === 'today') return isToday(taskDate);
+            if (maintFilter === 'today') {
+                const isOverdue = taskDate < today;
+                return isToday(taskDate) || isOverdue;
+            }
             if (maintFilter === 'week') return isThisWeek(taskDate, { weekStartsOn: 1 });
             if (maintFilter === 'month') return isThisMonth(taskDate);
             return true; // Use 'all' if needed, but the request says today/week/month
@@ -279,7 +282,10 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Task ID</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Department</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Machine Name</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Part Name</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Part Area</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Assign From</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Name</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[200px]">Task Description</th>
@@ -297,7 +303,10 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                 filteredTasks.map((task, index) => (
                                     <tr key={task.id || index} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">#{task.id}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.department}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.machine_name}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.part_name}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.part_area}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.given_by}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.assignedTo}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600">

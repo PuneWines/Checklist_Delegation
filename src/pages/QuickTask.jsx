@@ -39,7 +39,12 @@ export default function QuickTask() {
     delegationHasMore         // Add this
   } = useSelector((state) => state.quickTask);
 
-  const { maintenance, loading: maintenanceLoading } = useSelector((state) => state.maintenance);
+  const {
+    maintenance,
+    loading: maintenanceLoading,
+    hasMore: maintenanceHasMore,
+    currentPage: maintenancePage
+  } = useSelector((state) => state.maintenance);
   const dispatch = useDispatch();
 
   useEffect(() => {
@@ -51,7 +56,7 @@ export default function QuickTask() {
 
   // Add this new function
   const handleScroll = useCallback(() => {
-    if (!tableContainerRef.current || loading) return;
+    if (!tableContainerRef.current || loading || (activeTab === 'maintenance' && maintenanceLoading)) return;
 
     const { scrollTop, scrollHeight, clientHeight } = tableContainerRef.current;
 
@@ -69,9 +74,11 @@ export default function QuickTask() {
           pageSize: 50,
           append: true
         }));
+      } else if (activeTab === 'maintenance' && maintenanceHasMore) {
+        dispatch(maintenanceData(maintenancePage + 1));
       }
     }
-  }, [loading, activeTab, checklistHasMore, delegationHasMore, checklistPage, delegationPage, dispatch]);
+  }, [loading, maintenanceLoading, activeTab, checklistHasMore, delegationHasMore, maintenanceHasMore, checklistPage, delegationPage, maintenancePage, dispatch]);
 
   // Add scroll listener
   useEffect(() => {
@@ -221,7 +228,8 @@ export default function QuickTask() {
   const allFrequencies = [
     ...new Set([
       ...quickTask.map(task => task.frequency),
-      ...delegationTasks.map(task => task.frequency)
+      ...delegationTasks.map(task => task.frequency),
+      ...maintenance.map(task => task.frequency)
     ])
   ].filter(frequency => frequency && typeof frequency === 'string' && frequency.trim() !== '');
 
@@ -231,7 +239,7 @@ export default function QuickTask() {
     const searchTermPass = !searchTerm || task.task_description
       ?.toLowerCase()
       .includes(searchTerm.toLowerCase());
-    return freqFilterPass && searchTermPass;  // Only these two filters
+    return freqFilterPass && searchTermPass;
   }).sort((a, b) => {
     if (!sortConfig.key) return 0;
     if (a[sortConfig.key] < b[sortConfig.key]) {
@@ -241,6 +249,30 @@ export default function QuickTask() {
       return sortConfig.direction === 'asc' ? 1 : -1;
     }
     return 0;
+  });
+
+  const filteredMaintenance = maintenance.filter(task => {
+    // Frequency Filter
+    const freqFilterPass = !freqFilter || task.frequency === freqFilter;
+
+    // Search Term Filter
+    const searchTermPass = !searchTerm ||
+      task.task_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.name?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Today and Overdue Filter (Hide Upcoming)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const taskDate = task.task_start_date ? new Date(task.task_start_date) : null;
+    let isUpcoming = false;
+    if (taskDate) {
+      const taskDay = new Date(taskDate);
+      taskDay.setHours(0, 0, 0, 0);
+      if (taskDay > today) isUpcoming = true;
+    }
+
+    return freqFilterPass && searchTermPass && !isUpcoming;
   });
 
   function formatTimestampToDDMMYYYY(timestamp) {
@@ -272,7 +304,7 @@ export default function QuickTask() {
               {activeTab === 'checklist'
                 ? `Showing ${quickTask.length} checklist tasks`
                 : activeTab === 'maintenance'
-                  ? `Showing ${maintenance.length} maintenance tasks`
+                  ? `Showing ${filteredMaintenance.length} maintenance tasks`
                   : `Showing delegation tasks`}
             </p>
           </div>
@@ -667,7 +699,10 @@ export default function QuickTask() {
             <div className="mt-4 rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden">
               <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-4">
                 <h2 className="text-purple-700 font-medium">Maintenance Tasks</h2>
-                <p className="text-purple-600 text-sm">Showing all maintenance tasks from database</p>
+                <div className="flex items-center gap-2">
+                  {maintenanceLoading && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-purple-600"></div>}
+                  <p className="text-purple-600 text-sm">Showing all maintenance tasks from database</p>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -675,9 +710,12 @@ export default function QuickTask() {
                     <tr>
                       {[
                         { label: 'Department' },
+                        { label: 'Machine Name' },
+                        { label: 'Part Name' },
+                        { label: 'Part Area' },
                         { label: 'Assign From' },
                         { label: 'Name' },
-                        { label: 'Task Description', minWidth: 'min-w-[300px]' },
+                        { label: 'Task Description', minWidth: 'min-w-[200px]' },
                         { label: 'Start Date', bg: 'bg-yellow-50' },
                         { label: 'End Date', bg: 'bg-yellow-50' },
                         { label: 'Frequency' },
@@ -694,13 +732,16 @@ export default function QuickTask() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {maintenance.length > 0 ? (
-                      maintenance.map((task, index) => (
+                    {filteredMaintenance.length > 0 ? (
+                      filteredMaintenance.map((task, index) => (
                         <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{task.company_name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{task.department || task.company_name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.machine_name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.part_name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.part_area}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.given_by}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.name}</td>
-                          <td className="px-6 py-4 text-sm text-gray-500 min-w-[300px] max-w-[400px]">
+                          <td className="px-6 py-4 text-sm text-gray-500 min-w-[200px] max-w-[400px]">
                             <div className="whitespace-normal break-words">{task.task_description}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-yellow-50">

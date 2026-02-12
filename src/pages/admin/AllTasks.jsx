@@ -18,6 +18,7 @@ import {
   Camera,
   Users,
 } from "lucide-react";
+import TaskManagementTabs from "../../components/TaskManagementTabs";
 import { updateRepairData } from "../../redux/api/repairApi";
 
 const AllTasks = () => {
@@ -205,7 +206,10 @@ const AllTasks = () => {
           if (showHistory) {
             headers = [
               { id: "task_id", label: "Task ID" },
+              { id: "department", label: "Department" },
               { id: "machine_name", label: "Machine Name" },
+              { id: "part_name", label: "Part Name" },
+              { id: "part_area", label: "Part Area" },
               { id: "task_description", label: "Task Description" },
               { id: "task_start_date", label: "Task Start Date & Time" },
               { id: "freq", label: "Freq" },
@@ -216,7 +220,10 @@ const AllTasks = () => {
           } else {
             headers = [
               { id: "task_id", label: "Task ID" },
+              { id: "department", label: "Department" },
               { id: "machine_name", label: "Machine Name" },
+              { id: "part_name", label: "Part Name" },
+              { id: "part_area", label: "Part Area" },
               { id: "given_by", label: "Given By" },
               { id: "name", label: "Name" },
               { id: "task_description", label: "Task Description" },
@@ -707,48 +714,18 @@ const AllTasks = () => {
     }
   };
 
-  // Tab config
-  const tabs = [
-    { id: "checklist", label: "Checklist", icon: ClipboardList },
-    { id: "maintenance", label: "Maintenance", icon: Wrench },
-    { id: "repair", label: "Repair", icon: Hammer },
-    { id: "ea", label: "EA Tasks", icon: Users },
-  ];
 
   return (
     <AdminLayout>
       <div className="space-y-4 sm:space-y-6 p-2 sm:p-0">
         {/* Tab System */}
-        <div className="bg-white rounded-lg shadow-sm border border-purple-100">
-          <div className="border-b border-gray-200">
-            <nav className="flex -mb-px">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      setActiveTab(tab.id);
-                      setShowHistory(false);
-                      setSelectedItems(new Set());
-                      setSearchTerm("");
-                    }}
-                    className={`group inline-flex items-center px-4 sm:px-6 py-3 sm:py-4 border-b-2 font-medium text-xs sm:text-sm transition-all duration-200 ${isActive
-                      ? "border-purple-500 text-purple-600 bg-purple-50/50"
-                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                      }`}
-                  >
-                    <Icon
-                      className={`-ml-0.5 mr-2 h-4 w-4 sm:h-5 sm:w-5 ${isActive ? "text-purple-500" : "text-gray-400 group-hover:text-gray-500"
-                        }`}
-                    />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+        <div className="bg-white rounded-xl shadow-md border border-purple-100 px-4 md:px-6 py-4">
+          <TaskManagementTabs activeTab={activeTab} setActiveTab={(newTab) => {
+            setActiveTab(newTab);
+            setShowHistory(false);
+            setSelectedItems(new Set());
+            setSearchTerm("");
+          }} />
         </div>
 
         {/* Action Header */}

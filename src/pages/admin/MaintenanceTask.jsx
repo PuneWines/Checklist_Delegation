@@ -11,7 +11,13 @@ import supabase from "../../SupabaseClient";
 import CalendarComponent from "../../components/CalendarComponent";
 
 const formatDateLong = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
-const formatDateISO = (date) => date ? date.toISOString().split('T')[0] : "";
+const formatDateISO = (date) => {
+    if (!date) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 export default function MaintenanceTask() {
     const dispatch = useDispatch();
@@ -102,7 +108,15 @@ export default function MaintenanceTask() {
 
         try {
             const tasks = [];
-            const startDate = new Date(formData.startDate);
+            // Helper to get local YYYY-MM-DD
+            const getLocalDateString = (date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+
+            const startDate = new Date(formData.startDate + 'T00:00:00'); // Force local midnight
             const freq = formData.frequency.toLowerCase();
 
             // Fetch working days if recurring
@@ -114,8 +128,8 @@ export default function MaintenanceTask() {
                 const { data: workingData, error: wdError } = await supabase
                     .from('working_day_calender')
                     .select('working_date')
-                    .gte('working_date', startDate.toISOString().split('T')[0])
-                    .lte('working_date', yearEndDate.toISOString().split('T')[0]);
+                    .gte('working_date', getLocalDateString(startDate))
+                    .lte('working_date', getLocalDateString(yearEndDate));
 
                 if (wdError) throw wdError;
 
@@ -131,11 +145,14 @@ export default function MaintenanceTask() {
 
                 tasks.push({
                     task_id: taskId,
-                    company_name: formData.department,
+                    department: formData.department,
                     name: formData.doerName,
                     given_by: formData.givenBy,
                     task_start_date: `${formData.startDate}T${formData.startTime}:00`,
-                    task_description: `${formData.machineName} - ${formData.workDescription} (Area: ${formData.machineArea}, Part: ${formData.partName})`,
+                    task_description: `${formData.workDescription} (Area: ${formData.machineArea}, Part: ${formData.partName})`,
+                    machine_name: formData.machineName,
+                    part_name: formData.partName,
+                    part_area: formData.machineArea,
                     freq: formData.frequency,
                     status: "Pending",
                     submission_date: null,
@@ -146,12 +163,12 @@ export default function MaintenanceTask() {
                 endDate.setFullYear(endDate.getFullYear() + 1);
 
                 const isHoliday = (d) => {
-                    const dStr = d.toISOString().split('T')[0];
+                    const dStr = getLocalDateString(d);
                     return holidays.includes(dStr);
                 };
 
                 const isWorkingDay = (d) => {
-                    const dStr = d.toISOString().split('T')[0];
+                    const dStr = getLocalDateString(d);
                     return workingDaySet.has(dStr);
                 };
 
@@ -173,11 +190,14 @@ export default function MaintenanceTask() {
 
                         tasks.push({
                             task_id: taskId,
-                            company_name: formData.department,
+                            department: formData.department,
                             name: formData.doerName,
                             given_by: formData.givenBy,
-                            task_start_date: `${current.toISOString().split('T')[0]}T${formData.startTime}:00`,
-                            task_description: `${formData.machineName} - ${formData.workDescription} (Area: ${formData.machineArea}, Part: ${formData.partName})`,
+                            task_start_date: `${getLocalDateString(current)}T${formData.startTime}:00`,
+                            task_description: `${formData.workDescription} (Area: ${formData.machineArea}, Part: ${formData.partName})`,
+                            machine_name: formData.machineName,
+                            part_name: formData.partName,
+                            part_area: formData.machineArea,
                             freq: formData.frequency,
                             status: "Pending",
                             submission_date: null,

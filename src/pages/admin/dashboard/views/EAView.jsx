@@ -162,26 +162,26 @@ export default function EAView() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 w-full mt-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-2 gap-x-4 md:gap-x-8 gap-y-3 w-full mt-auto">
                         <div className="flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
-                            <span className="text-xs font-bold text-gray-500 uppercase">Done</span>
-                            <span className="ml-auto text-xs font-black text-gray-700">{calculatePercentage(stats.completed, stats.total)}%</span>
+                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0"></div>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase">Done</span>
+                            <span className="ml-auto text-[10px] font-black text-gray-700">{calculatePercentage(stats.completed, stats.total)}%</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full bg-indigo-500"></div>
-                            <span className="text-xs font-bold text-gray-500 uppercase">Pending</span>
-                            <span className="ml-auto text-xs font-black text-gray-700">{calculatePercentage(stats.pending, stats.total)}%</span>
+                            <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 flex-shrink-0"></div>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase">Pending</span>
+                            <span className="ml-auto text-[10px] font-black text-gray-700">{calculatePercentage(stats.pending, stats.total)}%</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div>
-                            <span className="text-xs font-bold text-gray-500 uppercase">Extd</span>
-                            <span className="ml-auto text-xs font-black text-gray-700">{calculatePercentage(stats.extended, stats.total)}%</span>
+                            <div className="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0"></div>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase">Extd</span>
+                            <span className="ml-auto text-[10px] font-black text-gray-700">{calculatePercentage(stats.extended, stats.total)}%</span>
                         </div>
                         <div className="flex items-center gap-2 text-red-500">
-                            <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                            <span className="text-xs font-bold uppercase">Overdue</span>
-                            <span className="ml-auto text-xs font-black">{stats.overdue}</span>
+                            <div className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0"></div>
+                            <span className="text-[10px] font-bold uppercase">Overdue</span>
+                            <span className="ml-auto text-[10px] font-black">{stats.overdue}</span>
                         </div>
                     </div>
                 </div>
@@ -233,7 +233,7 @@ export default function EAView() {
             </div>
 
             {/* Premium Stat Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
                     { label: 'Total Syncs', value: stats.total, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50' },
                     { label: 'Active Queue', value: stats.pending, icon: Clock, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -268,8 +268,8 @@ export default function EAView() {
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
+                <div className="overflow-x-auto scrollbar-hide">
+                    <table className="w-full text-left min-w-[700px]">
                         <thead>
                             <tr className="bg-gray-50/30">
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-wider">Stakeholder</th>

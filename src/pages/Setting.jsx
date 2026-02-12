@@ -624,8 +624,12 @@ const Setting = () => {
   // Modified handleAddUser
   const handleAddUser = async (e) => {
     e.preventDefault();
+    // Auto-generate employee_id
+    const generatedEmpId = `EMP-${Date.now().toString().slice(-6)}`;
+
     const newUser = {
       ...userForm,
+      employee_id: generatedEmpId,
       user_access: userForm.department,
     };
 
@@ -1550,7 +1554,7 @@ const Setting = () => {
                         value={userForm.username}
                         onChange={handleUserInputChange}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
-                        placeholder="john_doe"
+                        placeholder="Enter username"
                       />
                     </div>
 
@@ -1563,7 +1567,7 @@ const Setting = () => {
                         value={userForm.email}
                         onChange={handleUserInputChange}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
-                        placeholder="john@example.com"
+                        placeholder="Enter email address"
                       />
                     </div>
 
@@ -1595,18 +1599,19 @@ const Setting = () => {
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <label htmlFor="employee_id" className="block text-sm font-bold text-gray-700 ml-1">Employee ID</label>
-                      <input
-                        type="text"
-                        name="employee_id"
-                        id="employee_id"
-                        value={userForm.employee_id}
-                        onChange={handleUserInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
-                        placeholder="EMP001"
-                      />
-                    </div>
+                    {isEditing && (
+                      <div className="space-y-2">
+                        <label htmlFor="employee_id" className="block text-sm font-bold text-gray-700 ml-1">Employee ID</label>
+                        <input
+                          type="text"
+                          name="employee_id"
+                          id="employee_id"
+                          value={userForm.employee_id}
+                          readOnly
+                          className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-gray-500 cursor-not-allowed outline-none"
+                        />
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <label htmlFor="role" className="block text-sm font-bold text-gray-700 ml-1">User Role</label>

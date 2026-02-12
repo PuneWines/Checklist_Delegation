@@ -29,16 +29,11 @@ export const fetchMaintenanceDataSortByDate = async (page = 1, limit = 50, searc
 
         if (searchTerm && searchTerm.trim() !== '') {
             const searchValue = searchTerm.trim();
-            query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,company_name.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
+            query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
         }
 
         if (role === 'user' && username) {
             query = query.eq('name', username);
-        } else if (role === 'admin' && userAccess && userAccess !== 'all') {
-            const allowedDepartments = userAccess.split(',').map(dept => dept.trim()).filter(d => d && d !== 'all');
-            if (allowedDepartments.length > 0) {
-                query = query.in('company_name', allowedDepartments); // department is stored as company_name in maintenance
-            }
         }
 
         const { data, error, count } = await query;
@@ -78,16 +73,11 @@ export const fetchMaintenanceDataForHistory = async (page = 1, searchTerm = '') 
 
         if (searchTerm && searchTerm.trim() !== '') {
             const searchValue = searchTerm.trim();
-            query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,company_name.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
+            query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
         }
 
         if (role === 'user' && username) {
             query = query.eq('name', username);
-        } else if (role === 'admin' && userAccess && userAccess !== 'all') {
-            const allowedDepartments = userAccess.split(',').map(dept => dept.trim()).filter(d => d && d !== 'all');
-            if (allowedDepartments.length > 0) {
-                query = query.in('company_name', allowedDepartments);
-            }
         }
 
         const { data, error } = await query;
@@ -127,11 +117,6 @@ export const fetchAllMaintenanceTasksForDashboard = async (page = 1, limit = 100
         // Apply role-based filtering
         if (role === 'user' && username) {
             query = query.eq('name', username);
-        } else if (role === 'admin' && userAccess && userAccess !== 'all') {
-            const allowedDepartments = userAccess.split(',').map(dept => dept.trim()).filter(d => d && d !== 'all');
-            if (allowedDepartments.length > 0) {
-                query = query.in('company_name', allowedDepartments);
-            }
         }
 
         const { data, error, count } = await query;

@@ -237,28 +237,26 @@ export default function TaskNavigationTabs({
 
   return (
     <div className="w-full overflow-hidden rounded-lg border border-gray-200 bg-white">
-      <div className="hidden md:grid grid-cols-3">
-        <button
-          className={`py-3 text-center font-medium transition-colors ${taskView === "recent" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          onClick={() => setTaskView("recent")}
-        >
-          {dashboardType === "delegation" ? "Today Task" : "Recent"}
-        </button>
-        <button
-          className={`py-3 text-center font-medium transition-colors ${taskView === "upcoming" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          onClick={() => setTaskView("upcoming")}
-        >
-          {dashboardType === "delegation" ? "Future Task" : "Upcoming"}
-        </button>
-        <button
-          className={`py-3 text-center font-medium transition-colors ${taskView === "overdue" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          onClick={() => setTaskView("overdue")}
-        >
-          Overdue
-        </button>
+      <div className="bg-gray-50/50 p-3 border-b border-gray-100">
+        <div className="flex bg-white rounded-xl border border-purple-100 p-1 shadow-sm overflow-x-auto no-scrollbar">
+          {["recent", "upcoming", "overdue"].map((view) => (
+            <button
+              key={view}
+              onClick={() => setTaskView(view)}
+              className={`flex-1 min-w-[120px] py-2.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-300 uppercase tracking-wider ${taskView === view
+                ? "bg-purple-600 text-white shadow-md transform scale-[1.02]"
+                : "text-purple-600 hover:bg-purple-50"
+                }`}
+            >
+              {view === "overdue" ? "Overdue" :
+                (dashboardType === "delegation"
+                  ? (view === "recent" ? "Today Task" : "Future Task")
+                  : (view === "recent" ? "Recent" : "Upcoming")
+                )
+              }
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="p-4">
@@ -335,26 +333,6 @@ export default function TaskNavigationTabs({
           </div>
         )}
 
-        {/* Mobile-Friendly Tabs Header */}
-        <div className="md:hidden flex bg-white rounded-lg border border-purple-200 p-1 mb-4 shadow-sm overflow-x-auto no-scrollbar">
-          {["recent", "upcoming", "overdue"].map((view) => (
-            <button
-              key={view}
-              onClick={() => setTaskView(view)}
-              className={`flex-1 min-w-[100px] py-3 rounded-lg text-sm font-bold transition-all duration-300 uppercase tracking-wider ${taskView === view
-                ? "bg-purple-600 text-white shadow-lg"
-                : "text-purple-600 hover:bg-purple-50"
-                }`}
-            >
-              {view === "overdue" ? "Overdue" :
-                (dashboardType === "delegation"
-                  ? (view === "recent" ? "Today Task" : "Future Task")
-                  : (view === "recent" ? "Recent" : "Upcoming")
-                )
-              }
-            </button>
-          ))}
-        </div>
 
         {/* Task List / Table Rendering */}
         {displayedTasks.length === 0 && !isLoadingMore ? (
