@@ -46,9 +46,9 @@ export const updateMaintenance = createAsyncThunk("updateMaintenance", async (su
     }
 });
 
-export const updateMaintenanceTask = createAsyncThunk("updateMaintenanceTask", async (updatedTask, { rejectWithValue }) => {
+export const updateMaintenanceTask = createAsyncThunk("updateMaintenanceTask", async ({ updatedTask, originalTask }, { rejectWithValue }) => {
     try {
-        const response = await updateMaintenanceTaskApi(updatedTask);
+        const response = await updateMaintenanceTaskApi(updatedTask, originalTask);
         return response;
     } catch (error) {
         return rejectWithValue(error.message);

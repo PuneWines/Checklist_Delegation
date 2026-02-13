@@ -206,26 +206,34 @@ export const postMaintenanceTaskApi = async (taskData) => {
     }
 };
 
-export const updateMaintenanceTaskApi = async (updatedTask) => {
+export const updateMaintenanceTaskApi = async (updatedTask, originalTask) => {
     try {
-        const { data, error } = await supabase
-            .from("maintenance_tasks")
-            .update({
-                machine_name: updatedTask.machine_name,
-                part_name: updatedTask.part_name,
-                part_area: updatedTask.part_area,
-                given_by: updatedTask.given_by,
-                name: updatedTask.name,
-                task_description: updatedTask.task_description,
-                task_start_date: updatedTask.task_start_date,
-                freq: updatedTask.freq,
-                status: updatedTask.status,
-                remarks: updatedTask.remarks
-            })
-            .eq("id", updatedTask.id)
-            .is("submission_date", null)
-            .select();
+        let query = supabase.from("maintenance_tasks").update({
+            machine_name: updatedTask.machine_name,
+            part_name: updatedTask.part_name,
+            part_area: updatedTask.part_area,
+            given_by: updatedTask.given_by,
+            name: updatedTask.name,
+            task_description: updatedTask.task_description,
+            task_start_date: updatedTask.task_start_date,
+            freq: updatedTask.freq,
+            status: updatedTask.status,
+            remarks: updatedTask.remarks
+        });
 
+        if (originalTask) {
+            // Update all matching pending tasks
+            query = query
+                .eq("machine_name", originalTask.machine_name)
+                .eq("part_name", originalTask.part_name)
+                .eq("task_description", originalTask.task_description)
+                .is("submission_date", null);
+        } else {
+            // Fallback to single record update
+            query = query.eq("id", updatedTask.id);
+        }
+
+        const { data, error } = await query.is("submission_date", null).select();
         if (error) throw error;
         return data;
     } catch (error) {

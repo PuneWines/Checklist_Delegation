@@ -74,9 +74,9 @@ export const updateChecklistTask = createAsyncThunk(
 
 export const updateDelegationTask = createAsyncThunk(
   'update/delegationTask',
-  async (updatedTask, { rejectWithValue }) => {
+  async ({ updatedTask, originalTask }, { rejectWithValue }) => {
     try {
-      const result = await updateDelegationTaskApi(updatedTask);
+      const result = await updateDelegationTaskApi(updatedTask, originalTask);
       return result;
     } catch (error) {
       return rejectWithValue(error.message);

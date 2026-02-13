@@ -1,13 +1,15 @@
 "use client"
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { format } from 'date-fns';
-import { Search, ChevronDown, Filter, Trash2, Edit, Save, X, Play, Pause } from "lucide-react";
+import { Search, ChevronDown, Filter, Trash2, Edit, Save, X, Play, Pause, Mic, Square } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import DelegationPage from "./delegation-data";
 import { useDispatch, useSelector } from "react-redux";
 import { deleteChecklistTask, deleteDelegationTask, uniqueChecklistTaskData, uniqueDelegationTaskData, updateChecklistTask, fetchUsers, resetChecklistPagination, resetDelegationPagination } from "../redux/slice/quickTaskSlice";
 import { maintenanceData, deleteMaintenanceTask, updateMaintenanceTask } from "../redux/slice/maintenanceSlice";
 import { fetchUniqueDepartmentDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../redux/api/assignTaskApi";
+import { ReactMediaRecorder } from "react-media-recorder";
+import supabase from "../SupabaseClient";
 
 const isAudioUrl = (url) => {
   if (typeof url !== 'string') return false;
@@ -208,14 +210,19 @@ export default function QuickTask() {
         frequency: task.frequency || '',
         enable_reminder: task.enable_reminder || '',
         require_attachment: task.require_attachment || '',
-        remark: task.remark || ''
+        remark: task.remark || '',
+        originalAudioUrl: isAudioUrl(task.task_description) ? task.task_description : null,
       });
     }
   };
 
+  const [recordedAudio, setRecordedAudio] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+
   const handleCancelEdit = () => {
     setEditingTaskId(null);
     setEditFormData({});
+    setRecordedAudio(null);
   };
 
   const handleSaveEdit = async () => {
@@ -223,8 +230,62 @@ export default function QuickTask() {
 
     setIsSaving(true);
     try {
+      let finalEditData = { ...editFormData };
+      let audioToCleanup = null;
+
+      // Handle Audio Upload
+      if (recordedAudio && recordedAudio.blob) {
+        setIsUploading(true);
+        try {
+          const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('audio-recordings')
+            .upload(fileName, recordedAudio.blob, {
+              contentType: recordedAudio.blob.type || 'audio/webm',
+              upsert: false
+            });
+
+          if (uploadError) throw uploadError;
+
+          const { data: publicUrlData } = supabase.storage
+            .from('audio-recordings')
+            .getPublicUrl(fileName);
+
+          finalEditData.task_description = publicUrlData.publicUrl;
+
+          if (editFormData.originalAudioUrl) {
+            audioToCleanup = editFormData.originalAudioUrl;
+          }
+        } catch (error) {
+          console.error("Audio upload failed:", error);
+          alert("Failed to upload voice note. Saving without it.");
+        } finally {
+          setIsUploading(false);
+        }
+      } else if (editFormData.originalAudioUrl && !isAudioUrl(editFormData.task_description)) {
+        audioToCleanup = editFormData.originalAudioUrl;
+      }
+
       if (activeTab === 'maintenance') {
-        await dispatch(updateMaintenanceTask(editFormData)).unwrap();
+        const originalTask = maintenance.find(task => task.id === editFormData.id);
+        await dispatch(updateMaintenanceTask({
+          updatedTask: finalEditData,
+          originalTask: originalTask ? {
+            machine_name: originalTask.machine_name,
+            part_name: originalTask.part_name,
+            task_description: originalTask.task_description
+          } : null
+        })).unwrap();
+      } else if (activeTab === 'delegation') {
+        const originalTask = delegationTasks.find(task => task.id === editFormData.id);
+        await dispatch(updateDelegationTask({
+          updatedTask: finalEditData,
+          originalTask: originalTask ? {
+            department: originalTask.department,
+            name: originalTask.name,
+            task_description: originalTask.task_description
+          } : null
+        })).unwrap();
       } else {
         // Find the original task data for matching (only for checklist currently)
         const originalTask = quickTask.find(task => task.id === editFormData.id);
@@ -234,7 +295,7 @@ export default function QuickTask() {
         }
 
         await dispatch(updateChecklistTask({
-          updatedTask: editFormData,
+          updatedTask: finalEditData,
           originalTask: {
             department: originalTask.department,
             name: originalTask.name,
@@ -243,8 +304,18 @@ export default function QuickTask() {
         })).unwrap();
       }
 
+      if (audioToCleanup) {
+        try {
+          const path = audioToCleanup.split('audio-recordings/').pop().split('?')[0];
+          await supabase.storage.from('audio-recordings').remove([path]);
+        } catch (cleanupError) {
+          console.error("Failed to cleanup old audio:", cleanupError);
+        }
+      }
+
       setEditingTaskId(null);
       setEditFormData({});
+      setRecordedAudio(null);
 
       // Refresh the data
       if (activeTab === 'checklist') {
@@ -688,11 +759,89 @@ export default function QuickTask() {
                           {/* Task Description */}
                           <td className="px-6 py-4 text-sm text-gray-500 min-w-[300px] max-w-[400px]">
                             {editingTaskId === task.id ? (
-                              <textarea
-                                value={editFormData.task_description}
-                                onChange={(e) => handleInputChange('task_description', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                rows="3"
+                              <ReactMediaRecorder
+                                audio
+                                onStop={(blobUrl, blob) => setRecordedAudio({ blobUrl, blob })}
+                                render={({ status, startRecording, stopRecording, clearBlobUrl }) => (
+                                  <div className="space-y-2">
+                                    {status !== 'recording' && !recordedAudio && (
+                                      <div className="relative">
+                                        {isAudioUrl(editFormData.task_description) ? (
+                                          <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2">
+                                            <div className="flex items-center justify-between mb-2">
+                                              <span className="text-[10px] font-bold text-indigo-600 uppercase">Existing Audio</span>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleInputChange('task_description', '')}
+                                                className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                                              >
+                                                <Trash2 size={10} /> Remove
+                                              </button>
+                                            </div>
+                                            <AudioPlayer url={editFormData.task_description} />
+                                            <button
+                                              type="button"
+                                              onClick={startRecording}
+                                              className="mt-2 w-full flex items-center justify-center gap-2 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 transition-all"
+                                            >
+                                              <Mic size={12} /> Replace with Recording
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div className="relative">
+                                            <textarea
+                                              value={editFormData.task_description}
+                                              onChange={(e) => handleInputChange('task_description', e.target.value)}
+                                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm pr-10"
+                                              rows="3"
+                                              placeholder="Enter task text..."
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={startRecording}
+                                              className="absolute bottom-2 right-2 p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200"
+                                              title="Record Audio"
+                                            >
+                                              <Mic size={16} />
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {status === 'recording' && (
+                                      <div className="flex flex-col items-center justify-center p-4 bg-red-50 border border-red-100 rounded-lg space-y-2 animate-pulse">
+                                        <Mic size={20} className="text-red-600" />
+                                        <button
+                                          type="button"
+                                          onClick={stopRecording}
+                                          className="flex items-center gap-2 px-3 py-1 bg-red-600 text-white rounded-full hover:bg-red-700 text-xs font-bold"
+                                        >
+                                          <Square size={10} /> Stop
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {recordedAudio && status !== 'recording' && (
+                                      <div className="bg-purple-50 border border-purple-100 rounded-lg p-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-[10px] font-bold text-purple-600 uppercase">New Voice Note Attached</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              clearBlobUrl();
+                                              setRecordedAudio(null);
+                                            }}
+                                            className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                                          >
+                                            <Trash2 size={10} /> Remove
+                                          </button>
+                                        </div>
+                                        <audio src={recordedAudio.blobUrl} controls className="w-full h-8 mt-1" />
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               />
                             ) : (
                               <div className="whitespace-normal break-words">

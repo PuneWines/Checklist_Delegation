@@ -209,22 +209,31 @@ export const deleteDelegationTasksApi = async (tasks) => {
 
 export const updateChecklistTaskApi = async (updatedTask, originalTask) => {
   try {
-    const { data, error } = await supabase
-      .from("checklist")
-      .update({
-        department: updatedTask.department,
-        given_by: updatedTask.given_by,
-        name: updatedTask.name,
-        task_description: updatedTask.task_description,
-        task_start_date: updatedTask.task_start_date,
-        frequency: updatedTask.frequency,
-        enable_reminder: updatedTask.enable_reminder,
-        require_attachment: updatedTask.require_attachment,
-        remark: updatedTask.remark
-      })
-      .eq("task_id", updatedTask.id || updatedTask.task_id) // Match specific record
-      .select();
+    let query = supabase.from("checklist").update({
+      department: updatedTask.department,
+      given_by: updatedTask.given_by,
+      name: updatedTask.name,
+      task_description: updatedTask.task_description,
+      task_start_date: updatedTask.task_start_date,
+      frequency: updatedTask.frequency,
+      enable_reminder: updatedTask.enable_reminder,
+      require_attachment: updatedTask.require_attachment,
+      remark: updatedTask.remark
+    });
 
+    if (originalTask) {
+      // Update all matching pending tasks
+      query = query
+        .eq("department", originalTask.department)
+        .eq("name", originalTask.name)
+        .eq("task_description", originalTask.task_description)
+        .is("submission_date", null);
+    } else {
+      // Fallback to single record update
+      query = query.eq("task_id", updatedTask.id || updatedTask.task_id);
+    }
+
+    const { data, error } = await query.select();
     if (error) throw error;
     return data;
   } catch (error) {
@@ -233,25 +242,33 @@ export const updateChecklistTaskApi = async (updatedTask, originalTask) => {
   }
 };
 
-export const updateDelegationTaskApi = async (updatedTask) => {
+export const updateDelegationTaskApi = async (updatedTask, originalTask) => {
   try {
-    const { data, error } = await supabase
-      .from("delegation")
-      .update({
-        department: updatedTask.department,
-        given_by: updatedTask.given_by,
-        name: updatedTask.name,
-        task_description: updatedTask.task_description,
-        task_start_date: updatedTask.task_start_date,
-        frequency: updatedTask.frequency,
-        enable_reminder: updatedTask.enable_reminder,
-        require_attachment: updatedTask.require_attachment,
-        remarks: updatedTask.remarks
-      })
-      .eq("task_id", updatedTask.id)
-      .is("submission_date", null)
-      .select();
+    let query = supabase.from("delegation").update({
+      department: updatedTask.department,
+      given_by: updatedTask.given_by,
+      name: updatedTask.name,
+      task_description: updatedTask.task_description,
+      task_start_date: updatedTask.task_start_date,
+      frequency: updatedTask.frequency,
+      enable_reminder: updatedTask.enable_reminder,
+      require_attachment: updatedTask.require_attachment,
+      remarks: updatedTask.remarks
+    });
 
+    if (originalTask) {
+      // Update all matching pending tasks
+      query = query
+        .eq("department", originalTask.department)
+        .eq("name", originalTask.name)
+        .eq("task_description", originalTask.task_description)
+        .is("submission_date", null);
+    } else {
+      // Fallback to single record update
+      query = query.eq("task_id", updatedTask.id || updatedTask.task_id);
+    }
+
+    const { data, error } = await query.select();
     if (error) throw error;
     return data;
   } catch (error) {

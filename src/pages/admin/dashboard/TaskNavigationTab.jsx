@@ -119,6 +119,7 @@ export default function TaskNavigationTabs({
       department: task.department || '',
       task_start_date: task.originalTaskStartDate || '',
       frequency: task.frequency || '',
+      originalAudioUrl: isAudioUrl(task.title) ? task.title : null,
       // Add other relevant fields if needed
     });
   };
@@ -143,8 +144,9 @@ export default function TaskNavigationTabs({
     setIsSaving(true);
     try {
       let finalEditData = { ...editFormData };
+      let audioToCleanup = null;
 
-      // Handle Audio Upload if exists
+      // Handle Audio Upload or Change
       if (recordedAudio && recordedAudio.blob) {
         setIsUploading(true);
         try {
@@ -163,12 +165,22 @@ export default function TaskNavigationTabs({
             .getPublicUrl(fileName);
 
           finalEditData.task_description = publicUrlData.publicUrl;
+
+          // If we had an original audio, mark it for cleanup
+          if (editFormData.originalAudioUrl) {
+            audioToCleanup = editFormData.originalAudioUrl;
+          }
         } catch (error) {
           console.error("Audio upload failed:", error);
           alert("Failed to upload voice note. Saving without it.");
         } finally {
           setIsUploading(false);
         }
+      } else if (editFormData.originalAudioUrl && isAudioUrl(editFormData.task_description)) {
+        // No new recording, keeping old audio
+      } else if (editFormData.originalAudioUrl && !isAudioUrl(editFormData.task_description)) {
+        // Audio removed, record it for cleanup
+        audioToCleanup = editFormData.originalAudioUrl;
       }
 
       if (dashboardType === 'checklist') {
@@ -182,13 +194,39 @@ export default function TaskNavigationTabs({
           }
         })).unwrap();
       } else if (dashboardType === 'maintenance') {
+        const originalTask = displayedTasks.find(t => t.id === editingTaskId);
         const updatedTask = {
           ...finalEditData,
           freq: finalEditData.frequency
         };
-        await dispatch(updateMaintenanceTask(updatedTask)).unwrap();
+        await dispatch(updateMaintenanceTask({
+          updatedTask,
+          originalTask: {
+            machine_name: originalTask.machine_name || originalTask.title, // Handle potential mapping differences
+            part_name: originalTask.part_name || '',
+            task_description: originalTask.title
+          }
+        })).unwrap();
       } else if (dashboardType === 'delegation') {
-        await dispatch(updateDelegationTask(finalEditData)).unwrap();
+        const originalTask = displayedTasks.find(t => t.id === editingTaskId);
+        await dispatch(updateDelegationTask({
+          updatedTask: finalEditData,
+          originalTask: {
+            department: originalTask.department,
+            name: originalTask.assignedTo,
+            task_description: originalTask.title
+          }
+        })).unwrap();
+      }
+
+      // Cleanup audio after successful DB update
+      if (audioToCleanup) {
+        try {
+          const path = audioToCleanup.split('audio-recordings/').pop().split('?')[0];
+          await supabase.storage.from('audio-recordings').remove([path]);
+        } catch (cleanupError) {
+          console.error("Failed to cleanup old audio:", cleanupError);
+        }
       }
 
       setEditingTaskId(null);
@@ -265,6 +303,7 @@ export default function TaskNavigationTabs({
         }
 
         return {
+          ...task,
           id: task.id,
           title: task.task_description,
           assignedTo: task.name || "Unassigned",
@@ -572,21 +611,46 @@ export default function TaskNavigationTabs({
                                 <div className="space-y-2">
                                   {status !== 'recording' && !recordedAudio && (
                                     <div className="relative">
-                                      <textarea
-                                        value={editFormData.task_description}
-                                        onChange={(e) => handleInputChange('task_description', e.target.value)}
-                                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm pr-8"
-                                        rows="3"
-                                        placeholder="Edit description or record voice..."
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={startRecording}
-                                        className="absolute bottom-1.5 right-1.5 p-1 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all shadow-sm"
-                                        title="Record Voice Note"
-                                      >
-                                        <Mic size={14} />
-                                      </button>
+                                      {isAudioUrl(editFormData.task_description) ? (
+                                        <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2 mb-2">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <span className="text-[10px] font-bold text-indigo-600 uppercase">Existing Audio</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleInputChange('task_description', '')}
+                                              className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                                            >
+                                              <Trash2 size={10} /> Remove & Edit Text
+                                            </button>
+                                          </div>
+                                          <AudioPlayer url={editFormData.task_description} />
+                                          <button
+                                            type="button"
+                                            onClick={startRecording}
+                                            className="mt-2 w-full flex items-center justify-center gap-2 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 transition-all"
+                                          >
+                                            <Mic size={12} /> Replace with New Recording
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <textarea
+                                            value={editFormData.task_description}
+                                            onChange={(e) => handleInputChange('task_description', e.target.value)}
+                                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm pr-8"
+                                            rows="3"
+                                            placeholder="Edit description or record voice..."
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={startRecording}
+                                            className="absolute bottom-1.5 right-1.5 p-1 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all shadow-sm"
+                                            title="Record Voice Note"
+                                          >
+                                            <Mic size={14} />
+                                          </button>
+                                        </>
+                                      )}
                                     </div>
                                   )}
 
