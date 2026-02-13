@@ -5,7 +5,8 @@ import {
   fetchChecklistData, 
   fetchDelegationData,
   fetchUsersData,
-  updateChecklistTaskApi  // ← Make sure this is imported
+  updateChecklistTaskApi,
+  updateDelegationTaskApi
 } from "../api/quickTaskApi";
 
 
@@ -66,6 +67,18 @@ export const updateChecklistTask = createAsyncThunk(
       return result;
     } catch (error) {
       console.error("Redux action error:", error);
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const updateDelegationTask = createAsyncThunk(
+  'update/delegationTask',
+  async (updatedTask, { rejectWithValue }) => {
+    try {
+      const result = await updateDelegationTaskApi(updatedTask);
+      return result;
+    } catch (error) {
       return rejectWithValue(error.message);
     }
   }
@@ -210,6 +223,25 @@ const quickTaskSlice = createSlice({
         }
       })
       .addCase(updateChecklistTask.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(updateDelegationTask.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(updateDelegationTask.fulfilled, (state, action) => {
+        state.loading = false;
+        const updatedTasks = action.payload;
+        if (Array.isArray(updatedTasks)) {
+          updatedTasks.forEach(updatedTask => {
+            const index = state.delegationTasks.findIndex(task => task.id === updatedTask.task_id);
+            if (index !== -1) {
+              state.delegationTasks[index] = { ...updatedTask, id: updatedTask.task_id };
+            }
+          });
+        }
+      })
+      .addCase(updateDelegationTask.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       });

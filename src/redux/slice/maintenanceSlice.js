@@ -1,6 +1,6 @@
 
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { fetchMaintenanceDataSortByDate, fetchMaintenanceDataForHistory, updateMaintenanceData, deleteMaintenanceTasksApi } from "../api/maintenanceApi";
+import { fetchMaintenanceDataSortByDate, fetchMaintenanceDataForHistory, updateMaintenanceData, deleteMaintenanceTasksApi, updateMaintenanceTaskApi } from "../api/maintenanceApi";
 
 export const deleteMaintenanceTask = createAsyncThunk(
     "deleteMaintenanceTask",
@@ -40,6 +40,15 @@ export const maintenanceHistoryData = createAsyncThunk("maintenanceHistoryData",
 export const updateMaintenance = createAsyncThunk("updateMaintenance", async (submissionData, { rejectWithValue }) => {
     try {
         const response = await updateMaintenanceData(submissionData);
+        return response;
+    } catch (error) {
+        return rejectWithValue(error.message);
+    }
+});
+
+export const updateMaintenanceTask = createAsyncThunk("updateMaintenanceTask", async (updatedTask, { rejectWithValue }) => {
+    try {
+        const response = await updateMaintenanceTaskApi(updatedTask);
         return response;
     } catch (error) {
         return rejectWithValue(error.message);

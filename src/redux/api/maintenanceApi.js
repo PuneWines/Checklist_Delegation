@@ -206,6 +206,34 @@ export const postMaintenanceTaskApi = async (taskData) => {
     }
 };
 
+export const updateMaintenanceTaskApi = async (updatedTask) => {
+    try {
+        const { data, error } = await supabase
+            .from("maintenance_tasks")
+            .update({
+                machine_name: updatedTask.machine_name,
+                part_name: updatedTask.part_name,
+                part_area: updatedTask.part_area,
+                given_by: updatedTask.given_by,
+                name: updatedTask.name,
+                task_description: updatedTask.task_description,
+                task_start_date: updatedTask.task_start_date,
+                freq: updatedTask.freq,
+                status: updatedTask.status,
+                remarks: updatedTask.remarks
+            })
+            .eq("id", updatedTask.id)
+            .is("submission_date", null)
+            .select();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error("API Error updating maintenance task:", error);
+        throw error;
+    }
+};
+
 export const deleteMaintenanceTasksApi = async (tasks) => {
     try {
         const ids = tasks.map(t => t.id || t.taskId);

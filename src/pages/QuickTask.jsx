@@ -6,7 +6,8 @@ import AdminLayout from "../components/layout/AdminLayout";
 import DelegationPage from "./delegation-data";
 import { useDispatch, useSelector } from "react-redux";
 import { deleteChecklistTask, deleteDelegationTask, uniqueChecklistTaskData, uniqueDelegationTaskData, updateChecklistTask, fetchUsers, resetChecklistPagination, resetDelegationPagination } from "../redux/slice/quickTaskSlice";
-import { maintenanceData, deleteMaintenanceTask } from "../redux/slice/maintenanceSlice";
+import { maintenanceData, deleteMaintenanceTask, updateMaintenanceTask } from "../redux/slice/maintenanceSlice";
+import { fetchUniqueDepartmentDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../redux/api/assignTaskApi";
 
 const isAudioUrl = (url) => {
   if (typeof url !== 'string') return false;
@@ -95,6 +96,11 @@ export default function QuickTask() {
   const [editFormData, setEditFormData] = useState({});
   const [isSaving, setIsSaving] = useState(false);
 
+  // Dropdown lists
+  const [departments, setDepartments] = useState([]);
+  const [givenByList, setGivenByList] = useState([]);
+  const [doersList, setDoersList] = useState([]);
+
   // const { quickTask, loading, delegationTasks, users } = useSelector((state) => state.quickTask);
   const {
     quickTask,
@@ -119,6 +125,19 @@ export default function QuickTask() {
     dispatch(fetchUsers());
     dispatch(resetChecklistPagination());
     dispatch(uniqueChecklistTaskData({ page: 0, pageSize: 50 }));
+
+    // Fetch dropdown data
+    const fetchDropdownData = async () => {
+      const [depts, givens, doers] = await Promise.all([
+        fetchUniqueDepartmentDataApi(),
+        fetchUniqueGivenByDataApi(),
+        fetchUniqueDoerNameDataApi()
+      ]);
+      setDepartments(depts);
+      setGivenByList(givens);
+      setDoersList(doers);
+    };
+    fetchDropdownData();
   }, [dispatch]);
 
 
@@ -164,18 +183,34 @@ export default function QuickTask() {
   // Edit functionality
   const handleEditClick = (task) => {
     setEditingTaskId(task.id);
-    setEditFormData({
-      id: task.id,
-      department: task.department || '',
-      given_by: task.given_by || '',
-      name: task.name || '',
-      task_description: task.task_description || '',
-      task_start_date: task.task_start_date || '',
-      frequency: task.frequency || '',
-      enable_reminder: task.enable_reminder || '',
-      require_attachment: task.require_attachment || '',
-      remark: task.remark || ''
-    });
+    if (activeTab === 'maintenance') {
+      setEditFormData({
+        id: task.id,
+        machine_name: task.machine_name || '',
+        part_name: task.part_name || '',
+        part_area: task.part_area || '',
+        given_by: task.given_by || '',
+        name: task.name || '',
+        task_description: task.task_description || '',
+        task_start_date: task.task_start_date || '',
+        freq: task.freq || '',
+        status: task.status || '',
+        remarks: task.remarks || ''
+      });
+    } else {
+      setEditFormData({
+        id: task.id,
+        department: task.department || '',
+        given_by: task.given_by || '',
+        name: task.name || '',
+        task_description: task.task_description || '',
+        task_start_date: task.task_start_date || '',
+        frequency: task.frequency || '',
+        enable_reminder: task.enable_reminder || '',
+        require_attachment: task.require_attachment || '',
+        remark: task.remark || ''
+      });
+    }
   };
 
   const handleCancelEdit = () => {
@@ -186,26 +221,37 @@ export default function QuickTask() {
   const handleSaveEdit = async () => {
     if (!editFormData.id) return;
 
-    // Find the original task data for matching
-    const originalTask = quickTask.find(task => task.id === editFormData.id);
-    if (!originalTask) return;
-
     setIsSaving(true);
     try {
-      await dispatch(updateChecklistTask({
-        updatedTask: editFormData,
-        originalTask: {
-          department: originalTask.department,
-          name: originalTask.name,
-          task_description: originalTask.task_description
+      if (activeTab === 'maintenance') {
+        await dispatch(updateMaintenanceTask(editFormData)).unwrap();
+      } else {
+        // Find the original task data for matching (only for checklist currently)
+        const originalTask = quickTask.find(task => task.id === editFormData.id);
+        if (!originalTask) {
+          setIsSaving(false);
+          return;
         }
-      })).unwrap();
+
+        await dispatch(updateChecklistTask({
+          updatedTask: editFormData,
+          originalTask: {
+            department: originalTask.department,
+            name: originalTask.name,
+            task_description: originalTask.task_description
+          }
+        })).unwrap();
+      }
 
       setEditingTaskId(null);
       setEditFormData({});
 
-      // Refresh the data to show all updated rows
-      dispatch(uniqueChecklistTaskData());
+      // Refresh the data
+      if (activeTab === 'checklist') {
+        dispatch(uniqueChecklistTaskData());
+      } else if (activeTab === 'maintenance') {
+        dispatch(maintenanceData({ page: 1, frequency: freqFilter, searchTerm: searchTerm }));
+      }
 
     } catch (error) {
       console.error("Failed to update task:", error);
@@ -215,11 +261,17 @@ export default function QuickTask() {
     }
   };
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = async (field, value) => {
     setEditFormData(prev => ({
       ...prev,
       [field]: value
     }));
+
+    // If department changes, refresh doers list
+    if (field === 'department') {
+      const doers = await fetchUniqueDoerNameDataApi(value);
+      setDoersList(doers);
+    }
   };
 
   // Change your checkbox to store whole row instead of only id
@@ -656,12 +708,16 @@ export default function QuickTask() {
                           {/* Department */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             {editingTaskId === task.id ? (
-                              <input
-                                type="text"
+                              <select
                                 value={editFormData.department}
                                 onChange={(e) => handleInputChange('department', e.target.value)}
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              />
+                              >
+                                <option value="">Select Department</option>
+                                {departments.map(dept => (
+                                  <option key={dept} value={dept}>{dept}</option>
+                                ))}
+                              </select>
                             ) : (
                               task.department
                             )}
@@ -670,12 +726,16 @@ export default function QuickTask() {
                           {/* Given By */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {editingTaskId === task.id ? (
-                              <input
-                                type="text"
+                              <select
                                 value={editFormData.given_by}
                                 onChange={(e) => handleInputChange('given_by', e.target.value)}
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              />
+                              >
+                                <option value="">Select AssignBy</option>
+                                {givenByList.map(name => (
+                                  <option key={name} value={name}>{name}</option>
+                                ))}
+                              </select>
                             ) : (
                               task.given_by
                             )}
@@ -684,12 +744,16 @@ export default function QuickTask() {
                           {/* Name */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {editingTaskId === task.id ? (
-                              <input
-                                type="text"
+                              <select
                                 value={editFormData.name}
                                 onChange={(e) => handleInputChange('name', e.target.value)}
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              />
+                              >
+                                <option value="">Select Name</option>
+                                {doersList.map(name => (
+                                  <option key={name} value={name}>{name}</option>
+                                ))}
+                              </select>
                             ) : (
                               task.name
                             )}
@@ -702,7 +766,8 @@ export default function QuickTask() {
                                 type="datetime-local"
                                 value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
                                 onChange={(e) => handleInputChange('task_start_date', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
+                                disabled
                               />
                             ) : (
                               formatTimestampToDDMMYYYY(task.task_start_date)
@@ -717,7 +782,8 @@ export default function QuickTask() {
                               <select
                                 value={editFormData.frequency}
                                 onChange={(e) => handleInputChange('frequency', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
+                                disabled
                               >
                                 <option value="">Select Frequency</option>
                                 <option value="daily">Daily</option>
@@ -855,6 +921,7 @@ export default function QuickTask() {
                         { label: 'Frequency' },
                         { label: 'Status' },
                         { label: 'Remarks' },
+                        { label: 'Actions' },
                       ].map((column) => (
                         <th
                           key={column.label}
@@ -879,29 +946,126 @@ export default function QuickTask() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.id}</td>
                           <td className="px-6 py-4 text-sm text-gray-500 min-w-[200px] max-w-[400px]">
-                            {isAudioUrl(task.task_description) ? (
-                              <AudioPlayer url={task.task_description} />
+                            {editingTaskId === task.id ? (
+                              <textarea
+                                value={editFormData.task_description}
+                                onChange={(e) => handleInputChange('task_description', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                rows="3"
+                              />
                             ) : (
-                              <div className="whitespace-normal break-words">{task.task_description}</div>
+                              isAudioUrl(task.task_description) ? (
+                                <AudioPlayer url={task.task_description} />
+                              ) : (
+                                <div className="whitespace-normal break-words">{task.task_description}</div>
+                              )
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.machine_name}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.part_name}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.part_area}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.given_by}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {editingTaskId === task.id ? (
+                              <input
+                                type="text"
+                                value={editFormData.machine_name}
+                                onChange={(e) => handleInputChange('machine_name', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              />
+                            ) : (
+                              task.machine_name
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {editingTaskId === task.id ? (
+                              <input
+                                type="text"
+                                value={editFormData.part_name}
+                                onChange={(e) => handleInputChange('part_name', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              />
+                            ) : (
+                              task.part_name
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {editingTaskId === task.id ? (
+                              <input
+                                type="text"
+                                value={editFormData.part_area}
+                                onChange={(e) => handleInputChange('part_area', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              />
+                            ) : (
+                              task.part_area
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {editingTaskId === task.id ? (
+                              <select
+                                value={editFormData.given_by}
+                                onChange={(e) => handleInputChange('given_by', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              >
+                                <option value="">Select AssignBy</option>
+                                {givenByList.map(name => (
+                                  <option key={name} value={name}>{name}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              task.given_by
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {editingTaskId === task.id ? (
+                              <select
+                                value={editFormData.name}
+                                onChange={(e) => handleInputChange('name', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              >
+                                <option value="">Select Name</option>
+                                {doersList.map(name => (
+                                  <option key={name} value={name}>{name}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              task.name
+                            )}
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-yellow-50">
-                            {formatTimestampToDDMMYYYY(task.task_start_date)}
+                            {editingTaskId === task.id ? (
+                              <input
+                                type="datetime-local"
+                                value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
+                                onChange={(e) => handleInputChange('task_start_date', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
+                                disabled
+                              />
+                            ) : (
+                              formatTimestampToDDMMYYYY(task.task_start_date)
+                            )}
                           </td>
 
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <span className={`px-2 py-1 rounded-full text-xs ${task.freq?.toLowerCase() === 'daily' ? 'bg-blue-100 text-blue-800' :
-                              task.freq?.toLowerCase() === 'weekly' ? 'bg-green-100 text-green-800' :
-                                task.freq?.toLowerCase() === 'monthly' ? 'bg-purple-100 text-purple-800' :
-                                  'bg-gray-100 text-gray-800'
-                              }`}>
-                              <span className="capitalize">{task.freq}</span>
-                            </span>
+                            {editingTaskId === task.id ? (
+                              <select
+                                value={editFormData.freq}
+                                onChange={(e) => handleInputChange('freq', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
+                                disabled
+                              >
+                                <option value="">Select Frequency</option>
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="yearly">Yearly</option>
+                              </select>
+                            ) : (
+                              <span className={`px-2 py-1 rounded-full text-xs ${task.freq?.toLowerCase() === 'daily' ? 'bg-blue-100 text-blue-800' :
+                                task.freq?.toLowerCase() === 'weekly' ? 'bg-green-100 text-green-800' :
+                                  task.freq?.toLowerCase() === 'monthly' ? 'bg-purple-100 text-purple-800' :
+                                    'bg-gray-100 text-gray-800'
+                                }`}>
+                                <span className="capitalize">{task.freq}</span>
+                              </span>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             <span className={`px-2 py-1 rounded-full text-xs ${task.status === 'Done' ? 'bg-green-100 text-green-800' :
@@ -910,13 +1074,51 @@ export default function QuickTask() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500">
-                            {task.remarks || '—'}
+                            {editingTaskId === task.id ? (
+                              <input
+                                type="text"
+                                value={editFormData.remarks}
+                                onChange={(e) => handleInputChange('remarks', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              />
+                            ) : (
+                              task.remarks || '—'
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {editingTaskId === task.id ? (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={handleSaveEdit}
+                                  disabled={isSaving}
+                                  className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                                >
+                                  <Save size={14} />
+                                  {isSaving ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
+                                >
+                                  <X size={14} />
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleEditClick(task)}
+                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                              >
+                                <Edit size={14} />
+                                Edit
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={12} className="px-6 py-4 text-center text-gray-500">
+                        <td colSpan={13} className="px-6 py-4 text-center text-gray-500">
                           No maintenance tasks found
                         </td>
                       </tr>
@@ -931,6 +1133,9 @@ export default function QuickTask() {
               freqFilter={freqFilter}
               setFreqFilter={setFreqFilter}
               externalSelectedTasks={selectedTasks}
+              departments={departments}
+              givenByList={givenByList}
+              doersList={doersList}
               onSelectionChange={(taskOrAll, allTasks) => {
                 if (taskOrAll === 'ALL') {
                   if (selectedTasks.length === allTasks.length) setSelectedTasks([]);

@@ -207,11 +207,8 @@ export const deleteDelegationTasksApi = async (tasks) => {
   return taskIds;
 };
 
-// New function to update checklist task - matches department, name, task_description
 export const updateChecklistTaskApi = async (updatedTask, originalTask) => {
   try {
-    console.log("Updating with:", { updatedTask, originalTask }); // Debug log
-    
     const { data, error } = await supabase
       .from("checklist")
       .update({
@@ -219,33 +216,49 @@ export const updateChecklistTaskApi = async (updatedTask, originalTask) => {
         given_by: updatedTask.given_by,
         name: updatedTask.name,
         task_description: updatedTask.task_description,
-        // task_start_date: updatedTask.task_start_date,
-        // frequency: updatedTask.frequency,
+        task_start_date: updatedTask.task_start_date,
+        frequency: updatedTask.frequency,
         enable_reminder: updatedTask.enable_reminder,
         require_attachment: updatedTask.require_attachment,
         remark: updatedTask.remark
       })
-      .eq("department", originalTask.department)
-      .eq("name", originalTask.name)
-      .eq("task_description", originalTask.task_description)
-      .is("submission_date", null)
+      .eq("task_id", updatedTask.id || updatedTask.task_id) // Match specific record
       .select();
 
-    if (error) {
-      console.error("Supabase error:", error);
-      throw error;
-    }
-
-    console.log("Update successful:", data);
+    if (error) throw error;
     return data;
-
   } catch (error) {
-    console.error("API Error:", error);
+    console.error("API Error updating checklist task:", error);
     throw error;
   }
 };
 
+export const updateDelegationTaskApi = async (updatedTask) => {
+  try {
+    const { data, error } = await supabase
+      .from("delegation")
+      .update({
+        department: updatedTask.department,
+        given_by: updatedTask.given_by,
+        name: updatedTask.name,
+        task_description: updatedTask.task_description,
+        task_start_date: updatedTask.task_start_date,
+        frequency: updatedTask.frequency,
+        enable_reminder: updatedTask.enable_reminder,
+        require_attachment: updatedTask.require_attachment,
+        remarks: updatedTask.remarks
+      })
+      .eq("task_id", updatedTask.id)
+      .is("submission_date", null)
+      .select();
 
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("API Error updating delegation task:", error);
+    throw error;
+  }
+};
 
 // Add this new function
 export const fetchUsersData = async () => {

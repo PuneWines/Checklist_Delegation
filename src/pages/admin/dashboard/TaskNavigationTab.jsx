@@ -1,8 +1,14 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
-import { Filter, ChevronDown, ChevronUp, Play, Pause } from "lucide-react"
+import { Filter, ChevronDown, ChevronUp, Play, Pause, Edit, Save, X, Mic, Square, Trash2, Loader2 } from "lucide-react"
+import { ReactMediaRecorder } from "react-media-recorder"
+import supabase from "../../../SupabaseClient"
 import { fetchDashboardDataApi, getDashboardDataCount } from "../../../redux/api/dashboardApi"
+import { useDispatch } from "react-redux"
+import { updateChecklistTask, updateDelegationTask } from "../../../redux/slice/quickTaskSlice"
+import { updateMaintenanceTask } from "../../../redux/slice/maintenanceSlice"
+import { fetchUniqueDepartmentDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../../../redux/api/assignTaskApi"
 
 // --- AUDIO UTILITIES ---
 const isAudioUrl = (url) => {
@@ -30,14 +36,14 @@ const AudioPlayer = ({ url }) => {
 
   return (
     <div className={`flex items-center gap-3 px-3 py-1.5 rounded-xl border transition-all duration-300 min-w-[140px] ${isPlaying
-        ? 'bg-indigo-50/80 border-indigo-200 shadow-sm'
-        : 'bg-white border-gray-100 hover:border-indigo-100 hover:shadow-xs'
+      ? 'bg-indigo-50/80 border-indigo-200 shadow-sm'
+      : 'bg-white border-gray-100 hover:border-indigo-100 hover:shadow-xs'
       }`}>
       <button
         onClick={togglePlay}
         className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm ${isPlaying
-            ? 'bg-gradient-to-r from-rose-500 to-pink-600'
-            : 'bg-gradient-to-r from-indigo-500 to-violet-600 hover:scale-110'
+          ? 'bg-gradient-to-r from-rose-500 to-pink-600'
+          : 'bg-gradient-to-r from-indigo-500 to-violet-600 hover:scale-110'
           }`}
       >
         {isPlaying ? (
@@ -89,7 +95,112 @@ export default function TaskNavigationTabs({
   const [hasMoreData, setHasMoreData] = useState(true)
   const [totalCount, setTotalCount] = useState(0)
   const [isFilterExpanded, setIsFilterExpanded] = useState(false) // Add this state
+  const [isSaving, setIsSaving] = useState(false)
+  const [editingTaskId, setEditingTaskId] = useState(null)
+  const [editFormData, setEditFormData] = useState({})
+  const [recordedAudio, setRecordedAudio] = useState(null)
+  const [isUploading, setIsUploading] = useState(false)
+
+  // Dropdown lists
+  const [departments, setDepartments] = useState([]);
+  const [givenByList, setGivenByList] = useState([]);
+  const [doersList, setDoersList] = useState([]);
+
+  const dispatch = useDispatch()
   const itemsPerPage = 50
+
+  // Edit Handlers
+  const handleEditClick = (task) => {
+    setEditingTaskId(task.id);
+    setEditFormData({
+      id: task.id,
+      task_description: task.title || '',
+      name: task.assignedTo || '',
+      department: task.department || '',
+      task_start_date: task.originalTaskStartDate || '',
+      frequency: task.frequency || '',
+      // Add other relevant fields if needed
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTaskId(null);
+    setEditFormData({});
+    setRecordedAudio(null);
+  };
+
+  const handleInputChange = async (field, value) => {
+    setEditFormData(prev => ({ ...prev, [field]: value }));
+
+    // If department changes, refresh doers list
+    if (field === 'department') {
+      const doers = await fetchUniqueDoerNameDataApi(value);
+      setDoersList(doers);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    setIsSaving(true);
+    try {
+      let finalEditData = { ...editFormData };
+
+      // Handle Audio Upload if exists
+      if (recordedAudio && recordedAudio.blob) {
+        setIsUploading(true);
+        try {
+          const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('audio-recordings')
+            .upload(fileName, recordedAudio.blob, {
+              contentType: recordedAudio.blob.type || 'audio/webm',
+              upsert: false
+            });
+
+          if (uploadError) throw uploadError;
+
+          const { data: publicUrlData } = supabase.storage
+            .from('audio-recordings')
+            .getPublicUrl(fileName);
+
+          finalEditData.task_description = publicUrlData.publicUrl;
+        } catch (error) {
+          console.error("Audio upload failed:", error);
+          alert("Failed to upload voice note. Saving without it.");
+        } finally {
+          setIsUploading(false);
+        }
+      }
+
+      if (dashboardType === 'checklist') {
+        const originalTask = displayedTasks.find(t => t.id === editingTaskId);
+        await dispatch(updateChecklistTask({
+          updatedTask: finalEditData,
+          originalTask: {
+            department: originalTask.department,
+            name: originalTask.assignedTo,
+            task_description: originalTask.title
+          }
+        })).unwrap();
+      } else if (dashboardType === 'maintenance') {
+        const updatedTask = {
+          ...finalEditData,
+          freq: finalEditData.frequency
+        };
+        await dispatch(updateMaintenanceTask(updatedTask)).unwrap();
+      } else if (dashboardType === 'delegation') {
+        await dispatch(updateDelegationTask(finalEditData)).unwrap();
+      }
+
+      setEditingTaskId(null);
+      setRecordedAudio(null);
+      loadTasksFromServer(1, false);
+    } catch (error) {
+      console.error("Failed to save edit:", error);
+      alert("Failed to save changes: " + (error.message || "Unknown error"));
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Reset pagination when filters change
   useEffect(() => {
@@ -253,6 +364,19 @@ export default function TaskNavigationTabs({
   // Initial load when component mounts or key dependencies change
   useEffect(() => {
     loadTasksFromServer(1, false)
+
+    // Fetch dropdown data
+    const fetchDropdownData = async () => {
+      const [depts, givens, doers] = await Promise.all([
+        fetchUniqueDepartmentDataApi(),
+        fetchUniqueGivenByDataApi(),
+        fetchUniqueDoerNameDataApi()
+      ]);
+      setDepartments(depts);
+      setGivenByList(givens);
+      setDoersList(doers);
+    };
+    fetchDropdownData();
   }, [taskView, dashboardType, dashboardStaffFilter, departmentFilter])
 
   // Load more when search changes (client-side filter)
@@ -431,6 +555,7 @@ export default function TaskNavigationTabs({
                       )}
                       <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Date</th>
                       <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Freq</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
@@ -438,18 +563,181 @@ export default function TaskNavigationTabs({
                       <tr key={`${task.id}-${task.taskStartDate}`} className="hover:bg-purple-50/30 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-400">{index + 1}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-purple-700">{task.id}</td>
-                        <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate font-medium">
-                          {isAudioUrl(task.title) ? <AudioPlayer url={task.title} /> : task.title}
+                        <td className="px-6 py-4 text-sm text-gray-700 min-w-[300px] max-w-xs font-medium">
+                          {editingTaskId === task.id ? (
+                            <ReactMediaRecorder
+                              audio
+                              onStop={(blobUrl, blob) => setRecordedAudio({ blobUrl, blob })}
+                              render={({ status, startRecording, stopRecording, clearBlobUrl }) => (
+                                <div className="space-y-2">
+                                  {status !== 'recording' && !recordedAudio && (
+                                    <div className="relative">
+                                      <textarea
+                                        value={editFormData.task_description}
+                                        onChange={(e) => handleInputChange('task_description', e.target.value)}
+                                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm pr-8"
+                                        rows="3"
+                                        placeholder="Edit description or record voice..."
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={startRecording}
+                                        className="absolute bottom-1.5 right-1.5 p-1 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all shadow-sm"
+                                        title="Record Voice Note"
+                                      >
+                                        <Mic size={14} />
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {status === 'recording' && (
+                                    <div className="flex flex-col items-center justify-center p-4 bg-red-50 border border-red-100 rounded-lg space-y-2 animate-pulse">
+                                      <Mic size={20} className="text-red-600" />
+                                      <button
+                                        type="button"
+                                        onClick={stopRecording}
+                                        className="flex items-center gap-2 px-3 py-1 bg-red-600 text-white rounded-full hover:bg-red-700 text-xs font-bold shadow-sm"
+                                      >
+                                        <Square size={10} /> Stop
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {recordedAudio && status !== 'recording' && (
+                                    <div className="bg-purple-50 border border-purple-100 rounded-lg p-2">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className="text-[10px] font-bold text-purple-600 uppercase">Voice Note Attached</span>
+                                        <div className="flex gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              clearBlobUrl();
+                                              setRecordedAudio(null);
+                                              startRecording();
+                                            }}
+                                            className="text-[10px] text-purple-600 hover:text-purple-800 font-bold flex items-center gap-1"
+                                          >
+                                            <Mic size={10} /> Give Again
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              clearBlobUrl();
+                                              setRecordedAudio(null);
+                                            }}
+                                            className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                                          >
+                                            <Trash2 size={10} /> Remove
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2 bg-white p-1 rounded border border-purple-100 shadow-sm">
+                                        <audio src={recordedAudio.blobUrl} controls className="w-full h-6" />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            />
+                          ) : (
+                            isAudioUrl(task.title) ? <AudioPlayer url={task.title} /> :
+                              <div className="whitespace-normal break-words">{task.title}</div>
+                          )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">{task.assignedTo}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
+                          {editingTaskId === task.id ? (
+                            <select
+                              value={editFormData.name}
+                              onChange={(e) => handleInputChange('name', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                            >
+                              <option value="">Select Name</option>
+                              {doersList.map(name => (
+                                <option key={name} value={name}>{name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            task.assignedTo
+                          )}
+                        </td>
                         {dashboardType === "checklist" && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">{task.department}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                            {editingTaskId === task.id ? (
+                              <select
+                                value={editFormData.department}
+                                onChange={(e) => handleInputChange('department', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                              >
+                                <option value="">Select Department</option>
+                                {departments.map(dept => (
+                                  <option key={dept} value={dept}>{dept}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              task.department
+                            )}
+                          </td>
                         )}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">{task.taskStartDate}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                          {editingTaskId === task.id ? (
+                            <input
+                              type="datetime-local"
+                              value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
+                              onChange={(e) => handleInputChange('task_start_date', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
+                              disabled
+                            />
+                          ) : (
+                            task.taskStartDate
+                          )}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm ${getFrequencyColor(task.frequency)}`}>
-                            {task.frequency}
-                          </span>
+                          {editingTaskId === task.id ? (
+                            <select
+                              value={editFormData.frequency}
+                              onChange={(e) => handleInputChange('frequency', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
+                              disabled
+                            >
+                              <option value="one-time">One-time</option>
+                              <option value="daily">Daily</option>
+                              <option value="weekly">Weekly</option>
+                              <option value="monthly">Monthly</option>
+                              <option value="yearly">Yearly</option>
+                            </select>
+                          ) : (
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm ${getFrequencyColor(task.frequency)}`}>
+                              {task.frequency}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {editingTaskId === task.id ? (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={handleSaveEdit}
+                                disabled={isSaving}
+                                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                              >
+                                <Save size={12} />
+                                {isSaving ? '...' : 'Save'}
+                              </button>
+                              <button
+                                onClick={handleCancelEdit}
+                                className="flex items-center gap-1 px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleEditClick(task)}
+                              className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                            >
+                              <Edit size={12} />
+                              Edit
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -460,7 +748,7 @@ export default function TaskNavigationTabs({
 
             {/* Mobile Card View */}
             <div className="md:hidden space-y-4">
-              {displayedTasks.map((task, index) => (
+              {displayedTasks.map((task) => (
                 <div key={`${task.id}-${task.taskStartDate}`} className="bg-white p-4 rounded-xl shadow-md border border-gray-100 relative overflow-hidden group active:scale-[0.98] transition-all">
                   <div className="flex justify-between items-start mb-2">
                     <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded uppercase">#{task.id}</span>

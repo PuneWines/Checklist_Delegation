@@ -439,16 +439,29 @@ export default function EATask() {
                                             <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
                                                 <div className="flex items-center justify-between mb-2">
                                                     <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">Voice Note Attached</span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            clearBlobUrl();
-                                                            setRecordedAudio(null);
-                                                        }}
-                                                        className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-bold"
-                                                    >
-                                                        <Trash2 className="w-3 h-3" /> Remove
-                                                    </button>
+                                                    <div className="flex gap-4">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                clearBlobUrl();
+                                                                setRecordedAudio(null);
+                                                                startRecording();
+                                                            }}
+                                                            className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-bold"
+                                                        >
+                                                            <Mic className="w-3 h-3" /> Give Again / Re-record
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                clearBlobUrl();
+                                                                setRecordedAudio(null);
+                                                            }}
+                                                            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-bold"
+                                                        >
+                                                            <Trash2 className="w-3 h-3" /> Remove
+                                                        </button>
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-purple-100 shadow-sm">
                                                     <audio src={recordedAudio.blobUrl} controls className="w-full h-8" />

@@ -1,7 +1,10 @@
-import React, { useMemo, useState } from "react"
+import React, { useMemo, useState, useRef, useEffect } from "react"
 import { isToday, isThisWeek, isThisMonth } from "date-fns"
-import { Settings, Calendar, CheckCircle, Clock, AlertTriangle, IndianRupee, FileText, Play, Pause } from "lucide-react"
-import { useRef, useEffect } from "react"
+import { Settings, Calendar, CheckCircle, Clock, AlertTriangle, IndianRupee, FileText, Play, Pause, Edit, Save, X } from "lucide-react"
+import { useDispatch } from "react-redux"
+import { updateMaintenanceTask } from "../../../../redux/slice/maintenanceSlice"
+import { fetchUniqueDepartmentDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../../../../redux/api/assignTaskApi"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
 
 const isAudioUrl = (url) => {
     if (typeof url !== 'string') return false;
@@ -37,14 +40,14 @@ const AudioPlayer = ({ url }) => {
 
     return (
         <div className={`flex items-center gap-3 px-3 py-1.5 rounded-xl border transition-all duration-300 min-w-[140px] ${isPlaying
-                ? 'bg-indigo-50/80 border-indigo-200 shadow-sm scale-[1.02]'
-                : 'bg-white border-gray-100 hover:border-indigo-100 hover:shadow-xs'
+            ? 'bg-indigo-50/80 border-indigo-200 shadow-sm scale-[1.02]'
+            : 'bg-white border-gray-100 hover:border-indigo-100 hover:shadow-xs'
             }`}>
             <button
                 onClick={togglePlay}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm ${isPlaying
-                        ? 'bg-gradient-to-r from-rose-500 to-pink-600'
-                        : 'bg-gradient-to-r from-indigo-500 to-violet-600 hover:scale-110'
+                    ? 'bg-gradient-to-r from-rose-500 to-pink-600'
+                    : 'bg-gradient-to-r from-indigo-500 to-violet-600 hover:scale-110'
                     }`}
             >
                 {isPlaying ? (
@@ -71,7 +74,7 @@ const AudioPlayer = ({ url }) => {
         </div>
     );
 };
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
+
 
 const StatCard = ({ icon: Icon, label, value, color }) => (
     <div className="bg-white rounded-xl p-2 shadow-sm border border-gray-100 flex items-center gap-2 w-full min-w-0">
@@ -87,6 +90,74 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
 
 export default function MaintenanceView({ stats: originalStats, chartData, tasks = [] }) {
     const [maintFilter, setMaintFilter] = useState('today');
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Dropdown lists
+    const [givenByList, setGivenByList] = useState([]);
+    const [doersList, setDoersList] = useState([]);
+
+    const [editingTaskId, setEditingTaskId] = useState(null);
+    const [editFormData, setEditFormData] = useState({});
+
+    const dispatch = useDispatch();
+
+    const handleEditClick = (task) => {
+        setEditingTaskId(task.id);
+        setEditFormData({
+            id: task.id,
+            machine_name: task.machine_name || '',
+            part_name: task.part_name || '',
+            part_area: task.part_area || '',
+            given_by: task.given_by || '',
+            name: task.assignedTo || '',
+            task_description: task.task_description || task.title || '',
+            task_start_date: task.originalTaskStartDate || '',
+            freq: task.frequency || '',
+        });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingTaskId(null);
+        setEditFormData({});
+    };
+
+    const handleInputChange = async (field, value) => {
+        setEditFormData(prev => ({ ...prev, [field]: value }));
+
+        // If department changes (even if not in this view, good to have), refresh doers list
+        if (field === 'department') {
+            const doers = await fetchUniqueDoerNameDataApi(value);
+            setDoersList(doers);
+        }
+    };
+
+    const handleSaveEdit = async () => {
+        setIsSaving(true);
+        try {
+            await dispatch(updateMaintenanceTask(editFormData)).unwrap();
+            setEditingTaskId(null);
+            // In a real app, you might want to refresh the parent data here
+            // But for now, we'll assume the user will reload or the state is updated
+        } catch (error) {
+            console.error("Failed to save maintenance edit:", error);
+            alert("Failed to save changes: " + (error.message || "Unknown error"));
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    useEffect(() => {
+        // Fetch dropdown data
+        const fetchDropdownData = async () => {
+            const [givens, doers] = await Promise.all([
+                fetchUniqueGivenByDataApi(),
+                fetchUniqueDoerNameDataApi()
+            ]);
+            setGivenByList(givens);
+            setDoersList(doers);
+        };
+        fetchDropdownData();
+    }, []);
 
     // Filter tasks based on selected time range
     const filteredTasks = useMemo(() => {
@@ -141,7 +212,6 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
             "Quarterly": 0, "Half-yearly": 0, "Yearly": 0
         };
         const monthlyCost = {};
-        const deptCost = {};
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -200,7 +270,7 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
             pendingCount,
             overdueCount
         };
-    }, [tasks]);
+    }, [filteredTasks]);
 
     // Use passed chartData or calculated or defaults
     const costData = processedData.costData;
@@ -376,6 +446,7 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Status</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[150px]">Remarks</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Upload Image</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">
@@ -384,27 +455,92 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                     <tr key={task.id || index} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.id}</td>
 
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.machine_name}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.part_name}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.part_area}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.given_by}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.assignedTo}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                            {editingTaskId === task.id ? (
+                                                <input type="text" value={editFormData.machine_name} onChange={e => handleInputChange('machine_name', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
+                                            ) : task.machine_name}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                            {editingTaskId === task.id ? (
+                                                <input type="text" value={editFormData.part_name} onChange={e => handleInputChange('part_name', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
+                                            ) : task.part_name}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                            {editingTaskId === task.id ? (
+                                                <input type="text" value={editFormData.part_area} onChange={e => handleInputChange('part_area', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
+                                            ) : task.part_area}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                            {editingTaskId === task.id ? (
+                                                <select
+                                                    value={editFormData.given_by}
+                                                    onChange={e => handleInputChange('given_by', e.target.value)}
+                                                    className="w-full px-2 py-1 border rounded text-xs"
+                                                >
+                                                    <option value="">Select AssignBy</option>
+                                                    {givenByList.map(name => (
+                                                        <option key={name} value={name}>{name}</option>
+                                                    ))}
+                                                </select>
+                                            ) : task.given_by}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                            {editingTaskId === task.id ? (
+                                                <select
+                                                    value={editFormData.name}
+                                                    onChange={e => handleInputChange('name', e.target.value)}
+                                                    className="w-full px-2 py-1 border rounded text-xs"
+                                                >
+                                                    <option value="">Select Name</option>
+                                                    {doersList.map(name => (
+                                                        <option key={name} value={name}>{name}</option>
+                                                    ))}
+                                                </select>
+                                            ) : task.assignedTo}
+                                        </td>
                                         <td className="px-4 py-3 text-sm text-gray-600">
-                                            {isAudioUrl(task.task_description || task.title) ? (
-                                                <AudioPlayer url={task.task_description || task.title} />
+                                            {editingTaskId === task.id ? (
+                                                <textarea value={editFormData.task_description} onChange={e => handleInputChange('task_description', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" rows="2" />
                                             ) : (
-                                                <div className="line-clamp-2" title={task.task_description || task.title}>
-                                                    {task.task_description || task.title}
-                                                </div>
+                                                isAudioUrl(task.task_description || task.title) ? (
+                                                    <AudioPlayer url={task.task_description || task.title} />
+                                                ) : (
+                                                    <div className="line-clamp-2" title={task.task_description || task.title}>
+                                                        {task.task_description || task.title}
+                                                    </div>
+                                                )
                                             )}
                                         </td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                            {task.originalTaskStartDate ? new Date(task.originalTaskStartDate).toLocaleString('en-IN', {
-                                                day: '2-digit', month: '2-digit', year: 'numeric',
-                                                hour: '2-digit', minute: '2-digit', hour12: true
-                                            }) : '-'}
+                                            {editingTaskId === task.id ? (
+                                                <input
+                                                    type="datetime-local"
+                                                    value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
+                                                    onChange={e => handleInputChange('task_start_date', e.target.value)}
+                                                    className="w-full px-2 py-1 border rounded text-xs bg-gray-100 italic"
+                                                    disabled
+                                                />
+                                            ) : (
+                                                task.originalTaskStartDate ? new Date(task.originalTaskStartDate).toLocaleString('en-IN', {
+                                                    day: '2-digit', month: '2-digit', year: 'numeric',
+                                                    hour: '2-digit', minute: '2-digit', hour12: true
+                                                }) : '-'
+                                            )}
                                         </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap capitalize">{task.frequency}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap capitalize">
+                                            {editingTaskId === task.id ? (
+                                                <select
+                                                    value={editFormData.freq}
+                                                    onChange={e => handleInputChange('freq', e.target.value)}
+                                                    className="w-full px-2 py-1 border rounded text-xs bg-gray-100 italic"
+                                                    disabled
+                                                >
+                                                    <option value="daily">Daily</option>
+                                                    <option value="weekly">Weekly</option>
+                                                    <option value="monthly">Monthly</option>
+                                                </select>
+                                            ) : task.frequency}
+                                        </td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
                                             {task.enable_reminders ? 'Yes' : 'No'}
                                         </td>
@@ -428,6 +564,22 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                                     <CheckCircle className="h-3 w-3" /> View
                                                 </a>
                                             ) : '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm whitespace-nowrap">
+                                            {editingTaskId === task.id ? (
+                                                <div className="flex gap-2">
+                                                    <button onClick={handleSaveEdit} disabled={isSaving} className="p-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+                                                        <Save size={14} />
+                                                    </button>
+                                                    <button onClick={handleCancelEdit} className="p-1 bg-gray-600 text-white rounded hover:bg-gray-700">
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <button onClick={() => handleEditClick(task)} className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                                                    <Edit size={14} />
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))
