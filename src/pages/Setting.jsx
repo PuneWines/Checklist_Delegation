@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Plus, User, Building, X, Save, Edit, Trash2, Settings, Search, ChevronDown, Calendar, RefreshCw } from 'lucide-react';
 import AdminLayout from '../components/layout/AdminLayout';
 import { useDispatch, useSelector } from 'react-redux';
-import { createDepartment, createUser, deleteUser, departmentOnlyDetails, givenByDetails, departmentDetails, updateDepartment, updateUser, userDetails, customDropdownDetails, createCustomDropdown, deleteCustomDropdown, createAssignFrom, deleteDepartment, deleteAssignFrom, updateCustomDropdown, updateAssignFrom } from '../redux/slice/settingSlice';
+import { createDepartment, createUser, deleteUser, departmentOnlyDetails, givenByDetails, departmentDetails, updateDepartment, updateUser, userDetails, customDropdownDetails, createCustomDropdown, deleteCustomDropdown, createAssignFrom, deleteDepartment, deleteAssignFrom, updateCustomDropdown, updateAssignFrom, createMachineEntries } from '../redux/slice/settingSlice';
 import supabase from '../SupabaseClient';
 import CalendarComponent from '../components/CalendarComponent';
 
@@ -614,6 +614,22 @@ const Setting = () => {
     partName: '',
     machineArea: ''
   });
+  const [inputParts, setInputParts] = useState(['']);
+
+  const handleAddPartInput = () => {
+    setInputParts([...inputParts, '']);
+  };
+
+  const handlePartInputChange = (index, value) => {
+    const newParts = [...inputParts];
+    newParts[index] = value;
+    setInputParts(newParts);
+  };
+
+  const handleRemovePartInput = (index) => {
+    const newParts = inputParts.filter((_, i) => i !== index);
+    setInputParts(newParts);
+  };
 
   useEffect(() => {
     dispatch(userDetails());
@@ -691,8 +707,7 @@ const Setting = () => {
     if (activeTab === 'departments') {
       if (activeDeptSubTab === 'departments') {
         const updatedDept = {
-          department: deptForm.name,
-          given_by: deptForm.givenBy
+          department: deptForm.name
         };
         try {
           await dispatch(updateDepartment({ id: currentDeptId, updatedDept })).unwrap();
@@ -721,29 +736,33 @@ const Setting = () => {
 
     if (activeTab === 'categories') {
       try {
-        // Add Machine Name
-        if (deptForm.givenBy) {
-          await dispatch(createCustomDropdown({
-            category: 'Machine Name', // Force Machine Name category
-            value: deptForm.givenBy
-          })).unwrap();
+        const machineName = deptForm.givenBy;
+        const machineArea = deptForm.machineArea;
+        const parts = inputParts.filter(p => p.trim() !== '');
+
+        if (!machineName) {
+          alert("Machine Name is required");
+          return;
         }
 
-        // Add Part Name if provided
-        if (deptForm.partName) {
-          await dispatch(createCustomDropdown({
-            category: 'Part Name',
-            value: deptForm.partName
-          })).unwrap();
+        const entries = [];
+        if (parts.length > 0) {
+          parts.forEach(part => {
+            entries.push({
+              machine_name: machineName,
+              part_name: part,
+              machine_area: machineArea
+            });
+          });
+        } else {
+          entries.push({
+            machine_name: machineName,
+            part_name: null,
+            machine_area: machineArea
+          });
         }
 
-        // Add Machine Area if provided
-        if (deptForm.machineArea) {
-          await dispatch(createCustomDropdown({
-            category: 'Machine Area',
-            value: deptForm.machineArea
-          })).unwrap();
-        }
+        await dispatch(createMachineEntries(entries)).unwrap();
 
         resetDeptForm();
         setShowDeptModal(false);
@@ -764,7 +783,7 @@ const Setting = () => {
         }
       } else { // activeDeptSubTab === 'departments'
         try {
-          await dispatch(createDepartment({ department: deptForm.name, given_by: deptForm.givenBy })).unwrap(); // Pass both fields
+          await dispatch(createDepartment({ department: deptForm.name })).unwrap(); // Pass department only
           resetDeptForm();
           setShowDeptModal(false);
         } catch (error) {
@@ -825,7 +844,7 @@ const Setting = () => {
       const dept = department.find(d => d.id === deptId);
       setDeptForm({
         name: dept.department,
-        givenBy: dept.given_by
+        givenBy: ''
       });
       setCurrentDeptId(deptId);
       setIsEditing(true); // Set editing mode
@@ -918,6 +937,7 @@ const Setting = () => {
     });
     setCurrentDeptId(null);
     setIsEditing(false); // Reset editing state for department modal
+    setInputParts(['']);
   };
 
 
@@ -1380,9 +1400,7 @@ const Setting = () => {
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Department Name
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Assign By
-                        </th>
+
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
                         </th>
@@ -1394,7 +1412,7 @@ const Setting = () => {
                           <tr key={`dept-${dept.id || index}`} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{dept.department}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{dept.given_by || 'N/A'}</td>
+                            {/* <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{dept.given_by || 'N/A'}</td> */}
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                               <div className="flex space-x-2 justify-end">
                                 <button
@@ -1484,61 +1502,122 @@ const Setting = () => {
             </div>
 
             <div className="max-h-[calc(100vh-250px)] overflow-auto scrollbar-hide">
-              <div className="inline-block min-w-full align-middle">
-                <table className="min-w-full divide-y divide-gray-100">
-                  <thead className="bg-gray-50/50 sticky top-0 backdrop-blur-sm z-10 shadow-sm">
-                    <tr>
-                      <th className="px-8 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">ID</th>
-                      <th className="px-8 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Machine Name</th>
-                      <th className="px-8 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-50">
-                    {customDropdowns && customDropdowns.filter(item => item.category === 'Machine Name').length > 0 ? (
-                      customDropdowns
-                        .filter(item => item.category === 'Machine Name')
-                        .map((item, idx) => (
-                          <tr key={`cat-${item.id}-${item.category}`} className="hover:bg-indigo-50/30 transition-colors group">
-                            <td className="px-8 py-4 text-sm font-semibold text-gray-700">{idx + 1}</td>
-                            <td className="px-8 py-4">
-                              <span className="px-3 py-1 bg-white border border-indigo-100 rounded-full text-xs font-bold text-indigo-700 shadow-sm">
-                                {item.value}
-                              </span>
-                            </td>
-                            <td className="px-8 py-4 text-right">
-                              <div className="flex space-x-2 justify-end">
-                                <button
-                                  onClick={() => handleEditDepartment(item.id)}
-                                  className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                                >
-                                  <Edit size={16} />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    if (window.confirm('Delete this category option?')) {
-                                      dispatch(deleteCustomDropdown(item.id));
-                                    }
-                                  }}
-                                  className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                    ) : (
-                      <tr>
-                        <td colSpan="3" className="px-8 py-20 text-center">
-                          <div className="flex flex-col items-center gap-2 text-gray-400">
-                            <Settings size={40} className="opacity-20 mb-2" />
-                            <p className="font-medium italic">No custom categories found</p>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              <div className="p-6">
+                {(() => {
+                  // Group by Machine Name
+                  const machinesByName = {};
+                  const machineIds = {};
+
+                  if (customDropdowns) {
+                    customDropdowns.forEach(item => {
+                      if (item.category === 'Machine Name') {
+                        if (!machinesByName[item.value]) {
+                          machinesByName[item.value] = { parts: [], areas: new Set(), ids: [] };
+                        }
+                        machinesByName[item.value].ids.push(item.id);
+                      }
+                    });
+
+                    // Associate Parts and Areas
+                    Object.keys(machinesByName).forEach(machineName => {
+                      const ids = machinesByName[machineName].ids;
+                      customDropdowns.forEach(item => {
+                        if (ids.includes(item.id)) {
+                          if (item.category === 'Part Name') machinesByName[machineName].parts.push(item);
+                          if (item.category === 'Machine Area') machinesByName[machineName].areas.add(item.value);
+                        }
+                      });
+                    });
+                  }
+
+                  const machineNames = Object.keys(machinesByName).sort();
+
+                  return machineNames.length > 0 ? (
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine Name</th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine Area</th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parts Count</th>
+                          <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {machineNames.map((machineName, idx) => {
+                          const data = machinesByName[machineName];
+                          const isExpanded = activeDeptSubTab === `expanded-${idx}`;
+
+                          return (
+                            <React.Fragment key={idx}>
+                              <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setActiveDeptSubTab(isExpanded ? '' : `expanded-${idx}`)}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 flex items-center gap-2">
+                                  <ChevronDown size={16} className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                  {machineName}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  {[...data.areas].join(', ') || '-'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  <span className="bg-indigo-100 text-indigo-800 py-0.5 px-2.5 rounded-full text-xs font-medium">
+                                    {data.parts.length} parts
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (window.confirm(`Delete machine "${machineName}" and all its parts?`)) {
+                                        data.ids.forEach(id => dispatch(deleteCustomDropdown(id)));
+                                      }
+                                    }}
+                                    className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr className="bg-gray-50/50">
+                                  <td colSpan="4" className="px-6 py-4">
+                                    <div className="pl-6 border-l-2 border-indigo-200">
+                                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Associated Parts</p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {data.parts.length > 0 ? data.parts.map(part => (
+                                          <span key={part.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-xs font-medium rounded-md border border-gray-200 shadow-sm">
+                                            {part.value}
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (window.confirm(`Delete part "${part.value}"?`)) {
+                                                  dispatch(deleteCustomDropdown(part.id));
+                                                }
+                                              }}
+                                              className="text-gray-400 hover:text-red-600 transition-colors"
+                                            >
+                                              <X size={12} />
+                                            </button>
+                                          </span>
+                                        )) : (
+                                          <span className="text-sm text-gray-400 italic">No parts added for this machine</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <Settings size={48} className="text-gray-200 mb-4" />
+                      <p className="text-gray-500 font-medium">No machines found</p>
+                      <p className="text-gray-400 text-sm mt-1">Add a new machine to get started</p>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -1758,23 +1837,43 @@ const Setting = () => {
                   {activeTab === 'categories' && !isEditing && (
                     <>
                       <div className="space-y-2 pt-2">
-                        <label htmlFor="partName" className="block text-sm font-bold text-gray-700 ml-1">
-                          Part Name <span className="text-gray-400 font-normal text-xs">(Optional - adds to Part Name list)</span>
+                        <label className="block text-sm font-bold text-gray-700 ml-1">
+                          Part Names <span className="text-gray-400 font-normal text-xs">(Add multiple parts)</span>
                         </label>
-                        <input
-                          type="text"
-                          name="partName"
-                          id="partName"
-                          value={deptForm.partName}
-                          onChange={handleDeptInputChange}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-                          placeholder="Enter part name..."
-                        />
+                        <div className="space-y-2">
+                          {inputParts.map((part, index) => (
+                            <div key={index} className="flex gap-2">
+                              <input
+                                type="text"
+                                value={part}
+                                onChange={(e) => handlePartInputChange(index, e.target.value)}
+                                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-sm transition-all"
+                                placeholder={`Part #${index + 1}`}
+                              />
+                              {inputParts.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemovePartInput(index)}
+                                  className="p-2 text-red-400 hover:bg-red-50 rounded-lg"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddPartInput}
+                          className="mt-2 text-sm text-purple-600 font-bold hover:text-purple-800 flex items-center gap-1"
+                        >
+                          <Plus size={16} /> Add Another Part
+                        </button>
                       </div>
 
                       <div className="space-y-2 pt-2">
                         <label htmlFor="machineArea" className="block text-sm font-bold text-gray-700 ml-1">
-                          Machine Area <span className="text-gray-400 font-normal text-xs">(Optional - adds to Machine Area list)</span>
+                          Machine Area <span className="text-gray-400 font-normal text-xs">(Optional)</span>
                         </label>
                         <input
                           type="text"
@@ -1789,34 +1888,7 @@ const Setting = () => {
                     </>
                   )}
 
-                  {activeTab === 'departments' && activeDeptSubTab === 'departments' && (
-                    <div className="space-y-2">
-                      <label htmlFor="givenBy" className="block text-sm font-bold text-gray-700 ml-1">
-                        Assign By (Authorized Personnel)
-                      </label>
-                      <select
-                        id="givenBy"
-                        name="givenBy"
-                        value={deptForm.givenBy}
-                        onChange={handleDeptInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-                      >
-                        <option value="">Select individual or role...</option>
-                        {givenBy && givenBy.length > 0 ? (
-                          givenBy.map((item) => (
-                            <option key={`assign-opt-${item.id}`} value={item.given_by}>
-                              {item.given_by}
-                            </option>
-                          ))
-                        ) : (
-                          <option value="" disabled>No Assign From data available</option>
-                        )}
-                      </select>
-                      <p className="text-xs text-indigo-500 ml-1 mt-1">
-                        💡 Manage these roles in the "Assign From" sub-tab
-                      </p>
-                    </div>
-                  )}
+
 
                   <div className="flex justify-end gap-3 pt-4">
                     <button
@@ -1842,7 +1914,7 @@ const Setting = () => {
           </div>
         )}
       </div>
-    </AdminLayout>
+    </AdminLayout >
   );
 };
 

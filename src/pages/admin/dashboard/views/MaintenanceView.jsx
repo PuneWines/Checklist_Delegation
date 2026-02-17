@@ -227,12 +227,14 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
             const taskStartDate = task.originalTaskStartDate ? new Date(task.originalTaskStartDate) : null;
             const hasSubmission = task.submission_date !== null && task.submission_date !== undefined;
 
-            if (hasSubmission) {
+            if (hasSubmission && task.admin_done) {
                 completedCount++;
             } else {
+                // If submitted but not admin approved, it's Pending Approval.
+                // If not submitted, it's User Pending.
                 pendingCount++;
                 // Check if overdue (task start date is in the past and not completed)
-                if (taskStartDate && taskStartDate < today) {
+                if (taskStartDate && taskStartDate < today && !hasSubmission) {
                     overdueCount++;
                 }
             }
@@ -451,138 +453,149 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">
                             {filteredTasks.length > 0 ? (
-                                filteredTasks.map((task, index) => (
-                                    <tr key={task.id || index} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.id}</td>
+                                filteredTasks.map((task, index) => {
+                                    const hasSubmission = task.submission_date !== null && task.submission_date !== undefined;
+                                    const taskDate = task.originalTaskStartDate ? new Date(task.originalTaskStartDate) : null;
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    const isOverdue = taskDate && taskDate < today && !hasSubmission;
 
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                            {editingTaskId === task.id ? (
-                                                <input type="text" value={editFormData.machine_name} onChange={e => handleInputChange('machine_name', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
-                                            ) : task.machine_name}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                            {editingTaskId === task.id ? (
-                                                <input type="text" value={editFormData.part_name} onChange={e => handleInputChange('part_name', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
-                                            ) : task.part_name}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                            {editingTaskId === task.id ? (
-                                                <input type="text" value={editFormData.part_area} onChange={e => handleInputChange('part_area', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
-                                            ) : task.part_area}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                            {editingTaskId === task.id ? (
-                                                <select
-                                                    value={editFormData.given_by}
-                                                    onChange={e => handleInputChange('given_by', e.target.value)}
-                                                    className="w-full px-2 py-1 border rounded text-xs"
-                                                >
-                                                    <option value="">Select AssignBy</option>
-                                                    {givenByList.map(name => (
-                                                        <option key={name} value={name}>{name}</option>
-                                                    ))}
-                                                </select>
-                                            ) : task.given_by}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                            {editingTaskId === task.id ? (
-                                                <select
-                                                    value={editFormData.name}
-                                                    onChange={e => handleInputChange('name', e.target.value)}
-                                                    className="w-full px-2 py-1 border rounded text-xs"
-                                                >
-                                                    <option value="">Select Name</option>
-                                                    {doersList.map(name => (
-                                                        <option key={name} value={name}>{name}</option>
-                                                    ))}
-                                                </select>
-                                            ) : task.assignedTo}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">
-                                            {editingTaskId === task.id ? (
-                                                <textarea value={editFormData.task_description} onChange={e => handleInputChange('task_description', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" rows="2" />
-                                            ) : (
-                                                isAudioUrl(task.task_description || task.title) ? (
-                                                    <AudioPlayer url={task.task_description || task.title} />
+                                    return (
+                                        <tr key={task.id || index} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.id}</td>
+
+                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                {editingTaskId === task.id ? (
+                                                    <input type="text" value={editFormData.machine_name} onChange={e => handleInputChange('machine_name', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
+                                                ) : task.machine_name}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                {editingTaskId === task.id ? (
+                                                    <input type="text" value={editFormData.part_name} onChange={e => handleInputChange('part_name', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
+                                                ) : task.part_name}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                {editingTaskId === task.id ? (
+                                                    <input type="text" value={editFormData.part_area} onChange={e => handleInputChange('part_area', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
+                                                ) : task.part_area}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                {editingTaskId === task.id ? (
+                                                    <select
+                                                        value={editFormData.given_by}
+                                                        onChange={e => handleInputChange('given_by', e.target.value)}
+                                                        className="w-full px-2 py-1 border rounded text-xs"
+                                                    >
+                                                        <option value="">Select AssignBy</option>
+                                                        {givenByList.map(name => (
+                                                            <option key={name} value={name}>{name}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : task.given_by}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                {editingTaskId === task.id ? (
+                                                    <select
+                                                        value={editFormData.name}
+                                                        onChange={e => handleInputChange('name', e.target.value)}
+                                                        className="w-full px-2 py-1 border rounded text-xs"
+                                                    >
+                                                        <option value="">Select Name</option>
+                                                        {doersList.map(name => (
+                                                            <option key={name} value={name}>{name}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : task.assignedTo}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600">
+                                                {editingTaskId === task.id ? (
+                                                    <textarea value={editFormData.task_description} onChange={e => handleInputChange('task_description', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" rows="2" />
                                                 ) : (
-                                                    <div className="line-clamp-2" title={task.task_description || task.title}>
-                                                        {task.task_description || task.title}
+                                                    isAudioUrl(task.task_description || task.title) ? (
+                                                        <AudioPlayer url={task.task_description || task.title} />
+                                                    ) : (
+                                                        <div className="line-clamp-2" title={task.task_description || task.title}>
+                                                            {task.task_description || task.title}
+                                                        </div>
+                                                    )
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                {editingTaskId === task.id ? (
+                                                    <input
+                                                        type="datetime-local"
+                                                        value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
+                                                        onChange={e => handleInputChange('task_start_date', e.target.value)}
+                                                        className="w-full px-2 py-1 border rounded text-xs bg-gray-100 italic"
+                                                        disabled
+                                                    />
+                                                ) : (
+                                                    task.originalTaskStartDate ? new Date(task.originalTaskStartDate).toLocaleString('en-IN', {
+                                                        day: '2-digit', month: '2-digit', year: 'numeric',
+                                                        hour: '2-digit', minute: '2-digit', hour12: true
+                                                    }) : '-'
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap capitalize">
+                                                {editingTaskId === task.id ? (
+                                                    <select
+                                                        value={editFormData.freq}
+                                                        onChange={e => handleInputChange('freq', e.target.value)}
+                                                        className="w-full px-2 py-1 border rounded text-xs bg-gray-100 italic"
+                                                        disabled
+                                                    >
+                                                        <option value="daily">Daily</option>
+                                                        <option value="weekly">Weekly</option>
+                                                        <option value="monthly">Monthly</option>
+                                                    </select>
+                                                ) : task.frequency}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
+                                                {task.enable_reminders ? 'Yes' : 'No'}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
+                                                {task.require_attachment ? 'Yes' : 'No'}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm whitespace-nowrap">
+                                                <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase border ${hasSubmission && task.admin_done ? 'bg-green-50 text-green-700 border-green-200' :
+                                                    hasSubmission && !task.admin_done ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                                        isOverdue ? 'bg-red-50 text-red-700 border-red-200' :
+                                                            'bg-yellow-50 text-yellow-700 border-yellow-200'
+                                                    }`}>
+                                                    {hasSubmission && task.admin_done ? 'Approved' :
+                                                        hasSubmission && !task.admin_done ? 'Pending Approval' :
+                                                            isOverdue ? 'Overdue' : 'Pending'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600">
+                                                {isAudioUrl(task.remarks) ? <AudioPlayer url={task.remarks} /> : task.remarks}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
+                                                {task.uploaded_image_url ? (
+                                                    <a href={task.uploaded_image_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center justify-center gap-1">
+                                                        <CheckCircle className="h-3 w-3" /> View
+                                                    </a>
+                                                ) : '-'}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm whitespace-nowrap">
+                                                {editingTaskId === task.id ? (
+                                                    <div className="flex gap-2">
+                                                        <button onClick={handleSaveEdit} disabled={isSaving} className="p-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+                                                            <Save size={14} />
+                                                        </button>
+                                                        <button onClick={handleCancelEdit} className="p-1 bg-gray-600 text-white rounded hover:bg-gray-700">
+                                                            <X size={14} />
+                                                        </button>
                                                     </div>
-                                                )
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                            {editingTaskId === task.id ? (
-                                                <input
-                                                    type="datetime-local"
-                                                    value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
-                                                    onChange={e => handleInputChange('task_start_date', e.target.value)}
-                                                    className="w-full px-2 py-1 border rounded text-xs bg-gray-100 italic"
-                                                    disabled
-                                                />
-                                            ) : (
-                                                task.originalTaskStartDate ? new Date(task.originalTaskStartDate).toLocaleString('en-IN', {
-                                                    day: '2-digit', month: '2-digit', year: 'numeric',
-                                                    hour: '2-digit', minute: '2-digit', hour12: true
-                                                }) : '-'
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap capitalize">
-                                            {editingTaskId === task.id ? (
-                                                <select
-                                                    value={editFormData.freq}
-                                                    onChange={e => handleInputChange('freq', e.target.value)}
-                                                    className="w-full px-2 py-1 border rounded text-xs bg-gray-100 italic"
-                                                    disabled
-                                                >
-                                                    <option value="daily">Daily</option>
-                                                    <option value="weekly">Weekly</option>
-                                                    <option value="monthly">Monthly</option>
-                                                </select>
-                                            ) : task.frequency}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
-                                            {task.enable_reminders ? 'Yes' : 'No'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
-                                            {task.require_attachment ? 'Yes' : 'No'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm whitespace-nowrap">
-                                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase border ${task.status === 'completed' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                task.status === 'overdue' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                    'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                                }`}>
-                                                {task.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">
-                                            {isAudioUrl(task.remarks) ? <AudioPlayer url={task.remarks} /> : task.remarks}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
-                                            {task.uploaded_image_url ? (
-                                                <a href={task.uploaded_image_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center justify-center gap-1">
-                                                    <CheckCircle className="h-3 w-3" /> View
-                                                </a>
-                                            ) : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm whitespace-nowrap">
-                                            {editingTaskId === task.id ? (
-                                                <div className="flex gap-2">
-                                                    <button onClick={handleSaveEdit} disabled={isSaving} className="p-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
-                                                        <Save size={14} />
+                                                ) : (
+                                                    <button onClick={() => handleEditClick(task)} className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                                                        <Edit size={14} />
                                                     </button>
-                                                    <button onClick={handleCancelEdit} className="p-1 bg-gray-600 text-white rounded hover:bg-gray-700">
-                                                        <X size={14} />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <button onClick={() => handleEditClick(task)} className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700">
-                                                    <Edit size={14} />
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             ) : (
                                 <tr>
                                     <td colSpan="14" className="px-4 py-8 text-center text-gray-500 text-sm">

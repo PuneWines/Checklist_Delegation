@@ -16,7 +16,8 @@ import {
   deleteDepartmentApi,
   deleteAssignFromApi,
   updateCustomDropdownApi,
-  updateAssignFromApi
+  updateAssignFromApi,
+  createMachineEntriesApi
 } from '../api/settingApi';
 
 
@@ -146,6 +147,14 @@ export const updateCustomDropdown = createAsyncThunk(
   'update/custom-dropdown',
   async ({ id, category, value }) => {
     const data = await updateCustomDropdownApi({ id, category, value });
+    return data;
+  }
+);
+
+export const createMachineEntries = createAsyncThunk(
+  'post/machine-entries',
+  async (entries) => {
+    const data = await createMachineEntriesApi(entries);
     return data;
   }
 );
@@ -363,6 +372,17 @@ const settingsSlice = createSlice({
         );
       })
       .addCase(updateCustomDropdown.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(createMachineEntries.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(createMachineEntries.fulfilled, (state, action) => {
+        state.loading = false;
+        state.customDropdowns.push(...action.payload);
+      })
+      .addCase(createMachineEntries.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       });

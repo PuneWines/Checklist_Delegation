@@ -22,7 +22,8 @@ export default function DefaultView({
     activeTab,
     dashboardStaffFilter,
     departmentFilter,
-    parseTaskStartDate
+    parseTaskStartDate,
+    userRole,
 }) {
     return (
         <div className="space-y-4">
@@ -51,6 +52,7 @@ export default function DefaultView({
                 getFrequencyColor={getFrequencyColor}
                 isLoadingMore={isLoadingMore}
                 hasMoreData={hasMoreData}
+                userRole={userRole}
             />
 
             {activeTab === "overview" && (

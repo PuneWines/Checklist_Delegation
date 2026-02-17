@@ -213,9 +213,15 @@ export default function AdminDashboard() {
     // Process tasks
     const processedTasks = data
       .map((task) => {
-        // Skip if not assigned to current user (for non-admin)
-        if (userRole !== "admin" && task.name?.toLowerCase() !== username?.toLowerCase()) {
-          return null;
+        // Skip if not involved (assigned to OR created by) for non-admin
+        if (userRole !== "admin") {
+          const currentUserName = (username || "").toLowerCase();
+          const assignedUser = (task.name || task.assigned_person || task.doer_name || "").toLowerCase();
+          const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
+
+          if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
+            return null;
+          }
         }
 
         const taskStartDate = parseTaskStartDate(task.task_start_date);
@@ -611,9 +617,15 @@ export default function AdminDashboard() {
       // Process tasks with your field names
       const processedTasks = filteredData
         .map((task) => {
-          // Skip if not assigned to current user (for non-admin)
-          if ((userRole || "").toLowerCase() !== "admin" && task.name?.toLowerCase() !== username?.toLowerCase()) {
-            return null;
+          // Skip if not involved (assigned to OR created by) for non-admin
+          if ((userRole || "").toLowerCase() !== "admin") {
+            const currentUserName = (username || "").toLowerCase();
+            const assignedUser = (task.name || task.assigned_person || task.doer_name || "").toLowerCase();
+            const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
+
+            if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
+              return null;
+            }
           }
 
           // FIXED: Use correct field name from your Supabase data
@@ -1123,6 +1135,7 @@ export default function AdminDashboard() {
             dashboardStaffFilter={dashboardStaffFilter}
             departmentFilter={departmentFilter}
             parseTaskStartDate={parseTaskStartDate}
+            userRole={userRole}
           />
         )}
 

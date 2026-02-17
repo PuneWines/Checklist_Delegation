@@ -77,6 +77,7 @@ export default function ChecklistTask() {
             "Alternate Day": "alternate-day",
             "Daily": "daily",
             "Weekly": "weekly",
+            "Fortnight": "fortnight",
             "Monthly": "monthly",
             "Quarterly": "quarterly",
             "Half Yearly": "half-yearly"
@@ -169,6 +170,7 @@ export default function ChecklistTask() {
                     }
 
                     if (freqKey === 'weekly') current = addDays(current, 7);
+                    else if (freqKey === 'fortnight') current = addDays(current, 14);
                     else if (freqKey === 'monthly') current.setMonth(current.getMonth() + 1);
                     else if (freqKey === 'quarterly') current.setMonth(current.getMonth() + 3);
                     else if (freqKey === 'half-yearly') current.setMonth(current.getMonth() + 6);
@@ -445,6 +447,7 @@ export default function ChecklistTask() {
                                         <option>Alternate Day</option>
                                         <option>Daily</option>
                                         <option>Weekly</option>
+                                        <option>Fortnight</option>
                                         <option>Monthly</option>
                                         <option>Quarterly</option>
                                         <option>Half Yearly</option>

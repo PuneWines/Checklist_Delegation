@@ -720,7 +720,8 @@ const AllTasks = () => {
               status: taskStatus,
               remarks: remarksData[id] || null,
               given_by: originalTask.given_by,
-              extended_date: null
+              extended_date: null,
+              admin_done: false
             }]);
             if (doneError) throw doneError;
           }
@@ -748,7 +749,8 @@ const AllTasks = () => {
           const updates = {
             [completionField]: new Date().toISOString(),
             [remarksField]: remarksData[id] || null,
-            status: statusData[id] || "Done"
+            status: statusData[id] || (activeTab === "checklist" ? "yes" : "Done"),
+            admin_done: false
           };
           if (imageUrl) {
             updates[imageField] = imageUrl;

@@ -325,6 +325,13 @@ function DelegationDataPage() {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     return delegation.filter((task) => {
+      const assignedUser = task.name || task.assigned_person || "";
+      const userMatch =
+        (userRole || "").toLowerCase() === "admin" ||
+        (assignedUser && assignedUser.toLowerCase() === (username || "").toLowerCase());
+
+      if (!userMatch) return false;
+
       const matchesSearch = debouncedSearchTerm
         ? Object.values(task).some(
           (value) =>
@@ -358,16 +365,17 @@ function DelegationDataPage() {
 
       return matchesSearch && matchesDateFilter;
     });
-  }, [delegation, debouncedSearchTerm, dateFilter]);
+  }, [delegation, debouncedSearchTerm, dateFilter, userRole, username]);
 
   const filteredHistoryData = useMemo(() => {
     if (!delegation_done) return [];
 
     return delegation_done
       .filter((item) => {
+        const assignedUser = item.name || item.assigned_person || "";
         const userMatch =
           userRole === "admin" ||
-          (item.name && item.name.toLowerCase() === username.toLowerCase());
+          (assignedUser && assignedUser.toLowerCase() === (username || "").toLowerCase());
         if (!userMatch) return false;
 
         const matchesSearch = debouncedSearchTerm
@@ -615,9 +623,11 @@ function DelegationDataPage() {
       const selectedData = selectedItemsArray.map((id) => {
         const item = delegation.find((account) => account.id === id);
 
-        const dbStatus = statusData[id] === "Done" ? "done" :
+        let dbStatus = statusData[id] === "Done" ? "done" :
           statusData[id] === "Extend date" ? "extend" :
             statusData[id];
+
+
 
         return {
           id: item.id,
@@ -933,13 +943,17 @@ function DelegationDataPage() {
                           <td className="px-3 sm:px-6 py-2 sm:py-4">
                             <span
                               className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-normal ${history.status === "done"
-                                ? "bg-green-100 text-green-800"
-                                : history.status === "extend"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-gray-100 text-gray-800"
+                                  ? (history.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
+                                  : history.status === "pending_approval"
+                                    ? "bg-orange-100 text-orange-800"
+                                    : history.status === "extend"
+                                      ? "bg-yellow-100 text-yellow-800"
+                                      : "bg-gray-100 text-gray-800"
                                 }`}
                             >
-                              {history.status || "—"}
+                              {history.status === "done"
+                                ? (history.admin_done ? "Approved" : "Pending Approval")
+                                : (history.status === "pending_approval" ? "Pending Approval" : (history.status || "—"))}
                             </span>
                           </td>
                           <td className="px-3 sm:px-6 py-2 sm:py-4">

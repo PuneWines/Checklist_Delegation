@@ -168,7 +168,8 @@ export const updateMaintenanceData = async (submissionData) => {
                 status: item.status, // 'Done' or 'Issue'
                 remarks: item.remarks, // Note: Schema might be 'remarks' or 'remark' - check assumption. Schema likely 'remarks' if copied from checklist pattern, or check previous code.
                 submission_date: new Date().toISOString(),
-                uploaded_image_url: imageUrl
+                uploaded_image_url: imageUrl,
+                admin_done: false // Reset/Set to false when user submits maintenance task
             };
         }));
 
@@ -254,6 +255,40 @@ export const deleteMaintenanceTasksApi = async (tasks) => {
         return ids;
     } catch (error) {
         console.error("Error deleting maintenance tasks:", error);
+        throw error;
+    }
+};
+
+export const fetchPendingMaintenanceApprovals = async () => {
+    try {
+        const { data, error } = await supabase
+            .from('maintenance_tasks')
+            .select('*')
+            .not('submission_date', 'is', null) // Tasks that are submitted
+            .or('admin_done.is.null,admin_done.eq.false') // Not yet admin approved
+            .order('submission_date', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error("Error fetching pending maintenance approvals:", error);
+        return [];
+    }
+};
+
+export const approveMaintenanceTask = async (id) => {
+    try {
+        const { data, error } = await supabase
+            .from('maintenance_tasks')
+            .update({ admin_done: true })
+            .eq('id', id)
+            .select() // .single may fail if no row found but here we have ID
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error("Error approving maintenance task:", error);
         throw error;
     }
 };

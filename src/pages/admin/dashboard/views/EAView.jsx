@@ -91,14 +91,28 @@ export default function EAView() {
     const fetchEATasks = async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
+            const userRole = localStorage.getItem('role');
+            const username = localStorage.getItem('user-name');
+
+            let query = supabase
                 .from('ea_tasks')
                 .select('*')
                 .order('planned_date', { ascending: true });
 
+            const { data, error } = await query;
+
             if (error) throw error;
 
-            const tasks = data || [];
+            let tasks = data || [];
+
+            // Filter for non-admin users
+            if (userRole !== 'admin' && username) {
+                tasks = tasks.filter(t =>
+                    (t.doer_name && t.doer_name.toLowerCase() === username.toLowerCase()) ||
+                    (t.given_by && t.given_by.toLowerCase() === username.toLowerCase())
+                );
+            }
+
             setEATasks(tasks);
             calculateStats(tasks);
         } catch (err) {
@@ -111,8 +125,8 @@ export default function EAView() {
     const calculateStats = (tasks) => {
         const now = new Date();
         const total = tasks.length;
-        const pending = tasks.filter(t => t.status === 'pending').length;
-        const completed = tasks.filter(t => t.status === 'done').length;
+        const pending = tasks.filter(t => t.status === 'pending' || (t.status === 'done' && !t.admin_done)).length;
+        const completed = tasks.filter(t => t.status === 'done' && t.admin_done).length;
         const extended = tasks.filter(t => t.status === 'extended').length;
         const overdue = tasks.filter(t => {
             const plannedDate = new Date(t.planned_date);
@@ -126,7 +140,7 @@ export default function EAView() {
                 doerMap[t.doer_name] = { total: 0, completed: 0, pending: 0 };
             }
             doerMap[t.doer_name].total++;
-            if (t.status === 'done') doerMap[t.doer_name].completed++;
+            if (t.status === 'done' && t.admin_done) doerMap[t.doer_name].completed++;
             else doerMap[t.doer_name].pending++;
         });
 
@@ -145,7 +159,7 @@ export default function EAView() {
         return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     };
 
-    const getStatusStyles = (status, plannedDate) => {
+    const getStatusStyles = (status, plannedDate, admin_done) => {
         const now = new Date();
         const isOverdue = (status === 'pending' || status === 'extended') && new Date(plannedDate) < now;
 
@@ -158,7 +172,11 @@ export default function EAView() {
 
         switch (status) {
             case 'done':
-                return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-100', label: 'Completed' };
+                if (admin_done) {
+                    return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-100', label: 'Approved' };
+                } else {
+                    return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-100', label: 'Pending Approval' };
+                }
             case 'extended':
                 return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-100', label: 'Extended' };
             default:
@@ -358,7 +376,7 @@ export default function EAView() {
                                 </tr>
                             ) : (
                                 eaTasks.slice(0, 8).map((task) => {
-                                    const styles = getStatusStyles(task.status, task.planned_date);
+                                    const styles = getStatusStyles(task.status, task.planned_date, task.admin_done);
                                     return (
                                         <tr key={task.id} className="hover:bg-gray-50/50 group transition-colors">
                                             <td className="px-6 py-4">

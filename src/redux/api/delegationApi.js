@@ -103,6 +103,8 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
           if (taskData.status === 'done') {
             // Mark as completed
             delegationUpdate.status = 'done';
+            delegationUpdate.status = 'done';
+            delegationUpdate.admin_done = false; // Require admin approval
           } else if (taskData.status === 'extend') {
             // Update planned_date for extension
             if (taskData.next_extend_date) {
@@ -299,6 +301,56 @@ export const fetchDelegation_DoneDataSortByDate = async () => {
 
   } catch (error) {
     console.log("Error from Supabase", error);
+    return [];
+  }
+};
+
+export const updateDelegationDoneStatus = createAsyncThunk(
+  'delegation/updateDelegationDoneStatus',
+  async ({ id, status, taskId }, { rejectWithValue }) => {
+    try {
+      console.log('Approve delegation task:', { id, taskId });
+
+      // Update delegation_done admin_done status
+      const { data: doneData, error: doneError } = await supabase
+        .from('delegation_done')
+        .update({ admin_done: true })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (doneError) throw doneError;
+
+      // Also update the main delegation table
+      if (taskId) {
+        const { error: mainError } = await supabase
+          .from('delegation')
+          .update({ admin_done: true })
+          .eq('task_id', taskId);
+
+        if (mainError) throw mainError;
+      }
+
+      return doneData;
+    } catch (error) {
+      console.error('Error updating status:', error);
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const fetchPendingApprovals = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('delegation_done')
+      .select('*')
+      .or('admin_done.is.null,admin_done.eq.false')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching pending approvals:', error);
     return [];
   }
 };

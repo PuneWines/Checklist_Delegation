@@ -89,7 +89,8 @@ export const updateRepairData = async (updates) => {
                     work_done: item.workDone || null,
                     work_photo_url: item.workPhotoUrl || null,
                     bill_copy_url: item.billCopyUrl || null,
-                    submission_date: new Date().toISOString()
+                    submission_date: new Date().toISOString(),
+                    admin_done: false // Explicitly set to false on completion
                 })
                 .eq('id', item.taskId)
                 .select();
@@ -130,5 +131,39 @@ export const fetchRepairDataForHistory = async (page = 1, searchTerm = '') => {
     } catch (e) {
         console.error("Error fetching repair history:", e);
         return [];
+    }
+};
+
+export const fetchPendingRepairApprovals = async () => {
+    try {
+        const { data, error } = await supabase
+            .from('repair_tasks')
+            .select('*')
+            .neq('status', 'Pending') // Completed tasks
+            .or('admin_done.is.null,admin_done.eq.false') // Not yet admin approved
+            .order('submission_date', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error("Error fetching pending repair approvals:", error);
+        return [];
+    }
+};
+
+export const approveRepairTask = async (id) => {
+    try {
+        const { data, error } = await supabase
+            .from('repair_tasks')
+            .update({ admin_done: true })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error("Error approving repair task:", error);
+        throw error;
     }
 };

@@ -94,7 +94,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Assign Task",
       icon: CheckSquare,
       active: location.pathname === "/dashboard/assign-task",
-      showFor: ["admin", "user"],
+      showFor: ["admin"],
     },
     {
       href: "/dashboard/delegation",
@@ -120,7 +120,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     {
       label: "Holiday",
       icon: CalendarIcon, // Or a specific holiday icon
-      showFor: ["admin", "user"],
+      showFor: ["admin"],
       isSubmenu: true,
       isOpen: isHolidaySubmenuOpen,
       setIsOpen: setIsHolidaySubmenuOpen,
@@ -136,9 +136,16 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
           href: "/dashboard/working-day-calendar",
           label: "Working Day Calendar",
           active: location.pathname === "/dashboard/working-day-calendar",
-          showFor: ["admin", "user"],
+          showFor: ["admin"],
         }
       ]
+    },
+    {
+      href: "/dashboard/admin-approval",
+      label: "Admin Approval",
+      icon: BookmarkCheck,
+      active: location.pathname === "/dashboard/admin-approval",
+      showFor: ["admin"],
     },
     // {
     //   href: "/dashboard/mis-report",
@@ -582,14 +589,16 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
               <span className="text-[10px] mt-1 font-bold">Tasks</span>
             </Link>
 
-            <div className="relative -mt-12">
-              <Link
-                to="/dashboard/assign-task"
-                className="flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-blue-600 to-purple-600 rounded-2xl shadow-lg shadow-purple-200 text-white transform active:scale-90 transition-all duration-300 border-4 border-blue-50"
-              >
-                <CirclePlus size={28} strokeWidth={2.5} />
-              </Link>
-            </div>
+            {userRole === "admin" && (
+              <div className="relative -mt-12">
+                <Link
+                  to="/dashboard/assign-task"
+                  className="flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-blue-600 to-purple-600 rounded-2xl shadow-lg shadow-purple-200 text-white transform active:scale-90 transition-all duration-300 border-4 border-blue-50"
+                >
+                  <CirclePlus size={28} strokeWidth={2.5} />
+                </Link>
+              </div>
+            )}
 
             <Link
               to="/dashboard/delegation"

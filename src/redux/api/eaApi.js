@@ -81,7 +81,10 @@ export const completeEATask = async (task, remarks = '', imageUrl = '') => {
                 status: 'done',
                 remarks: remarks,
                 image_url: imageUrl,
-                given_by: task.given_by
+                remarks: remarks,
+                image_url: imageUrl,
+                given_by: task.given_by,
+                admin_done: false // Explicitly set to false when user completes task
             }])
             .select();
 
@@ -154,5 +157,49 @@ export const deleteEATask = async (taskId) => {
     } catch (err) {
         console.error('Error deleting EA task:', err);
         return { success: false, error: err.message };
+    }
+};
+
+export const fetchPendingEAApprovals = async () => {
+    try {
+        const { data, error } = await supabase
+            .from('ea_tasks_done')
+            .select('*')
+            .eq('status', 'done')
+            .or('admin_done.is.null,admin_done.eq.false')
+            .order('submission_date', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error("Error fetching pending EA approvals:", error);
+        return [];
+    }
+};
+
+export const approveEATask = async (id) => {
+    try {
+        // Update ea_tasks_done
+        const { data: doneData, error: doneError } = await supabase
+            .from('ea_tasks_done')
+            .update({ admin_done: true })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (doneError) throw doneError;
+
+        // Try to update main task if possible (optional, but good for consistency)
+        if (doneData && doneData.task_id) {
+            await supabase
+                .from('ea_tasks')
+                .update({ admin_done: true })
+                .eq('task_id', doneData.task_id);
+        }
+
+        return doneData;
+    } catch (error) {
+        console.error("Error approving EA task:", error);
+        throw error;
     }
 };

@@ -152,9 +152,11 @@ export default function RepairPendingPage({ showLayout = true }) {
     };
 
     // Helper for Status Badge
-    const getStatusColor = (status) => {
+    const getStatusColor = (status, admin_done) => {
         if (!status) return "bg-gray-100 text-gray-700 border-gray-200";
-        if (status.includes("Completed") || status === 'Done' || status.includes("Complete")) return "bg-green-50 text-green-700 border-green-200";
+        if (status.includes("Completed") || status === 'Done' || status.includes("Complete")) {
+            return admin_done ? "bg-green-50 text-green-700 border-green-200" : "bg-orange-50 text-orange-700 border-orange-200";
+        }
         if (status.includes("Cancelled")) return "bg-red-50 text-red-700 border-red-200";
         if (status.includes("Observation")) return "bg-blue-50 text-blue-700 border-blue-200";
         return "bg-yellow-50 text-yellow-700 border-yellow-200";
@@ -269,8 +271,10 @@ export default function RepairPendingPage({ showLayout = true }) {
                                     <td className="py-4 px-4 align-top text-sm text-gray-600 text-center">No</td>
                                     <td className="py-4 px-4 align-top text-sm text-gray-600 text-center">No</td>
                                     <td className="py-4 px-4 align-top">
-                                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold border uppercase ${getStatusColor(item.status)}`}>
-                                            {item.status ? item.status.split(' ')[0] : "Pending"}
+                                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold border uppercase ${getStatusColor(item.status, item.admin_done)}`}>
+                                            {item.status && (item.status.includes("Completed") || item.status === 'Done' || item.status.includes("Complete"))
+                                                ? (item.admin_done ? "Approved" : "Pending Approval")
+                                                : (item.status ? item.status.split(' ')[0] : "Pending")}
                                         </span>
                                     </td>
                                     <td className="py-4 px-4 align-top text-sm text-gray-600">

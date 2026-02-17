@@ -377,7 +377,9 @@ export const fetchCustomDropdownsApi = async () => {
           formatted.push({
             id: item.id,
             category: category,
-            value: item[column]
+            value: item[column],
+            // Include machine_name for Part Name entries to enable cascading
+            ...(category === "Part Name" && item.machine_name && { parent: item.machine_name })
           });
         }
       });
@@ -424,6 +426,36 @@ export const deleteCustomDropdownApi = async (id) => {
     return id;
   } catch (error) {
     console.log("error deleting custom dropdown", error);
+    throw error;
+  }
+};
+
+export const createMachineEntriesApi = async (entries) => {
+  try {
+    const { data, error } = await supabase
+      .from('dropdown_options')
+      .insert(entries)
+      .select();
+
+    if (error) throw error;
+
+    const formatted = [];
+    data.forEach(item => {
+      Object.keys(CATEGORY_TO_COLUMN).forEach(category => {
+        const column = CATEGORY_TO_COLUMN[category];
+        if (item[column] !== null && item[column] !== undefined && item[column] !== "") {
+          formatted.push({
+            id: item.id,
+            category: category,
+            value: item[column]
+          });
+        }
+      });
+    });
+
+    return formatted;
+  } catch (error) {
+    console.error("Error creating machine entries:", error);
     throw error;
   }
 };

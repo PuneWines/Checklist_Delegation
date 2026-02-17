@@ -44,7 +44,7 @@ export default function RepairView({ tasks = [] }) {
             // Normalize Status
             const rawStatus = (task.status || "Pending").toLowerCase();
             let statusKey = "Pending";
-            if (rawStatus.includes("complete") || rawStatus === "done") {
+            if ((rawStatus.includes("complete") || rawStatus === "done") && task.admin_done) {
                 statusKey = "Completed";
                 completedTasksCount++;
             } else if (rawStatus.includes("observation")) {

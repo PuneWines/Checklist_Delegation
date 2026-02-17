@@ -1,0 +1,74 @@
+                        {/* Row 2: Part Name */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2 relative">
+                                <label className="text-sm font-bold text-gray-700">Part Name (Multi-Select)</label>
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPartDropdown(!showPartDropdown)}
+                                        disabled={!formData.machineName}
+                                        className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 hover:bg-white transition-all text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <span className="text-sm">
+                                            {formData.partName.length === 0 
+                                                ? (formData.machineName ? 'Select Parts' : 'Select Machine First')
+                                                : `${formData.partName.length} part(s) selected`
+                                            }
+                                        </span>
+                                        <svg className={`w-4 h-4 transition-transform ${showPartDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+                                    
+                                    {showPartDropdown && formData.machineName && (
+                                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                            {getUniqueDropdownValues("Part Name")
+                                                .filter(item => !item.parent || item.parent === formData.machineName)
+                                                .map((item) => (
+                                                    <label
+                                                        key={item.id}
+                                                        className="flex items-center gap-3 px-4 py-2.5 hover:bg-purple-50 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={formData.partName.includes(item.value)}
+                                                            onChange={() => handlePartToggle(item.value)}
+                                                            className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                                        />
+                                                        <span className="text-sm text-gray-700">{item.value}</span>
+                                                    </label>
+                                                ))
+                                            }
+                                            {getUniqueDropdownValues("Part Name")
+                                                .filter(item => !item.parent || item.parent === formData.machineName)
+                                                .length === 0 && (
+                                                <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                                    No parts available for this machine
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {/* Selected parts display */}
+                                {formData.partName.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                        {formData.partName.map((part, index) => (
+                                            <span
+                                                key={index}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium"
+                                            >
+                                                {part}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handlePartToggle(part)}
+                                                    className="hover:bg-purple-200 rounded-full p-0.5 transition-colors"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>

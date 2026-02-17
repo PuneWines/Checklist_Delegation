@@ -276,8 +276,12 @@ export default function MaintenanceDataPage({ showLayout = true }) {
                                         <td className="px-3 py-4 align-top">
                                             {showHistory ? (
                                                 <span className={`inline-flex px-2 py-0.5 text-xs font-bold uppercase rounded-full border 
-                                                    ${(item.status === 'Done' || item.status === 'yes') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                                                    {item.status}
+                                                    ${(item.status === 'Done' || item.status === 'yes')
+                                                        ? (item.admin_done ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200')
+                                                        : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                                    {(item.status === 'Done' || item.status === 'yes')
+                                                        ? (item.admin_done ? 'Approved' : 'Pending Approval')
+                                                        : item.status}
                                                 </span>
                                             ) : (
                                                 <select

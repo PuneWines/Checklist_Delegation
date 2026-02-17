@@ -87,7 +87,8 @@ export default function TaskNavigationTabs({
   departmentData,
   getFrequencyColor,
   dashboardStaffFilter,
-  departmentFilter // Add this prop
+  departmentFilter,
+  userRole // Add this prop
 }) {
   const [currentPage, setCurrentPage] = useState(1)
   const [displayedTasks, setDisplayedTasks] = useState([])
@@ -792,13 +793,15 @@ export default function TaskNavigationTabs({
                               </button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => handleEditClick(task)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold transition-all shadow-sm active:scale-95"
-                            >
-                              <Edit size={12} />
-                              Edit
-                            </button>
+                            userRole === 'admin' && (
+                              <button
+                                onClick={() => handleEditClick(task)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold transition-all shadow-sm active:scale-95"
+                              >
+                                <Edit size={12} />
+                                Edit
+                              </button>
+                            )
                           )}
                         </td>
                       </tr>

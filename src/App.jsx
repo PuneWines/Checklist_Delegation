@@ -25,6 +25,7 @@ import AdminDelegationTask from "./pages/delegation-data"
 import AllTasks from "./pages/admin/AllTasks"
 import HolidayListPage from "./pages/admin/HolidayListPage"         // New
 import WorkingDayCalendarPage from "./pages/admin/WorkingDayCalendarPage" // New
+import AdminApprovalPage from "./pages/admin/AdminApprovalPage" // New
 
 // --- Components ---
 import RealtimeLogoutListener from "./components/RealtimeLogoutListener"
@@ -198,7 +199,7 @@ function App() {
                 <Route
                     path="/dashboard/delegation"
                     element={
-                        <ProtectedRoute allowedRoles={["admin"]}>
+                        <ProtectedRoute>
                             <AccountDataPage />
                         </ProtectedRoute>
                     }
@@ -208,6 +209,14 @@ function App() {
                     element={
                         <ProtectedRoute allowedRoles={["admin"]}>
                             <AdminDelegationTask />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/dashboard/admin-approval"
+                    element={
+                        <ProtectedRoute allowedRoles={["admin"]}>
+                            <AdminApprovalPage />
                         </ProtectedRoute>
                     }
                 />

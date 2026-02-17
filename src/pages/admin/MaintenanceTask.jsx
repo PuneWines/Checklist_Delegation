@@ -31,11 +31,10 @@ export default function MaintenanceTask() {
     const [formData, setFormData] = useState({
         department: "Maintenance",
         machineName: "",
-        taskStatus: "",
         givenBy: "",
         machineArea: "",
         doerDepartment: "",
-        partName: "",
+        partName: [], // Changed to array for multi-select
         doerName: "",
         needSoundTest: "",
         temperature: "",
@@ -54,6 +53,7 @@ export default function MaintenanceTask() {
     const [showPreview, setShowPreview] = useState(false);
     const [showCalendar, setShowCalendar] = useState(false);
     const [recordedAudio, setRecordedAudio] = useState(null);
+    const [showPartDropdown, setShowPartDropdown] = useState(false);
 
     useEffect(() => {
         const fetchHolidays = async () => {
@@ -78,13 +78,45 @@ export default function MaintenanceTask() {
         console.log('📊 Total dropdown items:', customDropdowns?.length || 0);
     }, [customDropdowns]);
 
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showPartDropdown && !event.target.closest('.part-dropdown-container')) {
+                setShowPartDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showPartDropdown]);
+
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
         setFormData(prev => ({
             ...prev,
-            [name]: type === 'checkbox' ? checked : value
+            [name]: type === 'checkbox' ? checked : value,
+            // Reset partName when machineName changes
+            ...(name === 'machineName' && { partName: [] })
         }));
+    };
+
+    const handlePartToggle = (partValue) => {
+        setFormData(prev => ({
+            ...prev,
+            partName: prev.partName.includes(partValue)
+                ? prev.partName.filter(p => p !== partValue)
+                : [...prev.partName, partValue]
+        }));
+    };
+
+    // Get unique dropdown values
+    const getUniqueDropdownValues = (category) => {
+        const items = customDropdowns.filter(item => item.category === category);
+        const uniqueValues = [...new Set(items.map(item => item.value))];
+        return uniqueValues.map(value => {
+            const item = items.find(i => i.value === value);
+            return { ...item, value };
+        });
     };
 
     const generatePreview = async (e) => {
@@ -149,7 +181,7 @@ export default function MaintenanceTask() {
                     task_start_date: `${formData.startDate}T${formData.startTime}:00`,
                     task_description: formData.workDescription,
                     machine_name: formData.machineName,
-                    part_name: formData.partName,
+                    part_name: formData.partName.join(', '), // Join array to string
                     part_area: formData.machineArea,
                     freq: formData.frequency,
                     status: "Pending",
@@ -177,7 +209,7 @@ export default function MaintenanceTask() {
                         task_start_date: `${getLocalDateString(date)}T${formData.startTime}:00`,
                         task_description: formData.workDescription,
                         machine_name: formData.machineName,
-                        part_name: formData.partName,
+                        part_name: formData.partName.join(', '), // Join array to string
                         part_area: formData.machineArea,
                         freq: formData.frequency,
                         status: "Pending",
@@ -228,6 +260,7 @@ export default function MaintenanceTask() {
 
                         // Advance
                         if (freq === 'weekly') current = addDays(current, 7);
+                        else if (freq === 'fortnight') current = addDays(current, 14);
                         else if (freq === 'monthly') current.setMonth(current.getMonth() + 1);
                         else if (freq === 'quarterly') current.setMonth(current.getMonth() + 3);
                         else if (freq === 'half-yearly') current.setMonth(current.getMonth() + 6);
@@ -299,7 +332,7 @@ export default function MaintenanceTask() {
                 department: "Maintenance",
                 machineName: "",
                 machineArea: "",
-                partName: "",
+                partName: [],
                 workDescription: "",
                 doerName: "",
                 givenBy: "",
@@ -311,7 +344,6 @@ export default function MaintenanceTask() {
                 priority: "",
                 enableReminder: false,
                 requireAttachment: false,
-                taskStatus: "",
                 doerDepartment: ""
             });
             setRecordedAudio(null);
@@ -356,8 +388,7 @@ export default function MaintenanceTask() {
                                 <label className="text-sm font-bold text-gray-700">Machine Name</label>
                                 <select name="machineName" value={formData.machineName} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all">
                                     <option value="">Select Machine</option>
-                                    {customDropdowns
-                                        .filter(item => item.category === "Machine Name")
+                                    {getUniqueDropdownValues("Machine Name")
                                         .map((item) => (
                                             <option key={item.id} value={item.value}>{item.value}</option>
                                         ))
@@ -383,43 +414,78 @@ export default function MaintenanceTask() {
                             </div>
                         </div>
 
-                        {/* Row 2: Part Name | Task Status */}
+                        {/* Row 2: Part Name */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <label className="text-sm font-bold text-gray-700">Part Name</label>
-                                <select
-                                    name="partName"
-                                    value={formData.partName}
-                                    onChange={handleChange}
-                                    className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all"
-                                >
-                                    <option value="">Select Part</option>
-                                    {customDropdowns
-                                        .filter(item => item.category === "Part Name")
-                                        .map((item) => (
-                                            <option key={item.id} value={item.value}>{item.value}</option>
-                                        ))
-                                    }
-                                </select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-bold text-gray-700">Task Status</label>
-                                <select name="taskStatus" value={formData.taskStatus} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all">
-                                    <option value="">Select Task Status</option>
-                                    {customDropdowns
-                                        .filter(item => item.category === "Task Status")
-                                        .map((item) => (
-                                            <option key={item.id} value={item.value}>{item.value}</option>
-                                        ))
-                                    }
-                                    {/* Fallback hardcoded if no dynamic data */}
-                                    {(!customDropdowns.some(item => item.category === "Task Status")) && (
-                                        <>
-                                            <option value="Pending">Pending</option>
-                                            <option value="In Progress">In Progress</option>
-                                        </>
+                                <label className="text-sm font-bold text-gray-700">Part Name (Multi-Select)</label>
+                                <div className="relative part-dropdown-container">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPartDropdown(!showPartDropdown)}
+                                        disabled={!formData.machineName}
+                                        className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 hover:bg-white transition-all text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <span className="text-sm">
+                                            {formData.partName.length === 0
+                                                ? (formData.machineName ? 'Select Parts' : 'Select Machine First')
+                                                : `${formData.partName.length} part(s) selected`
+                                            }
+                                        </span>
+                                        <svg className={`w-4 h-4 transition-transform ${showPartDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+
+                                    {showPartDropdown && formData.machineName && (
+                                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                            {getUniqueDropdownValues("Part Name")
+                                                .filter(item => !item.parent || item.parent === formData.machineName)
+                                                .map((item) => (
+                                                    <label
+                                                        key={item.id}
+                                                        className="flex items-center gap-3 px-4 py-2.5 hover:bg-purple-50 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={formData.partName.includes(item.value)}
+                                                            onChange={() => handlePartToggle(item.value)}
+                                                            className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                                        />
+                                                        <span className="text-sm text-gray-700">{item.value}</span>
+                                                    </label>
+                                                ))
+                                            }
+                                            {getUniqueDropdownValues("Part Name")
+                                                .filter(item => !item.parent || item.parent === formData.machineName)
+                                                .length === 0 && (
+                                                    <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                                        No parts available for this machine
+                                                    </div>
+                                                )}
+                                        </div>
                                     )}
-                                </select>
+                                </div>
+
+                                {/* Selected parts display */}
+                                {formData.partName.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                        {formData.partName.map((part, index) => (
+                                            <span
+                                                key={index}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium"
+                                            >
+                                                {part}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handlePartToggle(part)}
+                                                    className="hover:bg-purple-200 rounded-full p-0.5 transition-colors"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -641,6 +707,7 @@ export default function MaintenanceTask() {
                                     <option value="alternate-day">Alternate Day</option>
                                     <option value="daily">Daily</option>
                                     <option value="weekly">Weekly</option>
+                                    <option value="fortnight">Fortnight (Every 2 Weeks)</option>
                                     <option value="monthly">Monthly</option>
                                     <option value="quarterly">Quarterly</option>
                                     <option value="half-yearly">Half Yearly</option>
