@@ -4,10 +4,11 @@ import { X, Loader2, Mic, Square, Trash2, Play, Pause } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { useDispatch, useSelector } from "react-redux";
 import { createRepair } from "../../redux/slice/repairSlice";
-import { uniqueGivenByData, uniqueDoerNameData } from "../../redux/slice/assignTaskSlice";
-import { customDropdownDetails } from "../../redux/slice/settingSlice";
+import { uniqueGivenByData } from "../../redux/slice/assignTaskSlice";
+import { customDropdownDetails, userDetails } from "../../redux/slice/settingSlice";
 import { ReactMediaRecorder } from "react-media-recorder";
 import supabase from "../../SupabaseClient";
+import { sendTaskAssignmentNotification } from "../../services/whatsappService";
 
 // --- AUDIO UTILITIES ---
 const isAudioUrl = (url) => {
@@ -79,8 +80,8 @@ const AudioPlayer = ({ url }) => {
 export default function RepairTask() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
-    const { givenBy, doerName } = useSelector((state) => state.assignTask);
-    const { customDropdowns = [] } = useSelector((state) => state.setting || {});
+    const { givenBy } = useSelector((state) => state.assignTask);
+    const { customDropdowns = [], userData = [] } = useSelector((state) => state.setting || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Form State aligned with your requirements
@@ -92,10 +93,20 @@ export default function RepairTask() {
     });
     const [recordedAudio, setRecordedAudio] = useState(null);
 
+    // Helper to get unique dropdown values
+    const getUniqueDropdownValues = (category) => {
+        const items = customDropdowns.filter(item => item.category === category);
+        const uniqueValues = [...new Set(items.map(item => item.value))];
+        return uniqueValues.map(value => {
+            const item = items.find(i => i.value === value);
+            return { ...item, value };
+        });
+    };
+
     useEffect(() => {
         dispatch(uniqueGivenByData());
-        dispatch(uniqueDoerNameData("Maintenance")); // Or generic
         dispatch(customDropdownDetails());
+        dispatch(userDetails());
     }, [dispatch]);
 
     // Hardcoded Options
@@ -153,6 +164,20 @@ export default function RepairTask() {
                 ...formData,
                 issueDetails: descriptionWrapper(formData.issueDetails)
             })).unwrap();
+
+            // Send WhatsApp notifications
+            try {
+                await sendTaskAssignmentNotification({
+                    doerName: formData.assignedPerson,
+                    taskType: 'Repair',
+                    description: formData.issueDetails,
+                    machineName: formData.machineName,
+                    givenBy: formData.filledBy
+                });
+                console.log('✅ WhatsApp notification sent successfully');
+            } catch (whatsappError) {
+                console.error('WhatsApp notification error:', whatsappError);
+            }
 
             alert("Repair Request Submitted Successfully!");
             navigate('/dashboard/assign-task'); // Redirect back to assign task page
@@ -214,7 +239,14 @@ export default function RepairTask() {
                                 className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm font-medium"
                             >
                                 <option value="">Select person... (Doer)</option>
-                                {doerName.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                {userData
+                                    ?.filter(u => u.role === 'user' && u.status === 'active')
+                                    .map(user => (
+                                        <option key={user.id} value={user.user_name}>
+                                            {user.user_name}
+                                        </option>
+                                    ))
+                                }
                             </select>
                         </div>
 
@@ -230,10 +262,9 @@ export default function RepairTask() {
                                 className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm font-medium"
                             >
                                 <option value="">Select machine...</option>
-                                {customDropdowns
-                                    .filter(item => item.category === "Machine Name")
+                                {getUniqueDropdownValues("Machine Name")
                                     .map((item) => (
-                                        <option key={item.id} value={item.value}>{item.value}</option>
+                                        <option key={item.id || item.value} value={item.value}>{item.value}</option>
                                     ))
                                 }
                                 {/* Fallback hardcoded if no dynamic data */}

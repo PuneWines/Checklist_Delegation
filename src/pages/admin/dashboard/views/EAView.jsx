@@ -113,6 +113,20 @@ export default function EAView() {
                 );
             }
 
+            // FILTER: Show only Present or Past tasks (Hide Upcoming)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Local midnight
+
+            tasks = tasks.filter(t => {
+                if (!t.planned_date) return true; // Keep tasks without date
+
+                // Parse planned date and normalize to local midnight for comparison
+                const planned = new Date(t.planned_date);
+                planned.setHours(0, 0, 0, 0);
+
+                return planned <= today;
+            });
+
             setEATasks(tasks);
             calculateStats(tasks);
         } catch (err) {
@@ -123,14 +137,24 @@ export default function EAView() {
     };
 
     const calculateStats = (tasks) => {
-        const now = new Date();
+        const todayStr = new Date().toISOString().split('T')[0];
         const total = tasks.length;
-        const pending = tasks.filter(t => t.status === 'pending' || (t.status === 'done' && !t.admin_done)).length;
-        const completed = tasks.filter(t => t.status === 'done' && t.admin_done).length;
+
+        // Pending includes: 'pending', 'extended', and 'done' (waiting approval)
+        // But here extended is counted separately in stats object?
+        // Let's keep consistent with previous logic:
+        // pending: 'pending' + 'done' (waiting approval)
+        // completed: 'approved'
+        // extended: 'extended'
+
+        const pending = tasks.filter(t => t.status === 'pending' || t.status === 'done').length;
+        const completed = tasks.filter(t => t.status === 'approved').length;
         const extended = tasks.filter(t => t.status === 'extended').length;
+
         const overdue = tasks.filter(t => {
-            const plannedDate = new Date(t.planned_date);
-            return (t.status === 'pending' || t.status === 'extended') && plannedDate < now;
+            if (!t.planned_date) return false;
+            const plannedStr = new Date(t.planned_date).toISOString().split('T')[0];
+            return (t.status === 'pending' || t.status === 'extended') && plannedStr < todayStr;
         }).length;
 
         // Calculate doer statistics
@@ -140,7 +164,7 @@ export default function EAView() {
                 doerMap[t.doer_name] = { total: 0, completed: 0, pending: 0 };
             }
             doerMap[t.doer_name].total++;
-            if (t.status === 'done' && t.admin_done) doerMap[t.doer_name].completed++;
+            if (t.status === 'approved') doerMap[t.doer_name].completed++;
             else doerMap[t.doer_name].pending++;
         });
 
@@ -159,9 +183,13 @@ export default function EAView() {
         return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     };
 
-    const getStatusStyles = (status, plannedDate, admin_done) => {
-        const now = new Date();
-        const isOverdue = (status === 'pending' || status === 'extended') && new Date(plannedDate) < now;
+    const getStatusStyles = (status, plannedDate) => {
+        // Compare dates using ISO strings (YYYY-MM-DD) to avoid timezone issues
+        // and ensure TODAY is NOT counted as overdue.
+        const todayStr = new Date().toISOString().split('T')[0];
+        const plannedStr = plannedDate ? new Date(plannedDate).toISOString().split('T')[0] : '';
+
+        const isOverdue = (status === 'pending' || status === 'extended') && plannedStr && plannedStr < todayStr;
 
         if (isOverdue) return {
             bg: 'bg-red-50',
@@ -171,12 +199,10 @@ export default function EAView() {
         };
 
         switch (status) {
+            case 'approved':
+                return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-100', label: 'Approved' };
             case 'done':
-                if (admin_done) {
-                    return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-100', label: 'Approved' };
-                } else {
-                    return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-100', label: 'Pending Approval' };
-                }
+                return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-100', label: 'Pending Approval' };
             case 'extended':
                 return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-100', label: 'Extended' };
             default:
@@ -403,7 +429,7 @@ export default function EAView() {
                                 </tr>
                             ) : (
                                 eaTasks.slice(0, 8).map((task) => {
-                                    const styles = getStatusStyles(task.status, task.planned_date, task.admin_done);
+                                    const styles = getStatusStyles(task.status, task.planned_date);
                                     return (
                                         <tr key={task.id} className="hover:bg-gray-50/50 group transition-colors">
                                             <td className="px-6 py-4">

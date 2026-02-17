@@ -81,7 +81,8 @@ export const updateRepairData = async (updates) => {
             const { data, error } = await supabase
                 .from('repair_tasks')
                 .update({
-                    status: item.status,             // e.g., 'Done'
+                    // Use 'Pending Approval' status on completion instead of admin_done
+                    status: item.status === 'Done' ? 'Pending Approval' : item.status,
                     part_replaced: item.partReplaced || null,
                     bill_amount: item.billAmount || null,
                     remarks: item.remarks || null,
@@ -90,7 +91,6 @@ export const updateRepairData = async (updates) => {
                     work_photo_url: item.workPhotoUrl || null,
                     bill_copy_url: item.billCopyUrl || null,
                     submission_date: new Date().toISOString(),
-                    admin_done: false // Explicitly set to false on completion
                 })
                 .eq('id', item.taskId)
                 .select();
@@ -139,8 +139,7 @@ export const fetchPendingRepairApprovals = async () => {
         const { data, error } = await supabase
             .from('repair_tasks')
             .select('*')
-            .neq('status', 'Pending') // Completed tasks
-            .or('admin_done.is.null,admin_done.eq.false') // Not yet admin approved
+            .eq('status', 'Pending Approval') // Fetch tasks waiting for approval
             .order('submission_date', { ascending: false });
 
         if (error) throw error;
@@ -155,7 +154,7 @@ export const approveRepairTask = async (id) => {
     try {
         const { data, error } = await supabase
             .from('repair_tasks')
-            .update({ admin_done: true })
+            .update({ status: 'Done' }) // Mark as fully Done/Approved
             .eq('id', id)
             .select()
             .single();

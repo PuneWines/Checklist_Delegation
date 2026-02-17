@@ -10,6 +10,7 @@ import { assignTaskInTable, uniqueDepartmentData, uniqueDoerNameData, uniqueGive
 import { customDropdownDetails } from "../../redux/slice/settingSlice";
 import supabase from "../../SupabaseClient";
 import CalendarComponent from "../../components/CalendarComponent";
+import { sendTaskAssignmentNotification } from "../../services/whatsappService";
 
 
 
@@ -80,7 +81,8 @@ export default function ChecklistTask() {
             "Fortnight": "fortnight",
             "Monthly": "monthly",
             "Quarterly": "quarterly",
-            "Half Yearly": "half-yearly"
+            "Half Yearly": "half-yearly",
+            "Yearly": "yearly"
         };
         const freqKey = freqMap[formData.frequency] || "one-time";
 
@@ -174,6 +176,7 @@ export default function ChecklistTask() {
                     else if (freqKey === 'monthly') current.setMonth(current.getMonth() + 1);
                     else if (freqKey === 'quarterly') current.setMonth(current.getMonth() + 3);
                     else if (freqKey === 'half-yearly') current.setMonth(current.getMonth() + 6);
+                    else if (freqKey === 'yearly') current.setFullYear(current.getFullYear() + 1);
                     else break;
                 }
             }
@@ -206,7 +209,8 @@ export default function ChecklistTask() {
                         .getPublicUrl(fileName);
 
                     audioUrl = publicUrlData.publicUrl;
-                    descriptionWrapper = (desc) => audioUrl; // Store ONLY the URL if voice note exists
+                    // Append URL to description instead of replacing it, preserving text context
+                    descriptionWrapper = (desc) => desc ? `${desc}\n\nVoice Note Link: ${audioUrl}` : `Voice Note Link: ${audioUrl}`;
                 } catch (audioErr) {
                     console.error(audioErr);
                     alert(`Failed to upload audio: ${audioErr.message}`);
@@ -236,6 +240,26 @@ export default function ChecklistTask() {
             // Check if the submission was successful
             if (result.error) {
                 throw new Error(result.error.message || "Failed to assign tasks");
+            }
+
+            // Send WhatsApp notifications to assigned users (Send ONE notification per batch)
+            try {
+                if (tasksToSubmit.length > 0) {
+                    const firstTask = tasksToSubmit[0];
+                    await sendTaskAssignmentNotification({
+                        doerName: firstTask.doer,
+                        taskType: 'Checklist',
+                        description: firstTask.description,
+                        dueDate: firstTask.dueDate,
+                        frequency: firstTask.frequency,
+                        department: firstTask.department,
+                        givenBy: firstTask.givenBy
+                    });
+                    console.log('✅ WhatsApp notification sent successfully');
+                }
+            } catch (whatsappError) {
+                console.error('WhatsApp notification error:', whatsappError);
+                // Don't fail the task assignment if WhatsApp fails
             }
 
             alert(`Successfully assigned ${tasksToSubmit.length} task(s)!`);
@@ -451,6 +475,7 @@ export default function ChecklistTask() {
                                         <option>Monthly</option>
                                         <option>Quarterly</option>
                                         <option>Half Yearly</option>
+                                        <option>Yearly</option>
                                     </select>
                                 </div>
                             </div>

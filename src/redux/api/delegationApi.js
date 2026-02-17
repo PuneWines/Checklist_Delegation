@@ -15,13 +15,10 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
           // Step 1: Insert into delegation_done table
           const delegationDoneData = {
             task_id: taskData.id || taskData.task_id,
-            status: taskData.status, // Should be 'done' or 'extend'
-            next_extend_date: taskData.next_extend_date || null,
-            reason: taskData.reason || '',
-            name: taskData.name,
-            task_description: taskData.task_description,
             given_by: taskData.given_by,
             image_url: taskData.image_url, // Will be updated after image upload
+            // Use 'pending' status for completion requests to track approval - Handle various casings
+            status: String(taskData.status).toLowerCase() === 'done' ? 'pending' : taskData.status,
           };
 
           console.log('Inserting into delegation_done:', delegationDoneData);
@@ -314,7 +311,7 @@ export const updateDelegationDoneStatus = createAsyncThunk(
       // Update delegation_done admin_done status
       const { data: doneData, error: doneError } = await supabase
         .from('delegation_done')
-        .update({ admin_done: true })
+        .update({ status: 'done' })
         .eq('id', id)
         .select()
         .single();
@@ -341,14 +338,66 @@ export const updateDelegationDoneStatus = createAsyncThunk(
 
 export const fetchPendingApprovals = async () => {
   try {
-    const { data, error } = await supabase
+    console.log('Fetching pending delegation approvals (DEBUG MODE)...');
+
+    // Debug: Fetch recently created rows regardless of status
+    const { data: rawData, error: rawError } = await supabase
       .from('delegation_done')
       .select('*')
-      .or('admin_done.is.null,admin_done.eq.false')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (rawError) console.error('Raw fetch error:', rawError);
+    console.log('Last 5 delegation_done entries:', rawData);
+
+    // Fetch actual pending approvals
+    // Fetch actual pending approvals
+    const { data: doneData, error } = await supabase
+      .from('delegation_done')
+      .select('*')
+      .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return data || [];
+    if (error) {
+      console.error('Supabase error fetching pending approvals:', error);
+      throw error;
+    }
+
+    if (!doneData || doneData.length === 0) return [];
+
+    // Fetch related task details from 'delegation' table to get full info (name, description, etc.)
+    const taskIds = doneData.map(d => d.task_id).filter(id => id);
+
+    let taskDetails = [];
+    if (taskIds.length > 0) {
+      // Use 'task_id' column to look up delegation tasks
+      const { data: details, error: detailsError } = await supabase
+        .from('delegation')
+        .select('*')
+        .in('task_id', taskIds);
+
+      if (detailsError) {
+        console.error('Error fetching related delegation details:', detailsError);
+      } else {
+        taskDetails = details;
+      }
+    }
+
+    // Merge details
+    const mergedData = doneData.map(doneItem => {
+      // Search using task_id
+      const detail = taskDetails.find(t => t.task_id === doneItem.task_id);
+      return {
+        ...detail,      // properties from delegation (name, description, etc.)
+        ...doneItem,    // properties from delegation_done
+        // Ensure we have both IDs accessible if needed
+        done_id: doneItem.id,
+        original_task_id: doneItem.task_id
+      };
+    });
+
+    console.log(`Found ${mergedData.length} pending delegation approvals with details.`, mergedData);
+    return mergedData;
   } catch (error) {
     console.error('Error fetching pending approvals:', error);
     return [];

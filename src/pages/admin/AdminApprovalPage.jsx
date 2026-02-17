@@ -8,13 +8,12 @@ import { fetchPendingEAApprovals, approveEATask } from "../../redux/api/eaApi";
 import { fetchPendingChecklistApprovals, approveChecklistTask } from "../../redux/api/quickTaskApi";
 import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase } from "lucide-react";
 
-const isAudioUrl = (url) => {
-    if (typeof url !== 'string') return false;
-    return url.startsWith('http') && (
-        url.includes('audio-recordings') ||
-        url.includes('voice-notes') ||
-        url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
-    );
+// Helper to extract audio URL from text
+const extractAudioUrl = (text) => {
+    if (!text || typeof text !== 'string') return null;
+    const match = text.match(/(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|wav|ogg|webm|m4a|aac)(\?.*)?)/i) ||
+        text.match(/(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*)/i);
+    return match ? match[0] : null;
 };
 
 const AudioPlayer = ({ url }) => {
@@ -270,12 +269,23 @@ export default function AdminApprovalPage() {
                                                 <div className="text-xs text-gray-500">By: {task.given_by || '-'}</div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="text-sm text-gray-900 max-w-xs break-words">
-                                                    {isAudioUrl(task.task_description) ? (
-                                                        <AudioPlayer url={task.task_description} />
-                                                    ) : (
-                                                        task.task_description || task.issue_description || '-'
-                                                    )}
+                                                <div className="text-sm text-gray-900 max-w-xs break-words space-y-2">
+                                                    {(() => {
+                                                        const desc = task.task_description || task.issue_description;
+                                                        if (!desc) return '-';
+
+                                                        const audioUrl = extractAudioUrl(desc);
+
+                                                        return (
+                                                            <>
+                                                                {audioUrl && <AudioPlayer url={audioUrl} />}
+                                                                {/* Show text if it exists and is not just the URL itself */}
+                                                                {(!audioUrl || desc.replace(audioUrl, '').trim().replace(/Voice Note Link:?\s*/i, '').length > 0) && (
+                                                                    <div className="whitespace-pre-wrap">{desc}</div>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </div>
                                                 {(task.machine_name || task.part_name) && (
                                                     <div className="text-xs text-gray-500 mt-1">

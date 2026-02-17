@@ -78,13 +78,11 @@ export const completeEATask = async (task, remarks = '', imageUrl = '') => {
                 phone_number: task.phone_number,
                 planned_date: task.planned_date,
                 task_description: task.task_description,
-                status: 'done',
-                remarks: remarks,
-                image_url: imageUrl,
+                status: 'pending', // Pending admin approval
                 remarks: remarks,
                 image_url: imageUrl,
                 given_by: task.given_by,
-                admin_done: false // Explicitly set to false when user completes task
+                // admin_done removed
             }])
             .select();
 
@@ -165,8 +163,7 @@ export const fetchPendingEAApprovals = async () => {
         const { data, error } = await supabase
             .from('ea_tasks_done')
             .select('*')
-            .eq('status', 'done')
-            .or('admin_done.is.null,admin_done.eq.false')
+            .eq('status', 'pending') // Fetch pending approvals
             .order('submission_date', { ascending: false });
 
         if (error) throw error;
@@ -182,7 +179,7 @@ export const approveEATask = async (id) => {
         // Update ea_tasks_done
         const { data: doneData, error: doneError } = await supabase
             .from('ea_tasks_done')
-            .update({ admin_done: true })
+            .update({ status: 'done' }) // Mark as approved/done
             .eq('id', id)
             .select()
             .single();
@@ -193,7 +190,7 @@ export const approveEATask = async (id) => {
         if (doneData && doneData.task_id) {
             await supabase
                 .from('ea_tasks')
-                .update({ admin_done: true })
+                .update({ status: 'approved' }) // Use 'approved' status explicitly
                 .eq('task_id', doneData.task_id);
         }
 

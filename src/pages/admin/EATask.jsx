@@ -7,6 +7,7 @@ import supabase from "../../SupabaseClient";
 import { useDispatch, useSelector } from "react-redux";
 import { userDetails } from "../../redux/slice/settingSlice";
 import CalendarComponent from "../../components/CalendarComponent";
+import { sendTaskAssignmentNotification } from "../../services/whatsappService";
 
 const formatDateLong = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
 const formatDateISO = (date) => {
@@ -203,6 +204,21 @@ export default function EATask() {
                 .insert(tasksToInsert);
 
             if (error) throw error;
+
+            // Send WhatsApp notifications
+            try {
+                // EA Task is singular usually, so we access the first element
+                await sendTaskAssignmentNotification({
+                    doerName: formData.doer_name,
+                    taskType: 'EA Task',
+                    description: tasksToInsert[0].task_description,
+                    dueDate: startDate.toISOString(),
+                    givenBy: givenBy
+                });
+                console.log('✅ WhatsApp notification sent successfully');
+            } catch (whatsappError) {
+                console.error('WhatsApp notification error:', whatsappError);
+            }
 
             setSuccessMessage(`${tasksToInsert.length} EA Task(s) assigned successfully!`);
 

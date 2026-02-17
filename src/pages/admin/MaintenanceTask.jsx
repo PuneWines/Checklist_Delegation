@@ -10,6 +10,7 @@ import { postMaintenanceTaskApi } from "../../redux/api/maintenanceApi";
 import { maintenanceData } from "../../redux/slice/maintenanceSlice";
 import supabase from "../../SupabaseClient";
 import CalendarComponent from "../../components/CalendarComponent";
+import { sendTaskAssignmentNotification } from "../../services/whatsappService";
 
 const formatDateLong = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
 const formatDateISO = (date) => {
@@ -264,6 +265,7 @@ export default function MaintenanceTask() {
                         else if (freq === 'monthly') current.setMonth(current.getMonth() + 1);
                         else if (freq === 'quarterly') current.setMonth(current.getMonth() + 3);
                         else if (freq === 'half-yearly') current.setMonth(current.getMonth() + 6);
+                        else if (freq === 'yearly') current.setFullYear(current.getFullYear() + 1);
                         else break;
                     }
                 }
@@ -326,6 +328,29 @@ export default function MaintenanceTask() {
             if (tasksToSubmit.length > 0) {
                 const { error } = await supabase.from('maintenance_tasks').insert(tasksToSubmit);
                 if (error) throw new Error(`Database Insert Error: ${error.message}`);
+
+                // Send WhatsApp notifications to assigned users (Send ONE notification per batch)
+                try {
+                    if (tasksToSubmit.length > 0) {
+                        const firstTask = tasksToSubmit[0];
+                        await sendTaskAssignmentNotification({
+                            doerName: firstTask.doer_name,
+                            taskType: 'Maintenance',
+                            description: firstTask.task_description,
+                            dueDate: firstTask.task_start_date,
+                            frequency: firstTask.frequency,
+                            department: firstTask.department,
+                            givenBy: firstTask.given_by,
+                            machineName: firstTask.machine_name,
+                            partName: firstTask.part_name,
+                            priority: firstTask.priority
+                        });
+                        console.log('✅ WhatsApp notification sent successfully');
+                    }
+                } catch (whatsappError) {
+                    console.error('WhatsApp notification error:', whatsappError);
+                    // Don't fail the task assignment if WhatsApp fails
+                }
             }
 
             setFormData({
@@ -404,8 +429,7 @@ export default function MaintenanceTask() {
                                     className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all"
                                 >
                                     <option value="">Select Area</option>
-                                    {customDropdowns
-                                        .filter(item => item.category === "Machine Area")
+                                    {getUniqueDropdownValues("Machine Area")
                                         .map((item) => (
                                             <option key={item.id} value={item.value}>{item.value}</option>
                                         ))
@@ -711,6 +735,7 @@ export default function MaintenanceTask() {
                                     <option value="monthly">Monthly</option>
                                     <option value="quarterly">Quarterly</option>
                                     <option value="half-yearly">Half Yearly</option>
+                                    <option value="yearly">Yearly</option>
                                 </select>
                             </div>
                         </div>
