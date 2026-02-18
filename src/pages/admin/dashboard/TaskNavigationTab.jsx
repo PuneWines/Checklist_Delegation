@@ -593,13 +593,17 @@ export default function TaskNavigationTabs({
                         <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Dept</th>
                       )}
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Date</th>
+                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100 italic">Status</th>
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Freq</th>
-                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
                     {displayedTasks.map((task, index) => (
-                      <tr key={`${task.id}-${task.taskStartDate}`} className="hover:bg-purple-50/30 transition-colors border-b last:border-0">
+                      <tr
+                        key={`${task.id}-${task.taskStartDate}`}
+                        className="hover:bg-purple-50/30 transition-colors border-b last:border-0 cursor-pointer"
+                        onDoubleClick={() => handleEditClick(task)}
+                      >
                         <td className="px-3 py-2 whitespace-nowrap text-xs font-bold text-purple-700">{task.id}</td>
                         <td className="px-3 py-2 text-xs text-gray-700 min-w-[300px] max-w-sm font-medium">
                           {editingTaskId === task.id ? (
@@ -754,54 +758,51 @@ export default function TaskNavigationTabs({
                             task.taskStartDate
                           )}
                         </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-[10px] font-bold">
+                          <span className={`px-2 py-0.5 rounded-full ${(task.status === "completed" || task.status === "done" || task.status === "yes")
+                            ? (task.admin_done ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700")
+                            : (task.status === "overdue" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700")
+                            }`}>
+                            {(task.status === "completed" || task.status === "done" || task.status === "yes")
+                              ? (task.admin_done ? "Approved" : "Pending Approval")
+                              : (task.status === 'overdue' ? 'Overdue' : 'Pending')}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 whitespace-nowrap">
                           {editingTaskId === task.id ? (
-                            <select
-                              value={editFormData.frequency}
-                              onChange={(e) => handleInputChange('frequency', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
-                              disabled
-                            >
-                              <option value="one-time">One-time</option>
-                              <option value="daily">Daily</option>
-                              <option value="weekly">Weekly</option>
-                              <option value="monthly">Monthly</option>
-                              <option value="yearly">Yearly</option>
-                            </select>
+                            <div className="flex flex-col gap-2">
+                              <select
+                                value={editFormData.frequency}
+                                onChange={(e) => handleInputChange('frequency', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
+                                disabled
+                              >
+                                <option value="one-time">One-time</option>
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="yearly">Yearly</option>
+                              </select>
+                              <div className="flex gap-2 justify-center">
+                                <button
+                                  onClick={handleSaveEdit}
+                                  disabled={isSaving}
+                                  className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                                >
+                                  <Save size={12} />
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  className="flex items-center gap-1 px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            </div>
                           ) : (
                             <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm ${getFrequencyColor(task.frequency)}`}>
                               {task.frequency}
                             </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
-                          {editingTaskId === task.id ? (
-                            <div className="flex gap-2">
-                              <button
-                                onClick={handleSaveEdit}
-                                disabled={isSaving}
-                                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                              >
-                                <Save size={12} />
-                                {isSaving ? '...' : 'Save'}
-                              </button>
-                              <button
-                                onClick={handleCancelEdit}
-                                className="flex items-center gap-1 px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
-                              >
-                                <X size={12} />
-                              </button>
-                            </div>
-                          ) : (
-                            userRole === 'admin' && (
-                              <button
-                                onClick={() => handleEditClick(task)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold transition-all shadow-sm active:scale-95"
-                              >
-                                <Edit size={12} />
-                                Edit
-                              </button>
-                            )
                           )}
                         </td>
                       </tr>

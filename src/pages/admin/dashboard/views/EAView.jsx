@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from "react";
-import { Users, Phone, Calendar, FileText, CheckCircle, Clock, AlertCircle, ArrowUpRight, TrendingUp, UserCheck, PieChart, Play, Pause } from "lucide-react";
+import { Users, Phone, Calendar, FileText, CheckCircle, Clock, AlertCircle, ArrowUpRight, TrendingUp, UserCheck, PieChart, Play, Pause, Save, X } from "lucide-react";
 import supabase from "../../../../SupabaseClient";
 
 const isAudioUrl = (url) => {
@@ -84,6 +84,73 @@ export default function EAView() {
     });
     const [doerStats, setDoerStats] = useState([]);
 
+    // Editing State
+    const [editingTaskId, setEditingTaskId] = useState(null);
+    const [editFormData, setEditFormData] = useState({});
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleEditClick = (task) => {
+        setEditingTaskId(task.task_id);
+        setEditFormData({
+            ...task,
+            // ensure date is formatted for input
+            planned_date: task.planned_date ? new Date(task.planned_date).toISOString().split('T')[0] : ''
+        });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingTaskId(null);
+        setEditFormData({});
+    };
+
+    const handleInputChange = (field, value) => {
+        setEditFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleSaveEdit = async () => {
+        setIsSaving(true);
+        try {
+            const { error } = await supabase
+                .from('ea_tasks')
+                .update({
+                    doer_name: editFormData.doer_name,
+                    phone_number: editFormData.phone_number,
+                    task_description: editFormData.task_description,
+                    planned_date: editFormData.planned_date,
+                    remarks: editFormData.remarks,
+                    status: editFormData.status
+                })
+                .eq('task_id', editingTaskId);
+
+            if (error) throw error;
+
+            await fetchEATasks();
+            setEditingTaskId(null);
+        } catch (err) {
+            console.error("Failed to update EA task:", err);
+            alert("Failed to update task");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // Admin approval function
+    const handleApproveTask = async (taskId) => {
+        try {
+            const { error } = await supabase
+                .from('ea_tasks')
+                .update({ status: 'approved' })
+                .eq('task_id', taskId);
+
+            if (error) throw error;
+
+            await fetchEATasks();
+        } catch (err) {
+            console.error("Failed to approve task:", err);
+            alert("Failed to approve task");
+        }
+    };
+
     useEffect(() => {
         fetchEATasks();
     }, []);
@@ -141,20 +208,17 @@ export default function EAView() {
         const total = tasks.length;
 
         // Pending includes: 'pending', 'extended', and 'done' (waiting approval)
-        // But here extended is counted separately in stats object?
-        // Let's keep consistent with previous logic:
-        // pending: 'pending' + 'done' (waiting approval)
-        // completed: 'approved'
+        // completed: 'done' with admin_done=true
         // extended: 'extended'
 
-        const pending = tasks.filter(t => t.status === 'pending' || t.status === 'done').length;
-        const completed = tasks.filter(t => t.status === 'approved').length;
-        const extended = tasks.filter(t => t.status === 'extended').length;
+        const pending = tasks.filter(t => (t.status?.toLowerCase() === 'pending' || (t.status?.toLowerCase() === 'done' && !t.admin_done))).length;
+        const completed = tasks.filter(t => t.status?.toLowerCase() === 'done' && t.admin_done).length;
+        const extended = tasks.filter(t => t.status?.toLowerCase() === 'extended').length;
 
         const overdue = tasks.filter(t => {
             if (!t.planned_date) return false;
             const plannedStr = new Date(t.planned_date).toISOString().split('T')[0];
-            return (t.status === 'pending' || t.status === 'extended') && plannedStr < todayStr;
+            return (t.status?.toLowerCase() === 'pending' || t.status?.toLowerCase() === 'extended') && plannedStr < todayStr;
         }).length;
 
         // Calculate doer statistics
@@ -164,7 +228,7 @@ export default function EAView() {
                 doerMap[t.doer_name] = { total: 0, completed: 0, pending: 0 };
             }
             doerMap[t.doer_name].total++;
-            if (t.status === 'approved') doerMap[t.doer_name].completed++;
+            if (t.status?.toLowerCase() === 'done' && t.admin_done) doerMap[t.doer_name].completed++;
             else doerMap[t.doer_name].pending++;
         });
 
@@ -183,7 +247,7 @@ export default function EAView() {
         return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     };
 
-    const getStatusStyles = (status, plannedDate) => {
+    const getStatusStyles = (status, plannedDate, adminDone) => {
         // Compare dates using ISO strings (YYYY-MM-DD) to avoid timezone issues
         // and ensure TODAY is NOT counted as overdue.
         const todayStr = new Date().toISOString().split('T')[0];
@@ -198,9 +262,12 @@ export default function EAView() {
             label: 'Overdue'
         };
 
-        switch (status) {
-            case 'approved':
-                return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-100', label: 'Approved' };
+        // Check admin_done for approval status
+        if (status?.toLowerCase() === 'done' && adminDone) {
+            return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-100', label: 'Approved' };
+        }
+
+        switch (status?.toLowerCase()) {
             case 'done':
                 return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-100', label: 'Pending Approval' };
             case 'extended':
@@ -429,50 +496,122 @@ export default function EAView() {
                                 </tr>
                             ) : (
                                 eaTasks.slice(0, 8).map((task) => {
-                                    const styles = getStatusStyles(task.status, task.planned_date);
+                                    const styles = getStatusStyles(task.status, task.planned_date, task.admin_done);
                                     return (
-                                        <tr key={task.id} className="hover:bg-gray-50/50 group transition-colors">
+                                        <tr
+                                            key={task.task_id}
+                                            className="hover:bg-gray-50/50 group transition-colors cursor-pointer"
+                                            onDoubleClick={() => handleEditClick(task)}
+                                        >
                                             <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center font-bold text-gray-600 text-[10px] uppercase border border-gray-200 shadow-sm group-hover:bg-white transition-colors">
-                                                        {task.doer_name.slice(0, 2)}
+                                                {editingTaskId === task.task_id ? (
+                                                    <input
+                                                        type="text"
+                                                        value={editFormData.doer_name || ''}
+                                                        onChange={(e) => handleInputChange('doer_name', e.target.value)}
+                                                        className="w-full text-xs p-1 border rounded"
+                                                    />
+                                                ) : (
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center font-bold text-gray-600 text-[10px] uppercase border border-gray-200 shadow-sm group-hover:bg-white transition-colors">
+                                                            {task.doer_name ? task.doer_name.slice(0, 2) : 'EA'}
+                                                        </div>
+                                                        <div className="text-xs font-black text-gray-800 uppercase leading-none">{task.doer_name || 'Unknown'}</div>
                                                     </div>
-                                                    <div className="text-xs font-black text-gray-800 uppercase leading-none">{task.doer_name}</div>
-                                                </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="text-[10px] text-gray-600 font-bold flex items-center gap-1">
-                                                    <Phone size={10} className="text-indigo-400" /> {task.phone_number || 'HIDDEN'}
-                                                </div>
+                                                {editingTaskId === task.task_id ? (
+                                                    <input
+                                                        type="text"
+                                                        value={editFormData.phone_number || ''}
+                                                        onChange={(e) => handleInputChange('phone_number', e.target.value)}
+                                                        className="w-full text-xs p-1 border rounded"
+                                                    />
+                                                ) : (
+                                                    <div className="text-[10px] text-gray-600 font-bold flex items-center gap-1">
+                                                        <Phone size={10} className="text-indigo-400" /> {task.phone_number || 'HIDDEN'}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="max-w-xs group-hover:max-w-md transition-all duration-300">
-                                                    {isAudioUrl(task.task_description) ? (
-                                                        <AudioPlayer url={task.task_description} />
-                                                    ) : (
-                                                        <p className="text-xs font-medium text-gray-600 line-clamp-2 leading-relaxed italic border-l-2 border-indigo-100 pl-3">
-                                                            "{task.task_description}"
-                                                        </p>
-                                                    )}
-                                                </div>
+                                                {editingTaskId === task.task_id ? (
+                                                    <textarea
+                                                        value={editFormData.task_description || ''}
+                                                        onChange={(e) => handleInputChange('task_description', e.target.value)}
+                                                        className="w-full text-xs p-1 border rounded"
+                                                        rows={2}
+                                                    />
+                                                ) : (
+                                                    <div className="max-w-xs group-hover:max-w-md transition-all duration-300">
+                                                        {isAudioUrl(task.task_description) ? (
+                                                            <AudioPlayer url={task.task_description} />
+                                                        ) : (
+                                                            <p className="text-xs font-medium text-gray-600 line-clamp-2 leading-relaxed italic border-l-2 border-indigo-100 pl-3">
+                                                                "{task.task_description}"
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="flex items-center gap-2">
-                                                    <Calendar size={12} className="text-indigo-400" />
-                                                    <span className={`text-[11px] font-black uppercase tracking-tight ${styles.label === 'Overdue' ? 'text-rose-600 animate-pulse' : 'text-gray-600'}`}>
-                                                        {formatDate(task.planned_date)}
-                                                    </span>
-                                                </div>
+                                                {editingTaskId === task.task_id ? (
+                                                    <input
+                                                        type="date"
+                                                        value={editFormData.planned_date || ''}
+                                                        onChange={(e) => handleInputChange('planned_date', e.target.value)}
+                                                        className="w-full text-xs p-1 border rounded"
+                                                    />
+                                                ) : (
+                                                    <div className="flex items-center gap-2">
+                                                        <Calendar size={12} className="text-indigo-400" />
+                                                        <span className={`text-[11px] font-black uppercase tracking-tight ${styles.label === 'Overdue' ? 'text-rose-600 animate-pulse' : 'text-gray-600'}`}>
+                                                            {formatDate(task.planned_date)}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="text-xs text-gray-600 font-medium">
-                                                    {task.remarks || '—'}
-                                                </div>
+                                                {editingTaskId === task.task_id ? (
+                                                    <input
+                                                        type="text"
+                                                        value={editFormData.remarks || ''}
+                                                        onChange={(e) => handleInputChange('remarks', e.target.value)}
+                                                        className="w-full text-xs p-1 border rounded"
+                                                    />
+                                                ) : (
+                                                    <div className="text-xs text-gray-600 font-medium">
+                                                        {task.remarks || '—'}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4 text-center">
-                                                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${styles.bg} ${styles.text} ${styles.border} shadow-sm group-hover:shadow transition-all`}>
-                                                    {styles.label}
-                                                </span>
+                                                {editingTaskId === task.task_id ? (
+                                                    <div className="flex flex-col gap-2">
+                                                        <select
+                                                            value={editFormData.status || 'pending'}
+                                                            onChange={(e) => handleInputChange('status', e.target.value)}
+                                                            className="text-xs p-1 border rounded mb-1"
+                                                        >
+                                                            <option value="pending">Pending</option>
+                                                            <option value="done">Done</option>
+                                                            <option value="approved">Approved</option>
+                                                            <option value="extended">Extended</option>
+                                                        </select>
+                                                        <div className="flex gap-1 justify-center">
+                                                            <button onClick={handleSaveEdit} className="p-1 bg-green-500 text-white rounded hover:bg-green-600">
+                                                                <Save size={12} />
+                                                            </button>
+                                                            <button onClick={handleCancelEdit} className="p-1 bg-gray-500 text-white rounded hover:bg-gray-600">
+                                                                <X size={12} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${styles.bg} ${styles.text} ${styles.border} shadow-sm group-hover:shadow transition-all`}>
+                                                        {styles.label}
+                                                    </span>
+                                                )}
                                             </td>
                                         </tr>
                                     );

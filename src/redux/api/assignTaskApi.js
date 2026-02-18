@@ -2,13 +2,13 @@ import supabase from "../../SupabaseClient";
 
 export const fetchUniqueDepartmentDataApi = async () => {
   try {
-    console.log("🔍 Fetching unique departments from users table (role=user)...");
+    console.log("🔍 Fetching unique departments from users table...");
 
-    // Fetch all user_access values for users with role='user'
+    // Fetch all user_access values for active users
     const { data, error } = await supabase
       .from("users")
       .select("user_access")
-      .eq("role", "user")
+      .eq("status", "active")
       .not("user_access", "is", null);
 
     if (error) throw error;
@@ -47,37 +47,42 @@ export const fetchUniqueGivenByDataApi = async () => {
 
 export const fetchUniqueDoerNameDataApi = async (department) => {
   try {
-    console.log("🔍 Fetching doer names for department:", department);
+    console.log("🔍 Fetching doer data for department:", department);
 
     let query = supabase
       .from("users")
-      .select("user_name, role, user_access, status")
-      .eq("status", "active")
-      .eq("role", "user")
+      .select("user_name, user_access, status, leave_date, leave_end_date")
       .order("user_name", { ascending: true });
 
     if (department) {
-      query = query.or(`user_access.ilike.%${department}%,role.eq.admin`);
-    } else {
-      query = query.eq("role", "admin"); // Fallback if no department
+      // Fetch users where user_access matches or contains the department
+      query = query.ilike("user_access", `%${department}%`);
     }
 
     const { data, error } = await query;
 
-    console.log("📊 Raw user data:", data);
-    console.log("❌ Error:", error);
-
     if (error) {
-      console.error("Error when fetching data", error);
+      console.error("Error when fetching user data", error);
       return [];
     }
 
-    const uniqueDoerName = [...new Set(data?.map((d) => d.user_name))];
+    // Filter unique by user_name just in case there are duplicates
+    const uniqueUsers = [];
+    const seenNames = new Set();
 
-    console.log("✅ Unique doer names:", uniqueDoerName);
-    console.log("📈 Total doers found:", uniqueDoerName.length);
+    data?.forEach(user => {
+      if (user.user_name && !seenNames.has(user.user_name)) {
+        uniqueUsers.push({
+          user_name: user.user_name,
+          status: user.status,
+          leave_date: user.leave_date,
+          leave_end_date: user.leave_end_date
+        });
+        seenNames.add(user.user_name);
+      }
+    });
 
-    return uniqueDoerName;
+    return uniqueUsers;
   } catch (error) {
     console.error("❌ Error from Supabase:", error);
     return [];
@@ -108,6 +113,7 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
     task_description: task.description,
     task_start_date: task.dueDate,
     frequency: task.frequency,
+    duration: task.duration || null,
     enable_reminder: task.enableReminders ? "yes" : "no",
     require_attachment: task.requireAttachment ? "yes" : "no",
     status: submitTable === 'checklist' ? null : (task.status || 'pending')

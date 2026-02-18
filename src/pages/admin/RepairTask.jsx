@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Loader2, Mic, Square, Trash2, Play, Pause } from "lucide-react";
+import { X, Loader2, Mic, Square, Trash2, Play, Pause, Plus, Save, CheckCircle2, Clock } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { useDispatch, useSelector } from "react-redux";
 import { createRepair } from "../../redux/slice/repairSlice";
@@ -9,6 +9,8 @@ import { customDropdownDetails, userDetails } from "../../redux/slice/settingSli
 import { ReactMediaRecorder } from "react-media-recorder";
 import supabase from "../../SupabaseClient";
 import { sendTaskAssignmentNotification } from "../../services/whatsappService";
+
+
 
 // --- AUDIO UTILITIES ---
 const isAudioUrl = (url) => {
@@ -23,59 +25,188 @@ const isAudioUrl = (url) => {
 const AudioPlayer = ({ url }) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const audioRef = useRef(null);
-
     const togglePlay = (e) => {
         e.stopPropagation();
-        if (isPlaying) {
-            audioRef.current.pause();
-        } else {
-            audioRef.current.play();
-        }
+        if (isPlaying) audioRef.current.pause();
+        else audioRef.current.play();
         setIsPlaying(!isPlaying);
     };
-
     return (
-        <div className={`flex items-center gap-3 px-3 py-1.5 rounded-xl border transition-all duration-300 min-w-[140px] ${isPlaying
-            ? 'bg-purple-50/80 border-purple-200 shadow-sm'
-            : 'bg-white border-gray-100 hover:border-purple-100 hover:shadow-xs'
-            }`}>
-            <button
-                type="button"
-                onClick={togglePlay}
-                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm ${isPlaying
-                    ? 'bg-gradient-to-r from-rose-500 to-pink-600'
-                    : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:scale-110'
-                    }`}
-            >
-                {isPlaying ? (
-                    <Pause size={12} className="text-white fill-white" />
-                ) : (
-                    <Play size={12} className="text-white fill-white ml-0.5" />
-                )}
+        <div className={`flex items-center gap-3 px-3 py-1.5 rounded-xl border transition-all duration-300 min-w-[140px] ${isPlaying ? 'bg-purple-50/80 border-purple-200 shadow-sm' : 'bg-white border-gray-100 hover:border-purple-100'}`}>
+            <button type="button" onClick={togglePlay} className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm ${isPlaying ? 'bg-gradient-to-r from-rose-500 to-pink-600' : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:scale-110'}`}>
+                {isPlaying ? <Pause size={12} className="text-white fill-white" /> : <Play size={12} className="text-white fill-white ml-0.5" />}
             </button>
-            <div className="flex flex-col">
-                <span className={`text-[9px] font-black uppercase tracking-[0.1em] ${isPlaying ? 'text-purple-700' : 'text-gray-400'
-                    }`}>
-                    {isPlaying ? 'Playing...' : 'Voice Note'}
-                </span>
-                {isPlaying && (
-                    <div className="flex gap-0.5 mt-0.5 h-1.5 items-center">
-                        <div className="w-0.5 h-full bg-purple-400 animate-bounce" style={{ animationDuration: '0.6s' }}></div>
-                        <div className="w-0.5 h-2/3 bg-purple-500 animate-bounce" style={{ animationDuration: '0.8s' }}></div>
-                        <div className="w-0.5 h-full bg-purple-600 animate-bounce" style={{ animationDuration: '0.4s' }}></div>
-                        <div className="w-0.5 h-2/3 bg-purple-500 animate-bounce" style={{ animationDuration: '0.7s' }}></div>
-                    </div>
-                )}
-            </div>
-            <audio
-                ref={audioRef}
-                src={url}
-                onEnded={() => setIsPlaying(false)}
-                className="hidden"
-            />
+            <span className={`text-[9px] font-black uppercase tracking-[0.1em] ${isPlaying ? 'text-purple-700' : 'text-gray-400'}`}>
+                {isPlaying ? 'Playing...' : 'Voice Note'}
+            </span>
+            <audio ref={audioRef} src={url} onEnded={() => setIsPlaying(false)} className="hidden" />
         </div>
     );
 };
+
+const defaultTask = () => ({
+    id: Date.now() + Math.random(),
+    filledBy: "",
+    assignedPerson: "",
+    machineName: "",
+    issueDetails: "",
+    duration: "",
+    recordedAudio: null,
+});
+
+// Single Repair Task Card
+function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions, onUpdate, onRemove }) {
+    const handleChange = (e) => onUpdate(task.id, { [e.target.name]: e.target.value });
+
+    // Filter doers based on today's date (since repairs are immediate)
+    const getFilteredDoers = () => {
+        if (!userData || !Array.isArray(userData)) return [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        return userData.filter(u => {
+            if (u.role !== 'user') return false;
+
+            // If they are on leave, check the dates
+            if (u.status === 'on leave' && u.leave_date && u.leave_end_date) {
+                const leaveS = new Date(u.leave_date);
+                const leaveE = new Date(u.leave_end_date);
+                leaveS.setHours(0, 0, 0, 0);
+                leaveE.setHours(0, 0, 0, 0);
+
+                if (today >= leaveS && today <= leaveE) {
+                    return false; // Currently on leave
+                }
+            } else if (u.status !== 'active') {
+                return false; // Skip inactive and other non-active statuses
+            }
+
+            return true;
+        });
+    };
+
+    return (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-visible hover:shadow-md transition-all duration-300">
+            {/* Card Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100 rounded-t-2xl">
+                <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs font-black shadow-sm">
+                        {index + 1}
+                    </div>
+                    <span className="text-sm font-bold text-purple-800">Repair Request {index + 1}</span>
+                    {task.machineName && <span className="text-xs text-purple-500 font-medium">— {task.machineName}</span>}
+                </div>
+                {total > 1 && (
+                    <button type="button" onClick={() => onRemove(task.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                )}
+            </div>
+
+            <div className="p-5 space-y-4">
+                {/* Assign From (Filled By) */}
+                <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Assign From (Filled By) <span className="text-red-500">*</span></label>
+                    <select
+                        name="filledBy"
+                        value={task.filledBy}
+                        onChange={handleChange}
+                        className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm"
+                    >
+                        <option value="">Select person...</option>
+                        {givenBy.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                </div>
+
+                {/* Machine Name & Assign To */}
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Machine Name <span className="text-red-500">*</span></label>
+                        <select name="machineName" value={task.machineName} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm">
+                            <option value="">Select machine...</option>
+                            {machineOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Assign To <span className="text-red-500">*</span></label>
+                        <select name="assignedPerson" value={task.assignedPerson} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm">
+                            <option value="">Select person...</option>
+                            {getFilteredDoers().map(user => (
+                                <option key={user.id} value={user.user_name}>{user.user_name}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                {/* Duration */}
+                <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> Duration
+                    </label>
+                    <input
+                        type="time"
+                        name="duration"
+                        value={task.duration}
+                        onChange={handleChange}
+                        className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm"
+                    />
+                </div>
+
+                {/* Issue Details with Voice Note */}
+                <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Issue Details <span className="text-red-500">*</span></label>
+                    <ReactMediaRecorder
+                        audio
+                        onStop={(blobUrl, blob) => onUpdate(task.id, { recordedAudio: { blobUrl, blob } })}
+                        render={({ status, startRecording, stopRecording, clearBlobUrl }) => (
+                            <div>
+                                {status !== 'recording' && !task.recordedAudio && (
+                                    <div className="relative">
+                                        <textarea
+                                            name="issueDetails"
+                                            value={task.issueDetails}
+                                            onChange={handleChange}
+                                            rows="3"
+                                            placeholder="Describe the issue in detail..."
+                                            className="w-full p-3 pr-11 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none resize-none bg-gray-50 focus:bg-white transition-all text-sm"
+                                        />
+                                        <button type="button" onClick={startRecording} className="absolute bottom-2.5 right-2.5 p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all" title="Record Voice Note">
+                                            <Mic className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                )}
+                                {status === 'recording' && (
+                                    <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg animate-pulse">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                                            <span className="text-red-600 font-bold text-sm">Recording...</span>
+                                        </div>
+                                        <button type="button" onClick={stopRecording} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold">
+                                            <Square className="w-3 h-3" /> Stop
+                                        </button>
+                                    </div>
+                                )}
+                                {task.recordedAudio && status !== 'recording' && (
+                                    <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-xs font-bold text-purple-700 flex items-center gap-1.5">
+                                                <Mic className="w-3 h-3" /> Voice Note Attached
+                                            </span>
+                                            <button type="button" onClick={() => { clearBlobUrl(); onUpdate(task.id, { recordedAudio: null }); }} className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1">
+                                                <Trash2 className="w-3 h-3" /> Remove
+                                            </button>
+                                        </div>
+                                        <AudioPlayer url={task.recordedAudio.blobUrl} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    />
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default function RepairTask() {
     const dispatch = useDispatch();
@@ -83,24 +214,13 @@ export default function RepairTask() {
     const { givenBy } = useSelector((state) => state.assignTask);
     const { customDropdowns = [], userData = [] } = useSelector((state) => state.setting || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [successMessage, setSuccessMessage] = useState("");
+    const [tasks, setTasks] = useState([defaultTask()]);
 
-    // Form State aligned with your requirements
-    const [formData, setFormData] = useState({
-        filledBy: "",
-        assignedPerson: "",
-        machineName: "",
-        issueDetails: ""
-    });
-    const [recordedAudio, setRecordedAudio] = useState(null);
-
-    // Helper to get unique dropdown values
     const getUniqueDropdownValues = (category) => {
         const items = customDropdowns.filter(item => item.category === category);
         const uniqueValues = [...new Set(items.map(item => item.value))];
-        return uniqueValues.map(value => {
-            const item = items.find(i => i.value === value);
-            return { ...item, value };
-        });
+        return uniqueValues.map(value => { const item = items.find(i => i.value === value); return { ...item, value }; });
     };
 
     useEffect(() => {
@@ -109,273 +229,175 @@ export default function RepairTask() {
         dispatch(userDetails());
     }, [dispatch]);
 
-    // Hardcoded Options
-    const machineOptions = [
-        "A", "B", "C", "D", "E", "F", "G", "H", "I",
-        "Atlas compressor", "ELGI Compreser", "Transformers",
-        "65/18 Pipe Extruder", "52/18 Pipe Extruder", "C/c Capping Exturder",
-        "Polveiger machine", "Printer A", "Printer B", "Other"
-    ];
+    const machineOptions = getUniqueDropdownValues("Machine Name").map(i => i.value).length > 0
+        ? getUniqueDropdownValues("Machine Name").map(i => i.value)
+        : ["A", "B", "C", "D", "E", "F", "G", "H", "I", "Atlas compressor", "ELGI Compreser", "Transformers", "65/18 Pipe Extruder", "52/18 Pipe Extruder", "C/c Capping Exturder", "Polveiger machine", "Printer A", "Printer B", "Other"];
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const updateTask = (id, updates) => setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    const addTask = () => setTasks(prev => [...prev, defaultTask()]);
+    const removeTask = (id) => setTasks(prev => prev.filter(t => t.id !== id));
 
-        // Basic Validation
-        if (!formData.filledBy || !formData.assignedPerson || !formData.machineName || (!formData.issueDetails && !recordedAudio)) {
-            alert("Please fill in all required fields marked with * (Inluding Issue Details or Voice Note)");
-            return;
+    const handleSubmitAll = async () => {
+        for (let i = 0; i < tasks.length; i++) {
+            const t = tasks[i];
+            if (!t.filledBy) {
+                alert(`Request ${i + 1}: Please select 'Assign From' (Filled By).`);
+                return;
+            }
+            if (!t.assignedPerson || !t.machineName || (!t.issueDetails && !t.recordedAudio)) {
+                alert(`Request ${i + 1}: Please fill in all required fields (Assign To, Machine, and Issue Details or Voice Note).`);
+                return;
+            }
         }
 
         setIsSubmitting(true);
-
         try {
-            let audioUrl = "";
-            let descriptionWrapper = (desc) => desc;
-
-            // Upload audio if exists
-            if (recordedAudio && recordedAudio.blob) {
-                try {
+            const allResults = [];
+            for (const task of tasks) {
+                let finalIssueDetails = task.issueDetails;
+                if (task.recordedAudio && task.recordedAudio.blob) {
                     const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
-                    const { data: uploadData, error: uploadError } = await supabase.storage
+                    const { error: uploadError } = await supabase.storage
                         .from('audio-recordings')
-                        .upload(fileName, recordedAudio.blob, {
-                            contentType: recordedAudio.blob.type || 'audio/webm',
-                            upsert: false
-                        });
-
+                        .upload(fileName, task.recordedAudio.blob, { contentType: task.recordedAudio.blob.type || 'audio/webm', upsert: false });
                     if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
-
-                    const { data: publicUrlData } = supabase.storage
-                        .from('audio-recordings')
-                        .getPublicUrl(fileName);
-
-                    audioUrl = publicUrlData.publicUrl;
-                    descriptionWrapper = (desc) => audioUrl; // Store ONLY the URL if voice note exists
-                } catch (audioErr) {
-                    console.error(audioErr);
-                    alert(`Failed to upload audio: ${audioErr.message}`);
-                    setIsSubmitting(false);
-                    return;
+                    const { data: publicUrlData } = supabase.storage.from('audio-recordings').getPublicUrl(fileName);
+                    finalIssueDetails = publicUrlData.publicUrl;
                 }
+
+                const result = await dispatch(createRepair({
+                    ...task,
+                    filledBy: task.filledBy,
+                    issueDetails: finalIssueDetails,
+                    duration: task.duration || null,
+                })).unwrap();
+                if (Array.isArray(result)) allResults.push(...result);
+                else if (result) allResults.push(result);
             }
 
-            // Dispatch the create action with potential audio URL
-            await dispatch(createRepair({
-                ...formData,
-                issueDetails: descriptionWrapper(formData.issueDetails)
-            })).unwrap();
-
-            // Send WhatsApp notifications
+            // Send WhatsApp notifications (one per unique assignee)
             try {
-                await sendTaskAssignmentNotification({
-                    doerName: formData.assignedPerson,
-                    taskType: 'Repair',
-                    description: formData.issueDetails,
-                    machineName: formData.machineName,
-                    givenBy: formData.filledBy
-                });
-                console.log('✅ WhatsApp notification sent successfully');
+                const notified = new Set();
+                for (const insertedTask of allResults) {
+                    const assignee = insertedTask.assigned_person;
+                    if (assignee && !notified.has(assignee)) {
+                        notified.add(assignee);
+                        await sendTaskAssignmentNotification({
+                            doerName: assignee,
+                            taskId: insertedTask.id,
+                            description: insertedTask.issue_description,
+                            startDate: new Date(insertedTask.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+                            givenBy: insertedTask.filled_by,
+                            taskType: 'repair',
+                            machineName: insertedTask.machine_name,
+                        });
+                    }
+                }
             } catch (whatsappError) {
                 console.error('WhatsApp notification error:', whatsappError);
             }
 
-            alert("Repair Request Submitted Successfully!");
-            navigate('/dashboard/assign-task'); // Redirect back to assign task page
+            setSuccessMessage(`${tasks.length} Repair Request(s) submitted successfully!`);
+            setTasks([defaultTask()]);
+            setTimeout(() => navigate('/dashboard/assign-task'), 1500);
         } catch (error) {
             console.error("Submission failed:", error);
-            alert("Failed to submit request. Please try again.");
+            alert("Failed to submit requests. Please try again.");
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
-
     return (
         <AdminLayout>
-            <div className="max-w-2xl mx-auto p-6">
-                <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden mt-6">
-
-                    {/* Header */}
-                    <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                        <div>
-                            <h1 className="text-xl font-bold text-gray-800">Repairing Request Form</h1>
-                            <p className="text-sm text-gray-500 mt-1">Submit a repair request. Fill in the basic details below and the admin will complete the remaining information.</p>
+            <div className="max-w-3xl mx-auto p-4 sm:p-6">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-purple-600 rounded-xl text-white shadow-md">
+                            <Save size={20} />
                         </div>
-                        <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-gray-600">
-                            <X className="w-6 h-6" />
-                        </button>
+                        <div>
+                            <h1 className="text-xl font-black text-gray-900">Repair Request Form</h1>
+                            <p className="text-sm text-gray-500 mt-0.5">Submit one or multiple repair requests at once</p>
+                        </div>
                     </div>
+                    <button onClick={() => navigate(-1)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
 
-                    <form onSubmit={handleSubmit} className="p-6 space-y-6">
-
-                        {/* 1. Form Filled By */}
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                Assign From <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                                name="filledBy"
-                                value={formData.filledBy}
-                                onChange={handleChange}
-                                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm font-medium"
-                            >
-                                <option value="">Select Assign From...</option>
-                                {givenBy.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                            </select>
+                {/* Success Message */}
+                {successMessage && (
+                    <div className="mb-5 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <CheckCircle2 size={18} />
+                            <span className="font-bold text-sm">{successMessage}</span>
                         </div>
+                        <button onClick={() => setSuccessMessage("")} className="text-green-600 hover:text-green-800 font-bold text-lg">×</button>
+                    </div>
+                )}
 
-                        {/* 2. To Assign Person */}
+                {/* Task Cards */}
+                <div className="space-y-4">
+                    {tasks.map((task, index) => (
+                        <RepairTaskCard
+                            key={task.id}
+                            task={task}
+                            index={index}
+                            total={tasks.length}
+                            givenBy={givenBy}
+                            userData={userData}
+                            machineOptions={machineOptions}
+                            onUpdate={updateTask}
+                            onRemove={removeTask}
+                        />
+                    ))}
+                </div>
+
+                {/* Add Another */}
+                <button
+                    type="button"
+                    onClick={addTask}
+                    className="mt-4 w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-purple-300 text-purple-600 font-bold rounded-2xl hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 group"
+                >
+                    <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    Add Another Repair Request
+                </button>
+
+                {/* Summary & Submit */}
+                <div className="mt-5 bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                    <div className="flex items-center justify-between mb-3">
                         <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                To Assign Person <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                                name="assignedPerson"
-                                value={formData.assignedPerson}
-                                onChange={handleChange}
-                                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm font-medium"
-                            >
-                                <option value="">Select person... (Doer)</option>
-                                {userData
-                                    ?.filter(u => u.role === 'user' && u.status === 'active')
-                                    .map(user => (
-                                        <option key={user.id} value={user.user_name}>
-                                            {user.user_name}
-                                        </option>
-                                    ))
-                                }
-                            </select>
+                            <p className="text-sm font-bold text-gray-700">{tasks.length} request{tasks.length !== 1 ? 's' : ''} ready to submit</p>
+                            <p className="text-xs text-gray-400 mt-0.5">Admin will fill in additional details after submission</p>
                         </div>
-
-                        {/* 3. Machine Name */}
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                Machine Name <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                                name="machineName"
-                                value={formData.machineName}
-                                onChange={handleChange}
-                                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm font-medium"
-                            >
-                                <option value="">Select machine...</option>
-                                {getUniqueDropdownValues("Machine Name")
-                                    .map((item) => (
-                                        <option key={item.id || item.value} value={item.value}>{item.value}</option>
-                                    ))
-                                }
-                                {/* Fallback hardcoded if no dynamic data */}
-                                {(!customDropdowns.some(item => item.category === "Machine Name")) && (
-                                    machineOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)
-                                )}
-                            </select>
+                        <div className="text-right">
+                            <span className="text-2xl font-black text-purple-600">{tasks.length}</span>
+                            <p className="text-xs text-gray-400">Total</p>
                         </div>
-
-                        {/* 4. Issue Details & Audio Recording */}
-                        <div>
-                            <ReactMediaRecorder
-                                audio
-                                onStop={(blobUrl, blob) => {
-                                    setRecordedAudio({ blobUrl, blob });
-                                }}
-                                render={({ status, startRecording, stopRecording, mediaBlobUrl, clearBlobUrl }) => (
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-semibold text-gray-700">
-                                            Issue Details <span className="text-red-500">*</span>
-                                        </label>
-
-                                        {/* Default View: Input with Mic */}
-                                        {status !== 'recording' && !recordedAudio && (
-                                            <div className="relative">
-                                                <textarea
-                                                    name="issueDetails"
-                                                    value={formData.issueDetails}
-                                                    onChange={handleChange}
-                                                    rows="4"
-                                                    placeholder="Describe the issue in detail..."
-                                                    className="w-full p-3 pr-12 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none resize-none bg-gray-50 focus:bg-white transition-all text-sm font-medium"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={startRecording}
-                                                    className="absolute bottom-3 right-3 p-2 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200 transition-all shadow-sm group"
-                                                    title="Record Voice Note"
-                                                >
-                                                    <Mic className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        {/* Recording View */}
-                                        {status === 'recording' && (
-                                            <div className="flex flex-col items-center justify-center p-8 bg-red-50 border border-red-100 rounded-xl space-y-4 animate-pulse">
-                                                <div className="p-4 bg-red-100 rounded-full shadow-inner">
-                                                    <Mic className="w-8 h-8 text-red-600" />
-                                                </div>
-                                                <p className="text-red-600 font-bold text-lg">Recording Voice Note...</p>
-                                                <button
-                                                    type="button"
-                                                    onClick={stopRecording}
-                                                    className="flex items-center gap-2 px-6 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors font-bold shadow-lg"
-                                                >
-                                                    <Square className="w-4 h-4" /> Stop Recording
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        {/* Recorded View (Player) */}
-                                        {recordedAudio && status !== 'recording' && (
-                                            <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">Voice Note Attached</span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            clearBlobUrl();
-                                                            setRecordedAudio(null);
-                                                        }}
-                                                        className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-bold"
-                                                    >
-                                                        <Trash2 className="w-3 h-3" /> Remove
-                                                    </button>
-                                                </div>
-                                                <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-purple-100 shadow-sm">
-                                                    <AudioPlayer url={recordedAudio.blobUrl} />
-                                                </div>
-                                                <p className="text-xs text-center text-gray-500 mt-2">
-                                                    Note: Issue details hidden while voice note is attached.
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            />
-                        </div>
-
-                        <p className="text-xs text-gray-500 italic">
-                            After submission, the admin will fill in additional details like Part Replaced, Work Done, Status, etc.
-                        </p>
-
-                        {/* Submit Button */}
+                    </div>
+                    <div className="flex gap-3">
                         <button
-                            type="submit"
+                            type="button"
+                            onClick={() => navigate('/dashboard/assign-task')}
+                            className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+                        >
+                            <X className="w-4 h-4" /> Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSubmitAll}
                             disabled={isSubmitting}
-                            className="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-lg transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                            className="flex-grow py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-md transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
                             {isSubmitting ? (
-                                <>
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                    Submitting Request...
-                                </>
+                                <><Loader2 size={18} className="animate-spin" /> Submitting...</>
                             ) : (
-                                "Submit Request"
+                                <><Save size={18} /> Submit {tasks.length} Request{tasks.length !== 1 ? 's' : ''}</>
                             )}
                         </button>
-
-                    </form>
+                    </div>
                 </div>
             </div>
         </AdminLayout>

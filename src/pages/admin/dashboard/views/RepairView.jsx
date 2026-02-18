@@ -1,6 +1,74 @@
-import React, { useMemo } from "react"
-import { FileText, CheckCircle, IndianRupee, PieChart as PieIcon } from "lucide-react"
+import React, { useMemo, useState, useRef } from "react"
+import { FileText, CheckCircle, IndianRupee, PieChart as PieIcon, Search, X, Loader2, Save, Wrench, Play, Pause } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
+import { useDispatch } from "react-redux"
+import { updateRepair } from "../../../../redux/slice/repairSlice"
+
+const isAudioUrl = (url) => {
+    if (!url || typeof url !== 'string') return false;
+    return url.startsWith('http') && (
+        url.includes('audio-recordings') ||
+        url.includes('voice-notes') ||
+        url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
+    );
+};
+
+const AudioPlayer = ({ url }) => {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const audioRef = useRef(null);
+
+    const togglePlay = (e) => {
+        e.stopPropagation();
+        if (isPlaying) {
+            audioRef.current.pause();
+        } else {
+            audioRef.current.play();
+        }
+        setIsPlaying(!isPlaying);
+    };
+
+    return (
+        <div className={`flex items-center gap-3 px-3 py-1.5 rounded-xl border transition-all duration-300 min-w-[140px] ${isPlaying
+            ? 'bg-purple-50/80 border-purple-200 shadow-sm'
+            : 'bg-white border-gray-100 hover:border-purple-100 hover:shadow-xs'
+            }`}>
+            <button
+                type="button"
+                onClick={togglePlay}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm ${isPlaying
+                    ? 'bg-gradient-to-r from-rose-500 to-pink-600'
+                    : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:scale-110'
+                    }`}
+            >
+                {isPlaying ? (
+                    <Pause size={12} className="text-white fill-white" />
+                ) : (
+                    <Play size={12} className="text-white fill-white ml-0.5" />
+                )}
+            </button>
+            <div className="flex flex-col">
+                <span className={`text-[9px] font-black uppercase tracking-[0.1em] ${isPlaying ? 'text-purple-700' : 'text-gray-400'
+                    }`}>
+                    {isPlaying ? 'Playing...' : 'Voice Note'}
+                </span>
+                {isPlaying && (
+                    <div className="flex gap-0.5 mt-0.5 h-1.5 items-center">
+                        <div className="w-0.5 h-full bg-purple-400 animate-bounce" style={{ animationDuration: '0.6s' }}></div>
+                        <div className="w-0.5 h-2/3 bg-purple-500 animate-bounce" style={{ animationDuration: '0.8s' }}></div>
+                        <div className="w-0.5 h-full bg-purple-600 animate-bounce" style={{ animationDuration: '0.4s' }}></div>
+                        <div className="w-0.5 h-2/3 bg-purple-500 animate-bounce" style={{ animationDuration: '0.7s' }}></div>
+                    </div>
+                )}
+            </div>
+            <audio
+                ref={audioRef}
+                src={url}
+                onEnded={() => setIsPlaying(false)}
+                className="hidden"
+            />
+        </div>
+    );
+};
 
 const StatCard = ({ icon: Icon, label, value, color }) => (
     <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-1 relative overflow-hidden min-w-0">
@@ -18,6 +86,67 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
 )
 
 export default function RepairView({ tasks = [] }) {
+    const dispatch = useDispatch();
+    const [searchQuery, setSearchQuery] = useState("");
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedTask, setSelectedTask] = useState(null);
+    const [updateForm, setUpdateForm] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const openUpdateModal = (task) => {
+        setSelectedTask(task);
+        setUpdateForm({
+            partReplaced: task.part_replaced || "",
+            billAmount: task.bill_amount || "",
+            status: task.status || "",
+            remarks: task.remarks || ""
+        });
+        setIsModalOpen(true);
+    };
+
+    const handleUpdateSubmit = async (e) => {
+        e.preventDefault();
+        if (!updateForm.status) return alert("Please select a status");
+        setIsSubmitting(true);
+        try {
+            await dispatch(updateRepair([{
+                taskId: selectedTask.id,
+                status: updateForm.status,
+                partReplaced: updateForm.partReplaced,
+                billAmount: updateForm.billAmount,
+                remarks: updateForm.remarks
+            }])).unwrap();
+            setIsModalOpen(false);
+            // We assume tasks prop will update via parent re-fetch or store subscription
+        } catch (error) {
+            console.error(error);
+            alert("Failed to update task.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const getStatusColor = (status, admin_done) => {
+        if (!status) return "bg-gray-100 text-gray-700 border-gray-200";
+        if (status.includes("Completed") || status === 'Done' || status.includes("Complete")) {
+            return admin_done ? "bg-green-50 text-green-700 border-green-200" : "bg-orange-50 text-orange-700 border-orange-200";
+        }
+        if (status.includes("Cancelled")) return "bg-red-50 text-red-700 border-red-200";
+        if (status.includes("Observation")) return "bg-blue-50 text-blue-700 border-blue-200";
+        return "bg-yellow-50 text-yellow-700 border-yellow-200";
+    }
+
+    const filteredTableData = useMemo(() => {
+        if (!tasks) return [];
+        return tasks.filter(task => {
+            if (!searchQuery) return true;
+            return (
+                task.id?.toString().includes(searchQuery) ||
+                task.machine_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                task.assigned_person?.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+        });
+    }, [tasks, searchQuery]);
     const processedData = useMemo(() => {
         if (!tasks || tasks.length === 0) {
             return {
@@ -206,6 +335,141 @@ export default function RepairView({ tasks = [] }) {
                     </div>
                 </div>
             </div>
+
+            {/* Repair Tasks Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                        <Wrench className="h-4 w-4 text-gray-400" />
+                        <h3 className="text-base font-bold text-gray-800">Repair Tasks</h3>
+                    </div>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={14} />
+                        <input
+                            type="text"
+                            placeholder="Search repairs..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-9 pr-4 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
+                        />
+                    </div>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">ID</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Machine</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Given By</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Assign To</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[200px]">Issue</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Date</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[150px]">Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-100">
+                            {filteredTableData.length > 0 ? (
+                                filteredTableData.map((task) => (
+                                    <tr
+                                        key={task.id}
+                                        className="hover:bg-gray-50 transition-colors cursor-pointer"
+                                        onDoubleClick={() => openUpdateModal(task)}
+                                    >
+                                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">#{task.id}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.machine_name}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.filled_by}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.assigned_person || '-'}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600">
+                                            {isAudioUrl(task.issue_description) ? (
+                                                <AudioPlayer url={task.issue_description} />
+                                            ) : (
+                                                <div className="line-clamp-2" title={task.issue_description}>{task.issue_description}</div>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                            {task.created_at ? new Date(task.created_at).toLocaleDateString() : '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm">
+                                            <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold border uppercase ${getStatusColor(task.status, task.admin_done)}`}>
+                                                {task.status ? task.status.split(' ')[0] : "Pending"}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-600">
+                                            {task.remarks || "-"}
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="8" className="px-4 py-8 text-center text-gray-500 text-sm">
+                                        No repair tasks found.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Modal */}
+            {isModalOpen && selectedTask && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden animate-fade-in border border-purple-100">
+                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-purple-100 flex justify-between items-center">
+                            <h3 className="text-sm font-bold text-purple-800 uppercase">Update Ticket #{selectedTask.id}</h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-purple-400 hover:text-purple-600"><X className="w-5 h-5" /></button>
+                        </div>
+                        <form onSubmit={handleUpdateSubmit} className="p-6">
+                            <div className="bg-purple-50 rounded border border-purple-200 p-3 mb-6 flex gap-4 text-sm">
+                                <div className="flex-1">
+                                    <span className="block text-xs font-bold text-purple-500 uppercase mb-1">Machine</span>
+                                    <span className="text-gray-800 font-medium">{selectedTask.machine_name}</span>
+                                </div>
+                                <div className="flex-[2]">
+                                    <span className="block text-xs font-bold text-purple-500 uppercase mb-1">Issue</span>
+                                    {isAudioUrl(selectedTask.issue_description) ? (
+                                        <AudioPlayer url={selectedTask.issue_description} />
+                                    ) : (
+                                        <span className="text-gray-600">{selectedTask.issue_description}</span>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Status <span className="text-red-500">*</span></label>
+                                    <select className="w-full p-2 text-sm border border-gray-300 rounded focus:border-purple-500 outline-none" value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}>
+                                        <option value="">Select Status...</option>
+                                        <option value="✅ Completed (कार्य पूर्ण)">✅ Completed</option>
+                                        <option value="⏳ Pending (लंबित कार्य)">⏳ Pending</option>
+                                        <option value="🔍 Under Observation (निरीक्षण)">🔍 Observation</option>
+                                        <option value="🔄 Temporary Fix (अस्थायी)">🔄 Temporary Fix</option>
+                                        <option value="🚫 Cancelled (रद्द)">🚫 Cancelled</option>
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Part</label>
+                                        <input className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-purple-500" value={updateForm.partReplaced} onChange={(e) => setUpdateForm({ ...updateForm, partReplaced: e.target.value })} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bill (₹)</label>
+                                        <input type="number" className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-purple-500" value={updateForm.billAmount} onChange={(e) => setUpdateForm({ ...updateForm, billAmount: e.target.value })} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Remarks</label>
+                                    <textarea className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-purple-500" rows="2" value={updateForm.remarks} onChange={(e) => setUpdateForm({ ...updateForm, remarks: e.target.value })}></textarea>
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-3 pt-6 mt-2 border-t border-gray-100">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded hover:bg-gray-50 text-sm">Cancel</button>
+                                <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded text-sm flex items-center gap-2">{isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div >
     )
 }

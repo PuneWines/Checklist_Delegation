@@ -186,129 +186,407 @@ const sendWhatsAppVoiceMessage = async (phoneNumber, audioUrl) => {
 };
 
 /**
- * Send task assignment notification
- * @param {Object} taskDetails - Task details
- * @returns {Promise<boolean>} - Success status
+ * Send urgent task notification
  */
-export const sendTaskAssignmentNotification = async (taskDetails) => {
+export const sendUrgentTaskNotification = async (taskDetails) => {
     try {
         const {
             doerName,
-            taskType,
+            taskId,
             description,
             dueDate,
-            frequency,
-            department,
             givenBy,
+            taskType,
             machineName,
             partName,
-            priority
+            department
         } = taskDetails;
 
-        // Extract audio URL from description if present (handles standalone URL or text + URL)
+        const phoneNumber = await getUserPhoneNumber(doerName);
+        if (!phoneNumber) return false;
+
         const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|ogg|wav|webm|m4a)?)/i;
         const match = description && description.match(urlRegex);
         const audioUrl = match ? match[0] : null;
-        const isAudioUrl = !!audioUrl; // Boolean flag for logic flow
+        const displayDescription = (audioUrl && description.trim() === audioUrl) ? `🎤 Voice Note: ${description}` : description;
 
-        // Get user phone number
-        const phoneNumber = await getUserPhoneNumber(doerName);
+        const header = taskType ? `🚨 URGENT ${taskType.toUpperCase()} ALERT 🚨` : `🚨 URGENT TASK ALERT 🚨`;
 
-        if (!phoneNumber) {
-            console.warn(`No phone number found for user: ${doerName}`);
-            return false;
+        let body = "";
+        const type = taskType?.toLowerCase();
+
+        switch (type) {
+            case 'maintenance':
+                body = `Name: ${doerName}\n` +
+                    `Task ID: ${taskId}\n` +
+                    `⚙️ Machine: ${machineName || 'N/A'}\n` +
+                    `🧩 Part: ${partName || 'N/A'}\n` +
+                    `🏢 Dept: ${department || 'N/A'}\n` +
+                    `📝 Task: ${displayDescription}\n` +
+                    `🗓️ Planned: ${dueDate}\n` +
+                    `🧑 Given By: ${givenBy}\n`;
+                break;
+
+            case 'repair':
+                body = `Name: ${doerName}\n` +
+                    `Task ID: ${taskId}\n` +
+                    `⚙️ Machine: ${machineName || 'N/A'}\n` +
+                    `🏢 Dept: ${department || 'N/A'}\n` +
+                    `📝 Issue: ${displayDescription}\n` +
+                    `🗓️ Date: ${dueDate}\n` +
+                    `🧑 Filled By: ${givenBy}\n`;
+                break;
+
+            case 'checklist':
+                body = `Name: ${doerName}\n` +
+                    `Task ID: ${taskId}\n` +
+                    `🏢 Dept: ${department || 'N/A'}\n` +
+                    `📝 Task: ${displayDescription}\n` +
+                    `⏳ Start Date: ${dueDate}\n` +
+                    `🧑 Given By: ${givenBy}\n`;
+                break;
+
+            case 'ea':
+                body = `Name: ${doerName}\n` +
+                    `Task ID: ${taskId}\n` +
+                    `💼 EA Task: ${displayDescription}\n` +
+                    `⏳ Deadline: ${dueDate}\n` +
+                    `🧑 Assigned By: ${givenBy}\n`;
+                break;
+
+            default:
+                body = `Name: ${doerName}\n` +
+                    `Task ID: ${taskId}\n` +
+                    `📝 Task: ${displayDescription}\n` +
+                    `Planned Date: ${dueDate}\n` +
+                    `Given By: ${givenBy}\n`;
         }
 
-        // Format task details message with adjusted description if needed
-        const message = formatTaskMessage({
-            ...taskDetails,
-            // If description is JUST the URL, enhance it. If it has text + URL, keep it as is.
-            description: (isAudioUrl && description.trim() === audioUrl)
-                ? `🎤 Voice Note Link: ${description}`
-                : description
-        });
+        const message = `${header}\n\n` +
+            body +
+            `\n📌 Please take immediate action and update once completed.\n` +
+            `🔗 App Link: https://checklist-delegation-supabase-five.vercel.app/login`;
 
-        console.log('🚀 Attempting to send WhatsApp message...');
-
-        // 1. Send Text Notification
-        const textSent = await sendWhatsAppMessage(phoneNumber, message);
-
-        // 2. If Description contained Audio URL, Send Audio File separately
-        if (textSent && isAudioUrl) {
-            console.log('🎙️ Sending associated audio file...');
-            // Wait a moment purely for sequencing (optional)
+        const sent = await sendWhatsAppMessage(phoneNumber, message);
+        if (sent && audioUrl) {
             await new Promise(r => setTimeout(r, 1000));
-            await sendWhatsAppVoiceMessage(phoneNumber, audioUrl); // Pass extracted URL, not full description
+            await sendWhatsAppVoiceMessage(phoneNumber, audioUrl);
         }
-
-        return textSent;
+        return sent;
     } catch (error) {
-        console.error('Error sending task assignment notification:', error);
+        console.error('Error sending urgent notification:', error);
         return false;
     }
 };
 
 /**
- * Format task details into a readable WhatsApp message
- * @param {Object} taskDetails - Task details
- * @returns {string} - Formatted message
+ * Send checklist task notification
+ */
+export const sendChecklistTaskNotification = async (taskDetails) => {
+    try {
+        const { doerName, taskId, description, startDate, givenBy, department, duration } = taskDetails;
+        const phoneNumber = await getUserPhoneNumber(doerName);
+        if (!phoneNumber) return false;
+
+        const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|ogg|wav|webm|m4a)?)/i;
+        const match = description && description.match(urlRegex);
+        const audioUrl = match ? match[0] : null;
+        const displayDescription = (audioUrl && description.trim() === audioUrl) ? `🎤 Voice Note: ${description}` : description;
+
+        const message = `📋 *NEW CHECKLIST TASK*\n` +
+            `Dear ${doerName},\n\n` +
+            `A new checklist task has been assigned to you.\n\n` +
+            `📌 Task ID: ${taskId}\n` +
+            `🏢 Dept: ${department || 'N/A'}\n` +
+            `📝 Task: ${displayDescription}\n` +
+            `⏳ Start Date: ${startDate}\n` +
+            (duration ? `⏱ Duration: ${duration}\n` : '') +
+            `🧑 Given By: ${givenBy}\n\n` +
+            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
+            `Best regards,\nAcemark Stationers.`;
+
+        const sent = await sendWhatsAppMessage(phoneNumber, message);
+        if (sent && audioUrl) {
+            await new Promise(r => setTimeout(r, 1000));
+            await sendWhatsAppVoiceMessage(phoneNumber, audioUrl);
+        }
+        return sent;
+    } catch (error) {
+        console.error('Error sending checklist notification:', error);
+        return false;
+    }
+};
+
+/**
+ * Send maintenance task notification
+ */
+export const sendMaintenanceTaskNotification = async (taskDetails) => {
+    try {
+        const { doerName, taskId, description, startDate, givenBy, machineName, partName, department, duration } = taskDetails;
+        const phoneNumber = await getUserPhoneNumber(doerName);
+        if (!phoneNumber) return false;
+
+        const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|ogg|wav|webm|m4a)?)/i;
+        const match = description && description.match(urlRegex);
+        const audioUrl = match ? match[0] : null;
+        const displayDescription = (audioUrl && description.trim() === audioUrl) ? `🎤 Voice Note: ${description}` : description;
+
+        const message = `🛠️ *MAINTENANCE TASK ASSIGNED*\n` +
+            `Dear ${doerName},\n\n` +
+            `You have a new maintenance task.\n\n` +
+            `📌 Task ID: ${taskId}\n` +
+            `⚙️ Machine: ${machineName || 'N/A'}\n` +
+            `🧩 Part: ${partName || 'N/A'}\n` +
+            `🏢 Dept: ${department || 'N/A'}\n` +
+            `📝 Task: ${displayDescription}\n` +
+            `🗓️ Planned Date: ${startDate}\n` +
+            (duration ? `⏱ Duration: ${duration}\n` : '') +
+            `🧑 Given By: ${givenBy}\n\n` +
+            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
+            `Best regards,\nAcemark Stationers.`;
+
+        const sent = await sendWhatsAppMessage(phoneNumber, message);
+        if (sent && audioUrl) {
+            await new Promise(r => setTimeout(r, 1000));
+            await sendWhatsAppVoiceMessage(phoneNumber, audioUrl);
+        }
+        return sent;
+    } catch (error) {
+        console.error('Error sending maintenance notification:', error);
+        return false;
+    }
+};
+
+/**
+ * Send repair task notification
+ */
+export const sendRepairTaskNotification = async (taskDetails) => {
+    try {
+        const { doerName, taskId, description, startDate, givenBy, machineName, department, duration } = taskDetails;
+        const phoneNumber = await getUserPhoneNumber(doerName);
+        if (!phoneNumber) return false;
+
+        const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|ogg|wav|webm|m4a)?)/i;
+        const match = description && description.match(urlRegex);
+        const audioUrl = match ? match[0] : null;
+        const displayDescription = (audioUrl && description.trim() === audioUrl) ? `🎤 Voice Note: ${description}` : description;
+
+        const message = `🔨 *REPAIR REQUEST ASSIGNED*\n` +
+            `Dear ${doerName},\n\n` +
+            `A repair request has been assigned to you.\n\n` +
+            `📌 Task ID: ${taskId}\n` +
+            `⚙️ Machine: ${machineName || 'N/A'}\n` +
+            `🏢 Dept: ${department || 'N/A'}\n` +
+            `📝 Issue: ${displayDescription}\n` +
+            `🗓️ Date: ${startDate}\n` +
+            (duration ? `⏱ Duration: ${duration}\n` : '') +
+            `🧑 Filled By: ${givenBy}\n\n` +
+            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
+            `Best regards,\nAcemark Stationers.`;
+
+        const sent = await sendWhatsAppMessage(phoneNumber, message);
+        if (sent && audioUrl) {
+            await new Promise(r => setTimeout(r, 1000));
+            await sendWhatsAppVoiceMessage(phoneNumber, audioUrl);
+        }
+        return sent;
+    } catch (error) {
+        console.error('Error sending repair notification:', error);
+        return false;
+    }
+};
+
+/**
+ * Send EA task notification
+ */
+export const sendEATaskNotification = async (taskDetails) => {
+    try {
+        const { doerName, taskId, description, startDate, givenBy, duration } = taskDetails;
+        const phoneNumber = await getUserPhoneNumber(doerName);
+        if (!phoneNumber) return false;
+
+        const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|ogg|wav|webm|m4a)?)/i;
+        const match = description && description.match(urlRegex);
+        const audioUrl = match ? match[0] : null;
+        const displayDescription = (audioUrl && description.trim() === audioUrl) ? `🎤 Voice Note: ${description}` : description;
+
+        const message = `💼 *NEW EA TASK*\n` +
+            `Dear ${doerName},\n\n` +
+            `A new Executive Assistant task has been assigned.\n\n` +
+            `📌 Task ID: ${taskId}\n` +
+            `📝 Description: ${displayDescription}\n` +
+            `⏳ Planned Date: ${startDate}\n` +
+            (duration ? `⏱ Duration: ${duration}\n` : '') +
+            `🧑 Requested By: ${givenBy}\n\n` +
+            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
+            `Best regards,\nAcemark Stationers.`;
+
+        const sent = await sendWhatsAppMessage(phoneNumber, message);
+        if (sent && audioUrl) {
+            await new Promise(r => setTimeout(r, 1000));
+            await sendWhatsAppVoiceMessage(phoneNumber, audioUrl);
+        }
+        return sent;
+    } catch (error) {
+        console.error('Error sending EA notification:', error);
+        return false;
+    }
+};
+
+/**
+ * Send delegation task notification
+ */
+export const sendDelegationTaskNotification = async (taskDetails) => {
+    try {
+        const { doerName, taskId, description, startDate, givenBy, department, duration } = taskDetails;
+        const phoneNumber = await getUserPhoneNumber(doerName);
+        if (!phoneNumber) return false;
+
+        const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|ogg|wav|webm|m4a)?)/i;
+        const match = description && description.match(urlRegex);
+        const audioUrl = match ? match[0] : null;
+        const displayDescription = (audioUrl && description.trim() === audioUrl) ? `🎤 Voice Note: ${description}` : description;
+
+        const message = `🔔 *NEW DELEGATION TASK*\n` +
+            `Dear ${doerName},\n\n` +
+            `A new task has been delegated to you.\n\n` +
+            `📌 Task ID: ${taskId}\n` +
+            `🏢 Dept: ${department || 'N/A'}\n` +
+            `📝 Task: ${displayDescription}\n` +
+            `⏳ Deadline: ${startDate}\n` +
+            (duration ? `⏱ Duration: ${duration}\n` : '') +
+            `🧑 Allocated By: ${givenBy}\n\n` +
+            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
+            `Best regards,\nAcemark Stationers.`;
+
+        const sent = await sendWhatsAppMessage(phoneNumber, message);
+        if (sent && audioUrl) {
+            await new Promise(r => setTimeout(r, 1000));
+            await sendWhatsAppVoiceMessage(phoneNumber, audioUrl);
+        }
+        return sent;
+    } catch (error) {
+        console.error('Error sending delegation notification:', error);
+        return false;
+    }
+};
+
+/**
+ * Send task extension notification
+ */
+export const sendTaskExtensionNotification = async (taskDetails) => {
+    try {
+        const { doerName, taskId, givenBy, description, nextExtendDate } = taskDetails;
+        const phoneNumber = await getUserPhoneNumber(doerName);
+
+        if (!phoneNumber) return false;
+
+        // Extract audio URL from description if present
+        const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|ogg|wav|webm|m4a)?)/i;
+        const match = description && description.match(urlRegex);
+        const audioUrl = match ? match[0] : null;
+
+        // If description is JUST the URL, enhance it
+        const displayDescription = (audioUrl && description.trim() === audioUrl)
+            ? `🎤 Voice Note Link: ${description}`
+            : description;
+
+        const message = `🔄 *TASK EXTENSION NOTICE*\n` +
+            `Dear ${doerName},\n\n` +
+            `This is to inform you that the deadline for your delegated task has been extended. Please find the updated details below:\n\n` +
+            `📌 Task ID: ${taskId}\n` +
+            `🧑💼 Allocated By: ${givenBy}\n` +
+            `📝 Task Description: ${displayDescription}\n\n\n` +
+            `⏳ Updated Deadline: ${nextExtendDate}\n` +
+            `✅ Closure Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
+            `Please ensure the task is completed within the new timeline. If you require any support, feel free to contact the concerned person.\n\n` +
+            `Best regards,\n` +
+            `Acemark Stationers.`;
+
+        const sent = await sendWhatsAppMessage(phoneNumber, message);
+
+        if (sent && audioUrl) {
+            await new Promise(r => setTimeout(r, 1000));
+            await sendWhatsAppVoiceMessage(phoneNumber, audioUrl);
+        }
+
+        return sent;
+    } catch (error) {
+        console.error('Error sending extension notification:', error);
+        return false;
+    }
+};
+
+/**
+ * Send task assignment notification (Delegation Task)
+ */
+export const sendTaskAssignmentNotification = async (taskDetails) => {
+    const { taskType } = taskDetails;
+
+    switch (taskType?.toLowerCase()) {
+        case 'checklist':
+            return sendChecklistTaskNotification(taskDetails);
+        case 'maintenance':
+            return sendMaintenanceTaskNotification(taskDetails);
+        case 'repair':
+            return sendRepairTaskNotification(taskDetails);
+        case 'ea':
+            return sendEATaskNotification(taskDetails);
+        case 'delegation':
+            return sendDelegationTaskNotification(taskDetails);
+        default:
+            // For backward compatibility or if type is not provided
+            try {
+                const {
+                    doerName,
+                    taskId,
+                    givenBy,
+                    description,
+                    startDate,
+                } = taskDetails;
+
+                const phoneNumber = await getUserPhoneNumber(doerName);
+
+                if (!phoneNumber) {
+                    console.warn(`No phone number found for user: ${doerName}`);
+                    return false;
+                }
+
+                const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|ogg|wav|webm|m4a)?)/i;
+                const match = description && description.match(urlRegex);
+                const audioUrl = match ? match[0] : null;
+                const displayDescription = (audioUrl && description.trim() === audioUrl) ? `🎤 Voice Note Link: ${description}` : description;
+
+                const message = `🔔 *REMINDER: DELEGATION TASK*\n` +
+                    `Dear ${doerName},\n\n` +
+                    `You have been assigned a new task. Please find the details below:\n\n` +
+                    `📌 Task ID: ${taskId}\n` +
+                    `🧑 Allocated By: ${givenBy}\n` +
+                    `📝 Task Description: ${displayDescription}\n\n\n` +
+                    `⏳ Deadline: ${startDate}\n` +
+                    `✅ Closure Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
+                    `Please make sure the task is completed before the deadline. For any assistance, feel free to reach out.\n\n` +
+                    `Best regards,\n` +
+                    `Acemark Stationers.`;
+
+                const sent = await sendWhatsAppMessage(phoneNumber, message);
+                if (sent && audioUrl) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    await sendWhatsAppVoiceMessage(phoneNumber, audioUrl);
+                }
+                return sent;
+            } catch (error) {
+                console.error('Error sending task assignment notification:', error);
+                return false;
+            }
+    }
+};
+
+/**
+ * DEPRECATED - use sendTaskAssignmentNotification
  */
 const formatTaskMessage = (taskDetails) => {
-    const {
-        doerName,
-        taskType,
-        description,
-        dueDate,
-        frequency,
-        department,
-        givenBy,
-        machineName,
-        partName,
-        priority
-    } = taskDetails;
-
-    let message = `🔔 *New Task Assigned*\n\n`;
-    message += `👤 *Assigned to:* ${doerName}\n`;
-    message += `📋 *Task Type:* ${taskType || 'General'}\n`;
-
-    if (department) {
-        message += `🏢 *Department:* ${department}\n`;
-    }
-
-    if (givenBy) {
-        message += `👨‍💼 *Assigned by:* ${givenBy}\n`;
-    }
-
-    if (machineName) {
-        message += `⚙️ *Machine:* ${machineName}\n`;
-    }
-
-    if (partName) {
-        message += `🔧 *Part:* ${partName}\n`;
-    }
-
-    if (priority) {
-        message += `⚡ *Priority:* ${priority}\n`;
-    }
-
-    message += `\n📝 *Description:*\n${description || 'No description provided'}\n`;
-
-    if (dueDate) {
-        const formattedDate = new Date(dueDate).toLocaleString('en-IN', {
-            dateStyle: 'medium',
-            timeStyle: 'short'
-        });
-        message += `\n📅 *Due Date:* ${formattedDate}\n`;
-    }
-
-    if (frequency && frequency !== 'one-time') {
-        message += `🔄 *Frequency:* ${frequency}\n`;
-    }
-
-    message += `\n✅ Please complete this task on time.`;
-    message += `\n\n_This is an automated message from Task Management System_`;
-
-    return message;
+    return "Please use specific notification functions";
 };
 
 /**
@@ -381,8 +659,101 @@ export const sendTaskCompletionNotification = async (taskDetails) => {
     }
 };
 
+
+
+/**
+ * Send task rejection notification
+ */
+export const sendTaskRejectionNotification = async (taskDetails) => {
+    try {
+        const { doerName, taskId, description, taskType, reason } = taskDetails;
+        const phoneNumber = await getUserPhoneNumber(doerName);
+
+        if (!phoneNumber) {
+            console.warn(`No phone number found for user: ${doerName}`);
+            return false;
+        }
+
+        const header = taskType ? `❌ ${taskType.toUpperCase()} TASK REJECTED` : `❌ TASK REJECTED`;
+
+        const message = `${header}\n\n` +
+            `Dear ${doerName},\n\n` +
+            `Your submitted task has been rejected by the Admin.\n\n` +
+            `📌 Task ID: ${taskId}\n` +
+            `📝 Task: ${description || 'N/A'}\n` +
+            (reason ? `❓ Reason: ${reason}\n` : '') +
+            `\n⚠️ The task has been moved back to your pending list. Please review the issues and resubmit.\n\n` +
+            `🔗 App Link: https://checklist-delegation-supabase-five.vercel.app/login\n\n` +
+            `Best regards,\nAcemark Stationers.`;
+
+        return await sendWhatsAppMessage(phoneNumber, message);
+    } catch (error) {
+        console.error('Error sending rejection notification:', error);
+        return false;
+    }
+};
+
+/**
+ * Send task reassignment notification (Shifted Task)
+ */
+export const sendTaskReassignmentNotification = async (taskDetails) => {
+    try {
+        const {
+            newDoerName,
+            originalDoerName,
+            taskId,
+            description,
+            startDate,
+            givenBy,
+            department,
+            taskType
+        } = taskDetails;
+
+        const phoneNumber = await getUserPhoneNumber(newDoerName);
+        if (!phoneNumber) return false;
+
+        const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|ogg|wav|webm|m4a)?)/i;
+        const match = description && description.match(urlRegex);
+        const audioUrl = match ? match[0] : null;
+        const displayDescription = (audioUrl && description.trim() === audioUrl) ? `🎤 Voice Note: ${description}` : description;
+
+        const message = `🔄 *TASK REASSIGNED*\n` +
+            `Dear ${newDoerName},\n\n` +
+            `A task has been reassigned to you from ${originalDoerName} (currently on leave).\n\n` +
+            `📌 Task ID: ${taskId}\n` +
+            `📋 Type: ${taskType ? taskType.toUpperCase() : 'TASK'}\n` +
+            `🏢 Dept: ${department || 'N/A'}\n` +
+            `📝 Task: ${displayDescription}\n` +
+            `⏳ Date: ${startDate}\n` +
+            `🧑 Originally Given By: ${givenBy}\n\n` +
+            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
+            `Please ensure this task is completed on time.\n\n` +
+            `Best regards,\nAcemark Stationers.`;
+
+        const sent = await sendWhatsAppMessage(phoneNumber, message);
+        if (sent && audioUrl) {
+            await new Promise(r => setTimeout(r, 1000));
+            await sendWhatsAppVoiceMessage(phoneNumber, audioUrl);
+        }
+        return sent;
+    } catch (error) {
+        console.error('Error sending reassignment notification:', error);
+        return false;
+    }
+};
+
 export default {
+    sendUrgentTaskNotification,
+    sendTaskExtensionNotification,
     sendTaskAssignmentNotification,
+    sendChecklistTaskNotification,
+    sendMaintenanceTaskNotification,
+    sendRepairTaskNotification,
+    sendEATaskNotification,
+    sendDelegationTaskNotification,
     sendTaskReminderNotification,
-    sendTaskCompletionNotification
+    sendTaskCompletionNotification,
+    sendTaskCompletionNotification,
+    sendTaskRejectionNotification,
+    sendTaskReassignmentNotification
 };

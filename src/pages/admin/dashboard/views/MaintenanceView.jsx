@@ -448,7 +448,6 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Status</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[150px]">Remarks</th>
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Upload Image</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">
@@ -461,7 +460,11 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                     const isOverdue = taskDate && taskDate < today && !hasSubmission;
 
                                     return (
-                                        <tr key={task.id || index} className="hover:bg-gray-50 transition-colors">
+                                        <tr
+                                            key={task.id || index}
+                                            className="hover:bg-gray-50 transition-colors cursor-pointer"
+                                            onDoubleClick={() => handleEditClick(task)}
+                                        >
                                             <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.id}</td>
 
                                             <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
@@ -571,15 +574,8 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                                 {isAudioUrl(task.remarks) ? <AudioPlayer url={task.remarks} /> : task.remarks}
                                             </td>
                                             <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
-                                                {task.uploaded_image_url ? (
-                                                    <a href={task.uploaded_image_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center justify-center gap-1">
-                                                        <CheckCircle className="h-3 w-3" /> View
-                                                    </a>
-                                                ) : '-'}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm whitespace-nowrap">
                                                 {editingTaskId === task.id ? (
-                                                    <div className="flex gap-2">
+                                                    <div className="flex gap-2 justify-center">
                                                         <button onClick={handleSaveEdit} disabled={isSaving} className="p-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
                                                             <Save size={14} />
                                                         </button>
@@ -588,9 +584,11 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                                         </button>
                                                     </div>
                                                 ) : (
-                                                    <button onClick={() => handleEditClick(task)} className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700">
-                                                        <Edit size={14} />
-                                                    </button>
+                                                    task.uploaded_image_url ? (
+                                                        <a href={task.uploaded_image_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center justify-center gap-1">
+                                                            <CheckCircle className="h-3 w-3" /> View
+                                                        </a>
+                                                    ) : '-'
                                                 )}
                                             </td>
                                         </tr>

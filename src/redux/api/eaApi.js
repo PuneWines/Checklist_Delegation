@@ -6,7 +6,7 @@ export const fetchEATasks = async () => {
         const { data, error } = await supabase
             .from('ea_tasks')
             .select('*')
-            .eq('status', 'pending')
+            .in('status', ['pending', 'extend', 'extended', 'Pending'])
             .order('planned_date', { ascending: true });
 
         if (error) throw error;
@@ -17,16 +17,17 @@ export const fetchEATasks = async () => {
     }
 };
 
-// Fetch EA task history (completed/extended)
+// Fetch EA task history (completed/approved)
 export const fetchEATasksHistory = async () => {
     try {
         const { data, error } = await supabase
-            .from('ea_tasks_done')
+            .from('ea_tasks')
             .select('*')
-            .order('submission_date', { ascending: false });
+            .in('status', ['done', 'approved', 'Approved', 'Done'])
+            .order('updated_at', { ascending: false });
 
         if (error) throw error;
-        return (data || []).map(row => ({ ...row, id: row.task_id }));
+        return (data || []).map(row => ({ ...row, id: row.task_id, department: "EA" }));
     } catch (err) {
         console.error('Error fetching EA task history:', err);
         return [];
@@ -66,37 +67,22 @@ export const updateEATask = async (taskId, updates) => {
     }
 };
 
-// Complete EA task (move to history)
+// Complete EA task (mark for admin approval)
 export const completeEATask = async (task, remarks = '', imageUrl = '') => {
     try {
-        // Insert into ea_tasks_done
-        const { data: doneData, error: doneError } = await supabase
-            .from('ea_tasks_done')
-            .insert([{
-                task_id: task.id,
-                doer_name: task.doer_name,
-                phone_number: task.phone_number,
-                planned_date: task.planned_date,
-                task_description: task.task_description,
-                status: 'pending', // Pending admin approval
+        const { data, error } = await supabase
+            .from('ea_tasks')
+            .update({
+                status: 'done', // Mark as pending for admin approval
                 remarks: remarks,
                 image_url: imageUrl,
-                given_by: task.given_by,
-                // admin_done removed
-            }])
+                updated_at: new Date().toISOString()
+            })
+            .eq('task_id', task.id || task.task_id)
             .select();
 
-        if (doneError) throw doneError;
-
-        // Update original task status
-        const { error: updateError } = await supabase
-            .from('ea_tasks')
-            .update({ status: 'done' })
-            .eq('task_id', task.id || task.task_id);
-
-        if (updateError) throw updateError;
-
-        return { success: true, data: doneData[0] };
+        if (error) throw error;
+        return { success: true, data: data[0] };
     } catch (err) {
         console.error('Error completing EA task:', err);
         return { success: false, error: err.message };
@@ -106,36 +92,19 @@ export const completeEATask = async (task, remarks = '', imageUrl = '') => {
 // Extend EA task deadline
 export const extendEATask = async (task, newPlannedDate, remarks = '') => {
     try {
-        // Insert into ea_tasks_done for history
-        const { data: doneData, error: doneError } = await supabase
-            .from('ea_tasks_done')
-            .insert([{
-                task_id: task.id,
-                doer_name: task.doer_name,
-                phone_number: task.phone_number,
-                planned_date: task.planned_date,
-                task_description: task.task_description,
-                status: 'extend',
-                remarks: remarks,
-                given_by: task.given_by
-            }])
-            .select();
-
-        if (doneError) throw doneError;
-
-        // Update task with new planned date
-        const { error: updateError } = await supabase
+        const { data, error } = await supabase
             .from('ea_tasks')
             .update({
                 planned_date: newPlannedDate,
                 status: 'pending',
+                remarks: remarks,
                 updated_at: new Date().toISOString()
             })
-            .eq('task_id', task.id || task.task_id);
+            .eq('task_id', task.id || task.task_id)
+            .select();
 
-        if (updateError) throw updateError;
-
-        return { success: true, data: doneData[0] };
+        if (error) throw error;
+        return { success: true, data: data[0] };
     } catch (err) {
         console.error('Error extending EA task:', err);
         return { success: false, error: err.message };
@@ -161,42 +130,86 @@ export const deleteEATask = async (taskId) => {
 export const fetchPendingEAApprovals = async () => {
     try {
         const { data, error } = await supabase
-            .from('ea_tasks_done')
+            .from('ea_tasks')
             .select('*')
-            .eq('status', 'pending') // Fetch pending approvals
-            .order('submission_date', { ascending: false });
+            .in('status', ['done', 'Done']) // 'done' status means waiting for admin approval
+            .or('admin_done.is.null,admin_done.eq.false') // Only fetch tasks not yet approved
+            .order('updated_at', { ascending: false });
 
         if (error) throw error;
-        return data || [];
+        return (data || []).map(task => ({ ...task, id: task.task_id, department: "EA" }));
     } catch (error) {
         console.error("Error fetching pending EA approvals:", error);
         return [];
     }
 };
 
-export const approveEATask = async (id) => {
+export const approveEATaskV2 = async (id) => {
+    console.log("APPROVING EA TASK WITH ID:", id);
     try {
-        // Update ea_tasks_done
-        const { data: doneData, error: doneError } = await supabase
-            .from('ea_tasks_done')
-            .update({ status: 'done' }) // Mark as approved/done
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (doneError) throw doneError;
-
-        // Try to update main task if possible (optional, but good for consistency)
-        if (doneData && doneData.task_id) {
-            await supabase
-                .from('ea_tasks')
-                .update({ status: 'approved' }) // Use 'approved' status explicitly
-                .eq('task_id', doneData.task_id);
+        const numericId = parseInt(id);
+        if (isNaN(numericId)) {
+            console.error("Invalid Task ID provided to approveEATaskV2:", id);
+            throw new Error("Invalid Task ID: " + id);
         }
 
-        return doneData;
+        const { data, error } = await supabase
+            .from('ea_tasks')
+            .update({
+                admin_done: true, // Mark as admin approved
+                updated_at: new Date().toISOString()
+            })
+            .eq('task_id', numericId)
+            .select();
+
+        if (error) {
+            console.error("Supabase Error in approveEATaskV2:", error);
+            throw error;
+        }
+
+        console.log("EA Task Approved successfully:", data);
+        return data && data.length > 0 ? data[0] : null;
     } catch (error) {
-        console.error("Error approving EA task:", error);
+        console.error("Error in approveEATaskV2 catch block:", error);
         throw error;
     }
 };
+
+export const rejectEATask = async (id, reason) => {
+    try {
+        const numericId = parseInt(id);
+        const { data, error } = await supabase
+            .from('ea_tasks')
+            .update({
+                admin_done: false,
+                status: 'pending', // Revert to pending
+                remarks: reason
+            })
+            .eq('task_id', numericId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error("Error rejecting EA task:", error);
+        throw error;
+    }
+};
+
+export const fetchApprovedEA = async () => {
+    try {
+        const { data, error } = await supabase
+            .from('ea_tasks')
+            .select('*')
+            .eq('admin_done', true)
+            .order('updated_at', { ascending: false });
+
+        if (error) throw error;
+        return (data || []).map(row => ({ ...row, id: row.task_id, department: "EA" }));
+    } catch (error) {
+        console.error("Error fetching approved EA tasks:", error);
+        return [];
+    }
+};
+

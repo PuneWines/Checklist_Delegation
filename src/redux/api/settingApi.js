@@ -115,7 +115,10 @@ export const createUserApi = async (newUser) => {
           employee_id: newUser.employee_id, // Add this line
           role: newUser.role,
           status: newUser.status,
-          user_access: newUser.user_access
+          user_access: newUser.user_access,
+          leave_date: newUser.leave_date || null,
+          leave_end_date: newUser.leave_end_date || null,
+          remark: newUser.remark || null
         }
       ])
       .select()

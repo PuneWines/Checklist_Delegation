@@ -57,10 +57,11 @@ export const postRepairTaskApi = async (formData) => {
         const { data, error } = await supabase
             .from('repair_tasks')
             .insert({
-                filled_by: formData.filledBy,           // Matches "Form Filled By"
-                assigned_person: formData.assignedPerson, // Matches "To Assign Person"
-                machine_name: formData.machineName,     // Matches "Machine Name"
-                issue_description: formData.issueDetails, // Matches "Issue Details"
+                filled_by: formData.filledBy,
+                assigned_person: formData.assignedPerson,
+                machine_name: formData.machineName,
+                issue_description: formData.issueDetails,
+                duration: formData.duration || null,
                 status: 'Pending'
             })
             .select();
@@ -81,8 +82,8 @@ export const updateRepairData = async (updates) => {
             const { data, error } = await supabase
                 .from('repair_tasks')
                 .update({
-                    // Use 'Pending Approval' status on completion instead of admin_done
-                    status: item.status === 'Done' ? 'Pending Approval' : item.status,
+                    // Any submission (Completed, Done or Issue) needs admin approval first
+                    status: (item.status === 'Completed' || item.status === 'Done' || item.status === 'Issue') ? 'Pending Approval' : item.status,
                     part_replaced: item.partReplaced || null,
                     bill_amount: item.billAmount || null,
                     remarks: item.remarks || null,
@@ -116,7 +117,7 @@ export const fetchRepairDataForHistory = async (page = 1, searchTerm = '') => {
         let query = supabase
             .from('repair_tasks')
             .select('*', { count: 'exact' })
-            .neq('status', 'Pending')
+            .eq('status', 'Approved')
             .order('submission_date', { ascending: false })
             .range(from, to);
 
@@ -143,7 +144,12 @@ export const fetchPendingRepairApprovals = async () => {
             .order('submission_date', { ascending: false });
 
         if (error) throw error;
-        return data || [];
+        return (data || []).map(task => ({
+            ...task,
+            id: task.id,
+            department: task.department || 'Repair',
+            name: task.assigned_person || task.filled_by // Use doer's name for approval list
+        }));
     } catch (error) {
         console.error("Error fetching pending repair approvals:", error);
         return [];
@@ -154,7 +160,7 @@ export const approveRepairTask = async (id) => {
     try {
         const { data, error } = await supabase
             .from('repair_tasks')
-            .update({ status: 'Done' }) // Mark as fully Done/Approved
+            .update({ status: 'Approved' }) // Mark as fully Approved
             .eq('id', id)
             .select()
             .single();
@@ -164,5 +170,49 @@ export const approveRepairTask = async (id) => {
     } catch (error) {
         console.error("Error approving repair task:", error);
         throw error;
+    }
+};
+
+export const rejectRepairTask = async (id, reason) => {
+    try {
+        // Reset status to Pending so doer can retry/edit
+        const { data, error } = await supabase
+            .from('repair_tasks')
+            .update({
+                status: 'Pending',
+                // Clear submission details?
+                work_done: null,
+                work_photo_url: null,
+                bill_copy_url: null,
+                // remarks: reason // Maybe append reason to remarks?
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error("Error rejecting repair task:", error);
+        throw error;
+    }
+};
+
+export const fetchApprovedRepairs = async () => {
+    try {
+        const { data, error } = await supabase
+            .from('repair_tasks')
+            .select('*')
+            .eq('status', 'Approved')
+            .order('submission_date', { ascending: false });
+
+        if (error) throw error;
+        return (data || []).map(task => ({
+            ...task,
+            department: task.department || 'Repair'
+        }));
+    } catch (error) {
+        console.error("Error fetching approved repair tasks:", error);
+        return [];
     }
 };

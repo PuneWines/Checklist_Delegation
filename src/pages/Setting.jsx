@@ -5,9 +5,17 @@ import { useDispatch, useSelector } from 'react-redux';
 import { createDepartment, createUser, deleteUser, departmentOnlyDetails, givenByDetails, departmentDetails, updateDepartment, updateUser, userDetails, customDropdownDetails, createCustomDropdown, deleteCustomDropdown, createAssignFrom, deleteDepartment, deleteAssignFrom, updateCustomDropdown, updateAssignFrom, createMachineEntries } from '../redux/slice/settingSlice';
 import supabase from '../SupabaseClient';
 import CalendarComponent from '../components/CalendarComponent';
+import { createPortal } from 'react-dom';
+import { sendTaskReassignmentNotification } from '../services/whatsappService';
 
 const formatDateLong = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
-const formatDateISO = (date) => date ? date.toISOString().split('T')[0] : "";
+const formatDateISO = (date) => {
+  if (!date) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const Setting = () => {
   const [activeTab, setActiveTab] = useState('users');
@@ -23,13 +31,20 @@ const Setting = () => {
 
   const [activeDeptSubTab, setActiveDeptSubTab] = useState('departments');
   // Leave Management State
-  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [leavePerson, setLeavePerson] = useState('');
   const [leaveStartDate, setLeaveStartDate] = useState('');
   const [leaveEndDate, setLeaveEndDate] = useState('');
-  const [remark, setRemark] = useState('');
-  const [leaveUsernameFilter, setLeaveUsernameFilter] = useState('');
+  const [leaveTasks, setLeaveTasks] = useState([]);
+  const [leaveTasksLoading, setLeaveTasksLoading] = useState(false);
+  const [shiftToPerson, setShiftToPerson] = useState('');
+  const [leaveSubmitting, setLeaveSubmitting] = useState(false);
+  const [leaveSuccess, setLeaveSuccess] = useState(false);
   const [showStartCalendar, setShowStartCalendar] = useState(false);
   const [showEndCalendar, setShowEndCalendar] = useState(false);
+  const [startCalendarPos, setStartCalendarPos] = useState({ top: 0, left: 0 });
+  const [endCalendarPos, setEndCalendarPos] = useState({ top: 0, left: 0 });
+  const startBtnRef = useRef(null);
+  const endBtnRef = useRef(null);
 
   const { userData, department, departmentsOnly, givenBy, customDropdowns, loading, error } = useSelector((state) => state.setting);
   const dispatch = useDispatch();
@@ -314,7 +329,7 @@ const Setting = () => {
       const updatePromises = Object.entries(employeeStatus).map(async ([employeeCode, statusInfo]) => {
         if (!userData || !Array.isArray(userData)) return;
         const user = userData.find(u => u.employee_id === employeeCode);
-        if (user && user.status !== statusInfo.status) {
+        if (user && user.status !== statusInfo.status && user.status !== 'on leave') {
           const { error } = await supabase
             .from('users')
             .update({ status: statusInfo.status })
@@ -462,81 +477,120 @@ const Setting = () => {
     }
   };
 
-  const handleSubmitLeave = async () => {
-    if (selectedUsers.length === 0 || !leaveStartDate || !leaveEndDate) {
-      alert('Please select at least one user and provide both start and end dates');
+  // Fetch tasks for the person on leave within the date range
+  const handleFetchLeaveTasks = async () => {
+    if (!leavePerson || !leaveStartDate || !leaveEndDate) {
+      alert('Please select a person and both start and end dates');
       return;
     }
-
-    // Validate date range
-    const startDate = new Date(leaveStartDate);
-    const endDate = new Date(leaveEndDate);
-
-    if (startDate > endDate) {
+    if (new Date(leaveStartDate) > new Date(leaveEndDate)) {
       alert('End date cannot be before start date');
       return;
     }
-
+    setLeaveTasksLoading(true);
+    setLeaveTasks([]);
+    setLeaveSuccess(false);
     try {
-      // Update each selected user with leave information
-      const updatePromises = selectedUsers.map(userId =>
-        dispatch(updateUser({
-          id: userId,
-          updatedUser: {
-            leave_date: leaveStartDate, // You can store start date or both dates
-            leave_end_date: leaveEndDate, // Add this field to your user table if needed
-            remark: remark
-          }
-        })).unwrap()
+      const startISO = `${leaveStartDate}T00:00:00`;
+      const endISO = `${leaveEndDate}T23:59:59`;
+
+      const [{ data: checklistTasks }, { data: delegationTasks }] = await Promise.all([
+        supabase.from('checklist').select('*').eq('name', leavePerson)
+          .gte('task_start_date', startISO).lte('task_start_date', endISO).is('submission_date', null),
+        supabase.from('delegation').select('*').eq('name', leavePerson)
+          .gte('task_start_date', startISO).lte('task_start_date', endISO).is('submission_date', null)
+      ]);
+
+      const combined = [
+        ...(checklistTasks || []).map(t => ({ ...t, _table: 'checklist', id: t.task_id })),
+        ...(delegationTasks || []).map(t => ({ ...t, _table: 'delegation', id: t.task_id }))
+      ];
+      setLeaveTasks(combined);
+    } catch (err) {
+      console.error('Error fetching leave tasks:', err);
+    } finally {
+      setLeaveTasksLoading(false);
+    }
+  };
+
+  // Shift all fetched tasks to the substitute person and mark on leave
+  const handleShiftTasks = async () => {
+    // If there are tasks found, we MUST have a substitute person
+    if (leaveTasks.length > 0 && !shiftToPerson) {
+      alert('Please select a person to shift tasks to');
+      return;
+    }
+
+    const confirmMsg = leaveTasks.length > 0
+      ? `Shift ${leaveTasks.length} task(s) from "${leavePerson}" to "${shiftToPerson}" and mark "${leavePerson}" as On Leave?`
+      : `Mark "${leavePerson}" as On Leave? (No tasks found to shift)`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setLeaveSubmitting(true);
+    try {
+      const checklistIds = leaveTasks.filter(t => t._table === 'checklist').map(t => t.task_id);
+      const delegationIds = leaveTasks.filter(t => t._table === 'delegation').map(t => t.task_id);
+
+      const updates = [];
+
+      // Update User Status and Leave Dates
+      updates.push(supabase
+        .from('users')
+        .update({
+          status: 'on leave',
+          leave_date: leaveStartDate,
+          leave_end_date: leaveEndDate
+        })
+        .eq('user_name', leavePerson)
       );
 
-      await Promise.all(updatePromises);
+      // Update Tasks (If any)
+      if (checklistIds.length > 0) {
+        updates.push(supabase.from('checklist').update({ name: shiftToPerson }).in('task_id', checklistIds));
+      }
+      if (delegationIds.length > 0) {
+        updates.push(supabase.from('delegation').update({ name: shiftToPerson }).in('task_id', delegationIds));
+      }
 
-      // Delete matching checklist tasks for the date range
-      const deleteChecklistPromises = selectedUsers.map(async (userId) => {
-        const user = userData.find(u => u.id === userId);
-        if (user && user.user_name) {
-          try {
-            // Format dates for Supabase query
-            const formattedStartDate = `${leaveStartDate}T00:00:00`;
-            const formattedEndDate = `${leaveEndDate}T23:59:59`;
+      await Promise.all(updates);
 
-            // console.log(`Deleting tasks for ${user.user_name} from ${leaveStartDate} to ${leaveEndDate}`);
-
-            // Delete checklist tasks where name matches and date falls within the range
-            const { error } = await supabase
-              .from('checklist')
-              .delete()
-              .eq('name', user.user_name)
-              .gte('task_start_date', formattedStartDate)
-              .lte('task_start_date', formattedEndDate);
-
-            if (error) {
-              console.error('Error deleting checklist tasks:', error);
-            } else {
-              console.log(`Deleted checklist tasks for ${user.user_name} from ${leaveStartDate} to ${leaveEndDate}`);
-            }
-          } catch (error) {
-            console.error('Error in checklist deletion:', error);
-          }
+      // Send WhatsApp Notifications for shifted tasks
+      if (leaveTasks.length > 0) {
+        for (const task of leaveTasks) {
+          await sendTaskReassignmentNotification({
+            newDoerName: shiftToPerson,
+            originalDoerName: leavePerson,
+            taskId: task.task_id,
+            description: task.task_description,
+            startDate: task.task_start_date ? new Date(task.task_start_date).toLocaleDateString('en-IN') : 'N/A',
+            givenBy: task.given_by,
+            department: task.department,
+            taskType: task._table
+          });
         }
-      });
+      }
 
-      await Promise.all(deleteChecklistPromises);
-
-      // Reset form
-      setSelectedUsers([]);
-      setLeaveStartDate('');
-      setLeaveEndDate('');
-      setRemark('');
-
-      // Refresh data
-      setTimeout(() => window.location.reload(), 1000);
-      alert('Leave information submitted successfully and matching tasks deleted');
-    } catch (error) {
-      console.error('Error submitting leave information:', error);
-      alert('Error submitting leave information');
+      setLeaveSuccess(true);
+      setLeaveTasks([]);
+      setShiftToPerson('');
+      // Re-fetch user details to reflect the "on leave" status immediately
+      dispatch(userDetails());
+    } catch (err) {
+      console.error('Error shifting tasks:', err);
+      alert('Error shifting tasks. Please try again.');
+    } finally {
+      setLeaveSubmitting(false);
     }
+  };
+
+  const handleResetLeave = () => {
+    setLeavePerson('');
+    setLeaveStartDate('');
+    setLeaveEndDate('');
+    setLeaveTasks([]);
+    setShiftToPerson('');
+    setLeaveSuccess(false);
   };
 
   // Add to your existing handleTabChange function
@@ -673,7 +727,10 @@ const Setting = () => {
       employee_id: userForm.employee_id, // Add this line
       role: userForm.role,
       status: userForm.status,
-      user_access: userForm.department
+      user_access: userForm.department,
+      leave_date: userForm.leave_date || null,
+      leave_end_date: userForm.leave_end_date || null,
+      remark: userForm.remark || null
     };
 
     try {
@@ -832,7 +889,10 @@ const Setting = () => {
       employee_id: user.employee_id || '', // Add this line
       department: user.user_access || '',
       role: user.role,
-      status: user.status
+      status: user.status,
+      leave_date: user.leave_date ? user.leave_date.split('T')[0] : '',
+      leave_end_date: user.leave_end_date ? user.leave_end_date.split('T')[0] : '',
+      remark: user.remark || ''
     });
     setCurrentUserId(userId);
     setIsEditing(true);
@@ -890,7 +950,10 @@ const Setting = () => {
       department: '', // Add this line
       givenBy: '',
       role: 'user',
-      status: 'active'
+      status: 'active',
+      leave_date: '',
+      leave_end_date: '',
+      remark: ''
     });
     setIsEditing(false);
     setCurrentUserId(null);
@@ -941,14 +1004,14 @@ const Setting = () => {
   };
 
 
-  // Add this filtered users calculation for leave tab
-  const filteredLeaveUsers = userData?.filter(user =>
-    !leaveUsernameFilter || user.user_name.toLowerCase().includes(leaveUsernameFilter.toLowerCase())
-  );
+  // User names list for dropdowns
+  const userNames = userData?.filter(u => u.user_name && u.user_name !== 'admin' && u.user_name !== 'DSMC').map(u => u.user_name) || [];
 
 
   const getStatusColor = (status) => {
-    return status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+    if (status === 'active') return 'bg-green-100 text-green-800';
+    if (status === 'on leave') return 'bg-amber-100 text-amber-800';
+    return 'bg-red-100 text-red-800';
   };
 
   const getRoleColor = (role) => {
@@ -1053,164 +1116,220 @@ const Setting = () => {
 
 
         {/* Leave Management Tab */}
-        {
-          activeTab === 'leave' && (
-            <div className="bg-white shadow rounded-lg overflow-hidden border border-purple-200">
-              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple px-4 py-4 md:px-6 flex flex-col md:flex-row gap-4 md:items-center justify-between">
-                <h2 className="text-lg font-bold text-purple-700">Leave Management</h2>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-                    <input
-                      type="text"
-                      list="leaveUsernameOptions"
-                      placeholder="Filter users..."
-                      value={leaveUsernameFilter}
-                      onChange={(e) => setLeaveUsernameFilter(e.target.value)}
-                      className="w-full sm:w-48 pl-10 pr-8 py-2 border border-purple-200 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                    />
-                    <datalist id="leaveUsernameOptions">
-                      {userData?.map(user => (
-                        <option key={`opt-leave-${user.id}`} value={user.user_name} />
-                      ))}
-                    </datalist>
-                  </div>
-
-                  <button
-                    onClick={handleSubmitLeave}
-                    className="rounded-md bg-green-600 py-2 px-6 text-white font-bold hover:bg-green-700 shadow-md transition-all text-sm"
-                  >
-                    Submit Leave
-                  </button>
+        {activeTab === 'leave' && (
+          <div className="space-y-5">
+            {/* Step 1: Leave Form */}
+            <div className="bg-white shadow rounded-xl border border-purple-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-purple-700">Leave Management</h2>
+                  <p className="text-xs text-purple-500 mt-0.5">Reassign tasks to a substitute during leave period</p>
                 </div>
+                {(leaveTasks.length > 0 || leaveSuccess) && (
+                  <button onClick={handleResetLeave} className="text-xs text-purple-600 border border-purple-200 rounded-lg px-3 py-1.5 hover:bg-purple-50 font-semibold transition-all">
+                    ↺ Start Over
+                  </button>
+                )}
               </div>
 
-
-              {/* Leave Form */}
-              <div className="p-4 md:p-6 border-b border-gray-200">
+              <div className="p-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="relative">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Leave Start Date
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowStartCalendar(!showStartCalendar)}
-                      className="w-full border border-gray-200 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 focus:bg-white transition-all text-sm text-left flex justify-between items-center"
+                  {/* Person on Leave */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Person on Leave</label>
+                    <select
+                      value={leavePerson}
+                      onChange={e => { setLeavePerson(e.target.value); setLeaveTasks([]); setLeaveSuccess(false); }}
+                      className="w-full border border-gray-200 rounded-lg py-2.5 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-gray-50"
                     >
-                      {leaveStartDate ? formatDateLong(new Date(leaveStartDate)) : "Select start date"}
-                      <Calendar size={16} className="text-gray-400" />
+                      <option value="">Select person...</option>
+                      {userNames.map(name => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Leave Start Date */}
+                  <div className="relative">
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Leave Start Date</label>
+                    <button
+                      ref={startBtnRef}
+                      type="button"
+                      onClick={() => {
+                        const rect = startBtnRef.current?.getBoundingClientRect();
+                        if (rect) setStartCalendarPos({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX });
+                        setShowStartCalendar(!showStartCalendar);
+                        setShowEndCalendar(false);
+                      }}
+                      className="w-full border border-gray-200 rounded-lg py-2.5 px-3 text-sm text-left flex justify-between items-center bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    >
+                      <span className={leaveStartDate ? 'text-gray-800' : 'text-gray-400'}>
+                        {leaveStartDate ? formatDateLong(new Date(leaveStartDate)) : 'Select date'}
+                      </span>
+                      <Calendar size={14} className="text-gray-400" />
                     </button>
-                    {showStartCalendar && (
-                      <div className="absolute top-full left-0 mt-2 z-50">
+                    {showStartCalendar && createPortal(
+                      <div style={{ position: 'fixed', top: startCalendarPos.top, left: startCalendarPos.left, zIndex: 9999 }}>
                         <CalendarComponent
                           date={leaveStartDate ? new Date(leaveStartDate) : null}
-                          onChange={(date) => setLeaveStartDate(formatDateISO(date))}
+                          onChange={date => { setLeaveStartDate(formatDateISO(date)); setShowStartCalendar(false); setLeaveTasks([]); }}
                           onClose={() => setShowStartCalendar(false)}
                         />
-                      </div>
+                      </div>,
+                      document.body
                     )}
                   </div>
+
+                  {/* Leave End Date */}
                   <div className="relative">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Leave End Date
-                    </label>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Leave End Date</label>
                     <button
+                      ref={endBtnRef}
                       type="button"
-                      onClick={() => setShowEndCalendar(!showEndCalendar)}
-                      className="w-full border border-gray-200 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 focus:bg-white transition-all text-sm text-left flex justify-between items-center"
+                      onClick={() => {
+                        const rect = endBtnRef.current?.getBoundingClientRect();
+                        if (rect) setEndCalendarPos({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX });
+                        setShowEndCalendar(!showEndCalendar);
+                        setShowStartCalendar(false);
+                      }}
+                      className="w-full border border-gray-200 rounded-lg py-2.5 px-3 text-sm text-left flex justify-between items-center bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-400"
                     >
-                      {leaveEndDate ? formatDateLong(new Date(leaveEndDate)) : "Select end date"}
-                      <Calendar size={16} className="text-gray-400" />
+                      <span className={leaveEndDate ? 'text-gray-800' : 'text-gray-400'}>
+                        {leaveEndDate ? formatDateLong(new Date(leaveEndDate)) : 'Select date'}
+                      </span>
+                      <Calendar size={14} className="text-gray-400" />
                     </button>
-                    {showEndCalendar && (
-                      <div className="absolute top-full left-0 mt-2 z-50">
+                    {showEndCalendar && createPortal(
+                      <div style={{ position: 'fixed', top: endCalendarPos.top, left: endCalendarPos.left, zIndex: 9999 }}>
                         <CalendarComponent
                           date={leaveEndDate ? new Date(leaveEndDate) : null}
-                          onChange={(date) => setLeaveEndDate(formatDateISO(date))}
+                          onChange={date => { setLeaveEndDate(formatDateISO(date)); setShowEndCalendar(false); setLeaveTasks([]); }}
                           onClose={() => setShowEndCalendar(false)}
                         />
-                      </div>
+                      </div>,
+                      document.body
                     )}
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Remarks
-                    </label>
-                    <input
-                      type="text"
-                      value={remark}
-                      onChange={(e) => setRemark(e.target.value)}
-                      placeholder="Enter remarks..."
-                      className="w-full border border-gray-200 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 focus:bg-white transition-all text-sm"
-                    />
+
+                  {/* Fetch Button */}
+                  <div className="flex items-end">
+                    <button
+                      onClick={handleFetchLeaveTasks}
+                      disabled={leaveTasksLoading || !leavePerson || !leaveStartDate || !leaveEndDate}
+                      className="w-full py-2.5 px-4 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {leaveTasksLoading ? (
+                        <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Fetching...</>
+                      ) : 'Show Tasks'}
+                    </button>
                   </div>
                 </div>
               </div>
-
-              {/* Users List for Leave Selection - Updated with filter */}
-              {/* Users List for Leave Selection */}
-              <div className="h-[calc(100vh-400px)] overflow-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <input
-                          type="checkbox"
-                          onChange={handleSelectAll}
-                          checked={selectedUsers.length === filteredLeaveUsers?.length && filteredLeaveUsers?.length > 0}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Username
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Current Leave Start Date
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Current Leave End Date
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Current Remarks
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredLeaveUsers?.map((user) => (
-                      <tr key={`leave-${user.id}`} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <input
-                            type="checkbox"
-                            checked={selectedUsers.includes(user.id)}
-                            onChange={(e) => handleUserSelection(user.id, e.target.checked)}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{user.user_name}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {user.leave_date ? new Date(user.leave_date).toLocaleDateString() : 'No leave set'}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {user.leave_end_date ? new Date(user.leave_end_date).toLocaleDateString() : 'No end date set'}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{user.remark || 'No remarks'}</div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </div>
-          )}
+
+            {/* Success Banner */}
+            {leaveSuccess && (
+              <div className="bg-green-50 border border-green-200 rounded-xl px-6 py-4 flex items-center gap-3">
+                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold text-lg">✓</div>
+                <div>
+                  <p className="text-green-800 font-bold text-sm">Tasks shifted successfully!</p>
+                  <p className="text-green-600 text-xs mt-0.5">All tasks have been reassigned to <strong>{shiftToPerson || 'the substitute'}</strong> and will appear in their task panel.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Tasks Preview + Shift */}
+            {leaveTasks.length > 0 && !leaveSuccess && (
+              <div className="bg-white shadow rounded-xl border border-purple-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-blue-800">Tasks During Leave Period</h3>
+                    <p className="text-xs text-blue-500 mt-0.5">
+                      {leaveTasks.length} task(s) found for <strong>{leavePerson}</strong> between {leaveStartDate} and {leaveEndDate}
+                    </p>
+                  </div>
+
+                  {/* Shift To + Confirm */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div>
+                      <select
+                        value={shiftToPerson}
+                        onChange={e => setShiftToPerson(e.target.value)}
+                        className="border border-blue-200 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white min-w-[180px]"
+                      >
+                        <option value="">Shift to person...</option>
+                        {userNames.filter(n => n !== leavePerson).map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      onClick={handleShiftTasks}
+                      disabled={leaveSubmitting || !shiftToPerson}
+                      className="py-2 px-5 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap"
+                    >
+                      {leaveSubmitting ? (
+                        <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Shifting...</>
+                      ) : '✓ Confirm Shift'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-auto max-h-[400px]">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Task</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Department</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Given By</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {leaveTasks.map((task, idx) => (
+                        <tr key={`lt-${task.task_id}-${idx}`} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-xs text-gray-400">{idx + 1}</td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm font-medium text-gray-800 max-w-xs truncate">{task.task_description}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${task._table === 'checklist' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                              }`}>
+                              {task._table === 'checklist' ? 'Checklist' : 'Delegation'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-600">
+                            {task.task_start_date ? new Date(task.task_start_date).toLocaleDateString('en-IN') : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-600">{task.department || '—'}</td>
+                          <td className="px-4 py-3 text-xs text-gray-600">{task.given_by || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Empty state after fetch */}
+            {!leaveTasksLoading && leavePerson && leaveStartDate && leaveEndDate && leaveTasks.length === 0 && !leaveSuccess && (
+              <div className="bg-white border border-gray-200 rounded-xl px-6 py-10 text-center">
+                <Calendar size={36} className="mx-auto text-gray-300 mb-3" />
+                <p className="text-gray-500 font-medium">No pending tasks found</p>
+                <p className="text-gray-400 text-sm mt-1">There are no pending tasks for <strong>{leavePerson}</strong> between the selected dates.</p>
+                <button
+                  onClick={handleShiftTasks}
+                  disabled={leaveSubmitting}
+                  className="mt-6 py-2.5 px-6 bg-amber-600 text-white text-sm font-bold rounded-lg hover:bg-amber-700 transition-all flex items-center justify-center gap-2 mx-auto"
+                >
+                  {leaveSubmitting ? (
+                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Updating...</>
+                  ) : 'Mark as On Leave Anyway'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
 
         {/* Users Tab */}
@@ -1299,12 +1418,20 @@ const Setting = () => {
 
                           {/* ADD THE STATUS CELL HERE */}
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(user?.status)}`}>
-                                {user?.status}
-                              </span>
-                              {user?.status === 'active' && (
-                                <span className="ml-2 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live Status"></span>
+                            <div className="flex flex-col">
+                              <div className="flex items-center">
+                                <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(user?.status)}`}>
+                                  {user?.status}
+                                </span>
+                                {user?.status === 'active' && (
+                                  <span className="ml-2 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live Status"></span>
+                                )}
+                              </div>
+                              {user?.status === 'on leave' && user?.leave_date && (
+                                <span className="text-[10px] text-amber-600 font-medium mt-1">
+                                  {new Date(user.leave_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                  {user.leave_end_date ? ` to ${new Date(user.leave_end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
+                                </span>
                               )}
                             </div>
                           </td>
@@ -1725,9 +1852,8 @@ const Setting = () => {
                         onChange={handleUserInputChange}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
                       >
-                        <option value="user">Standard User</option>
-                        <option value="admin">Administrator</option>
-                        <option value="manager">Manager</option>
+                        <option value="admin">Admin</option>
+                        <option value="user">User</option>
                       </select>
                     </div>
 
@@ -1750,6 +1876,66 @@ const Setting = () => {
                         ) : null}
                       </select>
                     </div>
+
+                    {isEditing && (
+                      <>
+                        <div className="md:col-span-2 border-t border-gray-100 pt-4 mt-2">
+                          <h4 className="text-sm font-bold text-indigo-900 mb-4 px-1">Leave & Status Management</h4>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label htmlFor="status" className="block text-sm font-bold text-gray-700 ml-1">User Status</label>
+                          <select
+                            id="status"
+                            name="status"
+                            value={userForm.status}
+                            onChange={handleUserInputChange}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                          >
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                            <option value="on leave">On Leave</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label htmlFor="leave_date" className="block text-sm font-bold text-gray-700 ml-1">Leave Start Date</label>
+                          <input
+                            type="date"
+                            id="leave_date"
+                            name="leave_date"
+                            value={userForm.leave_date}
+                            onChange={handleUserInputChange}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label htmlFor="leave_end_date" className="block text-sm font-bold text-gray-700 ml-1">Leave End Date</label>
+                          <input
+                            type="date"
+                            id="leave_end_date"
+                            name="leave_end_date"
+                            value={userForm.leave_end_date}
+                            onChange={handleUserInputChange}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                          />
+                        </div>
+
+                        <div className="space-y-2 md:col-span-2">
+                          <label htmlFor="remark" className="block text-sm font-bold text-gray-700 ml-1">Remark / Reason</label>
+                          <textarea
+                            id="remark"
+                            name="remark"
+                            value={userForm.remark}
+                            onChange={handleUserInputChange}
+                            rows="2"
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all resize-none"
+                            placeholder="Enter any remarks or leave reason..."
+                          ></textarea>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="flex justify-end gap-3 pt-6">

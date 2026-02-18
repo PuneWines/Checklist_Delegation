@@ -251,6 +251,7 @@ export const updateDelegationTaskApi = async (updatedTask, originalTask) => {
       task_description: updatedTask.task_description,
       task_start_date: updatedTask.task_start_date,
       frequency: updatedTask.frequency,
+      duration: updatedTask.duration || null,
       enable_reminder: updatedTask.enable_reminder,
       require_attachment: updatedTask.require_attachment,
       remarks: updatedTask.remarks
@@ -471,5 +472,47 @@ export const approveChecklistTask = async (id) => {
   } catch (error) {
     console.error("Error approving checklist task:", error);
     throw error;
+  }
+};
+
+export const rejectChecklistTask = async (id, reason) => {
+  try {
+    const { data, error } = await supabase
+      .from('checklist')
+      .update({
+        admin_done: false,
+        submission_date: null,
+        // Reset confirmation fields?
+        // Note: We keep the task but reset submission status
+        // Optionally clear image_url if needed, but maybe keep it for reference?
+        // If we want it "pending", submission_date must be null.
+        // It's better to clear proof if it was rejected?
+        // Let's assume we reset it completely so they can submit again.
+      })
+      .eq('task_id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Error rejecting checklist task:", error);
+    throw error;
+  }
+};
+
+export const fetchChecklistHistory = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('checklist')
+      .select('*')
+      .eq('admin_done', true)
+      .order('submission_date', { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map(row => ({ ...row, id: row.task_id }));
+  } catch (error) {
+    console.error("Error fetching checklist history:", error);
+    return [];
   }
 };

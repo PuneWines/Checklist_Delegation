@@ -292,3 +292,42 @@ export const approveMaintenanceTask = async (id) => {
         throw error;
     }
 };
+
+export const rejectMaintenanceTask = async (id, reason) => {
+    try {
+        const { data, error } = await supabase
+            .from('maintenance_tasks')
+            .update({
+                admin_done: false,
+                submission_date: null,
+                // status: 'Pending', // Optional: reset status
+                uploaded_image_url: null, // Clear proof so they re-upload
+                remarks: reason // Set remarks to rejection reason? Or keep separate field?
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error("Error rejecting maintenance task:", error);
+        throw error;
+    }
+};
+
+export const fetchApprovedMaintenance = async () => {
+    try {
+        const { data, error } = await supabase
+            .from('maintenance_tasks')
+            .select('*')
+            .eq('admin_done', true)
+            .order('submission_date', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error("Error fetching approved maintenance tasks:", error);
+        return [];
+    }
+};

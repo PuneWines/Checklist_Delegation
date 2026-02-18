@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useDispatch } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { fetchPendingApprovals, updateDelegationDoneStatus } from "../../redux/api/delegationApi";
-import { fetchPendingMaintenanceApprovals, approveMaintenanceTask } from "../../redux/api/maintenanceApi";
-import { fetchPendingRepairApprovals, approveRepairTask } from "../../redux/api/repairApi";
-import { fetchPendingEAApprovals, approveEATask } from "../../redux/api/eaApi";
-import { fetchPendingChecklistApprovals, approveChecklistTask } from "../../redux/api/quickTaskApi";
-import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase } from "lucide-react";
+import { fetchPendingApprovals, updateDelegationDoneStatus, rejectDelegationTask, fetchDelegationHistory } from "../../redux/api/delegationApi";
+import { fetchPendingMaintenanceApprovals, approveMaintenanceTask, rejectMaintenanceTask, fetchApprovedMaintenance } from "../../redux/api/maintenanceApi";
+import { fetchPendingRepairApprovals, approveRepairTask, rejectRepairTask, fetchApprovedRepairs } from "../../redux/api/repairApi";
+import { fetchPendingEAApprovals, approveEATaskV2, rejectEATask, fetchApprovedEA } from "../../redux/api/eaApi";
+import { fetchPendingChecklistApprovals, approveChecklistTask, rejectChecklistTask, fetchChecklistHistory } from "../../redux/api/quickTaskApi";
+import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase, XCircle, History, Clock } from "lucide-react";
+import { sendTaskRejectionNotification } from "../../services/whatsappService";
 
 // Helper to extract audio URL from text
 const extractAudioUrl = (text) => {
@@ -70,27 +71,31 @@ const AudioPlayer = ({ url }) => {
 
 export default function AdminApprovalPage() {
     const [activeTab, setActiveTab] = useState("delegation");
+    const [viewMode, setViewMode] = useState("pending"); // 'pending' or 'history'
     const [pendingTasks, setPendingTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [processingId, setProcessingId] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
     const dispatch = useDispatch();
 
-    const loadPendingTasks = async () => {
+    const loadTasks = async () => {
         setLoading(true);
         setPendingTasks([]);
         let data = [];
         try {
-            if (activeTab === "delegation") {
-                data = await fetchPendingApprovals();
-            } else if (activeTab === "maintenance") {
-                data = await fetchPendingMaintenanceApprovals();
-            } else if (activeTab === "repair") {
-                data = await fetchPendingRepairApprovals();
-            } else if (activeTab === "ea") {
-                data = await fetchPendingEAApprovals();
-            } else if (activeTab === "checklist") {
-                data = await fetchPendingChecklistApprovals();
+            if (viewMode === "pending") {
+                if (activeTab === "delegation") data = await fetchPendingApprovals();
+                else if (activeTab === "maintenance") data = await fetchPendingMaintenanceApprovals();
+                else if (activeTab === "repair") data = await fetchPendingRepairApprovals();
+                else if (activeTab === "ea") data = await fetchPendingEAApprovals();
+                else if (activeTab === "checklist") data = await fetchPendingChecklistApprovals();
+            } else {
+                // History Mode
+                if (activeTab === "delegation") data = await fetchDelegationHistory();
+                else if (activeTab === "maintenance") data = await fetchApprovedMaintenance();
+                else if (activeTab === "repair") data = await fetchApprovedRepairs();
+                else if (activeTab === "ea") data = await fetchApprovedEA();
+                else if (activeTab === "checklist") data = await fetchChecklistHistory();
             }
         } catch (error) {
             console.error("Error loading tasks:", error);
@@ -100,12 +105,20 @@ export default function AdminApprovalPage() {
     };
 
     useEffect(() => {
-        loadPendingTasks();
-    }, [activeTab]);
+        loadTasks();
+    }, [activeTab, viewMode]);
 
     const handleApprove = async (task) => {
         setProcessingId(task.id);
+        if (!task.id) {
+            console.error("Task ID is missing!", task);
+            alert("Failed to approve task: Task ID is missing");
+            setProcessingId(null);
+            return;
+        }
+
         try {
+            console.log("Approving task:", task);
             if (activeTab === "delegation") {
                 await dispatch(updateDelegationDoneStatus({
                     id: task.id,
@@ -117,7 +130,7 @@ export default function AdminApprovalPage() {
             } else if (activeTab === "repair") {
                 await approveRepairTask(task.id);
             } else if (activeTab === "ea") {
-                await approveEATask(task.id);
+                await approveEATaskV2(task.id);
             } else if (activeTab === "checklist") {
                 await approveChecklistTask(task.id);
             }
@@ -125,8 +138,50 @@ export default function AdminApprovalPage() {
             // Remove from list
             setPendingTasks(prev => prev.filter(t => t.id !== task.id));
         } catch (error) {
-            console.error("Failed to approve task:", error);
-            alert("Failed to approve task");
+            console.error("Detailed error in handleApprove:", error);
+            alert("Failed to approve task: " + (error.message || "Unknown error"));
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const handleReject = async (task) => {
+        const reason = window.prompt("Enter rejection reason (User will be notified via WhatsApp):");
+        if (reason === null) return; // Cancelled
+        if (!reason.trim()) {
+            alert("Rejection reason is required.");
+            return;
+        }
+
+        setProcessingId(task.id);
+        try {
+            console.log("Rejecting task:", task);
+            if (activeTab === "delegation") {
+                await rejectDelegationTask(task.id, task.task_id, reason);
+            } else if (activeTab === "maintenance") {
+                await rejectMaintenanceTask(task.id, reason);
+            } else if (activeTab === "repair") {
+                await rejectRepairTask(task.id, reason);
+            } else if (activeTab === "ea") {
+                await rejectEATask(task.id, reason);
+            } else if (activeTab === "checklist") {
+                await rejectChecklistTask(task.id, reason);
+            }
+
+            // Send notification
+            await sendTaskRejectionNotification({
+                doerName: task.name || task.filled_by || task.doer_name,
+                taskId: task.id, // Or visible task ID
+                description: task.task_description || task.issue_description,
+                taskType: activeTab,
+                reason: reason
+            });
+
+            // Remove from list
+            setPendingTasks(prev => prev.filter(t => t.id !== task.id));
+        } catch (error) {
+            console.error("Error rejecting task:", error);
+            alert("Failed to reject task: " + (error.message || "Unknown error"));
         } finally {
             setProcessingId(null);
         }
@@ -163,58 +218,85 @@ export default function AdminApprovalPage() {
                     </h1>
                     <p className="text-gray-600">Review pending task completions submitted by users.</p>
 
-                    {/* Tabs */}
-                    <div className="flex gap-2 overflow-x-auto pb-2">
-                        <button
-                            onClick={() => setActiveTab("delegation")}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "delegation"
-                                ? "bg-purple-100 text-purple-700 border border-purple-200"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                                }`}
-                        >
-                            <BookCheck size={16} />
-                            Delegation
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("maintenance")}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "maintenance"
-                                ? "bg-blue-100 text-blue-700 border border-blue-200"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                                }`}
-                        >
-                            <Wrench size={16} />
-                            Maintenance
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("repair")}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "repair"
-                                ? "bg-amber-100 text-amber-700 border border-amber-200"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                                }`}
-                        >
-                            <Hammer size={16} />
-                            Repair
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("ea")}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "ea"
-                                ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                                }`}
-                        >
-                            <Briefcase size={16} />
-                            EA
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("checklist")}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "checklist"
-                                ? "bg-indigo-100 text-indigo-700 border border-indigo-200"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                                }`}
-                        >
-                            <BookCheck size={16} />
-                            Checklist
-                        </button>
+                    <div className="flex gap-4 items-center justify-between">
+                        {/* Tabs */}
+                        <div className="flex gap-2 overflow-x-auto pb-2">
+                            {/* ... existing category tabs ... */}
+                            <button
+                                onClick={() => setActiveTab("delegation")}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "delegation"
+                                    ? "bg-purple-100 text-purple-700 border border-purple-200"
+                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                                    }`}
+                            >
+                                <BookCheck size={16} />
+                                Delegation
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("maintenance")}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "maintenance"
+                                    ? "bg-blue-100 text-blue-700 border border-blue-200"
+                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                                    }`}
+                            >
+                                <Wrench size={16} />
+                                Maintenance
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("repair")}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "repair"
+                                    ? "bg-amber-100 text-amber-700 border border-amber-200"
+                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                                    }`}
+                            >
+                                <Hammer size={16} />
+                                Repair
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("ea")}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "ea"
+                                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                                    }`}
+                            >
+                                <Briefcase size={16} />
+                                EA
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("checklist")}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "checklist"
+                                    ? "bg-indigo-100 text-indigo-700 border border-indigo-200"
+                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                                    }`}
+                            >
+                                <BookCheck size={16} />
+                                Checklist
+                            </button>
+                        </div>
+
+                        {/* View Mode Toggle */}
+                        <div className="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200 shrink-0">
+                            <button
+                                onClick={() => setViewMode("pending")}
+                                className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${viewMode === "pending"
+                                        ? "bg-white text-gray-800 shadow-sm"
+                                        : "text-gray-500 hover:text-gray-700"
+                                    }`}
+                            >
+                                <Clock size={14} />
+                                Pending
+                            </button>
+                            <button
+                                onClick={() => setViewMode("history")}
+                                className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${viewMode === "history"
+                                        ? "bg-white text-gray-800 shadow-sm"
+                                        : "text-gray-500 hover:text-gray-700"
+                                    }`}
+                            >
+                                <History size={14} />
+                                History
+                            </button>
+                        </div>
                     </div>
 
                     <div className="relative max-w-md">
@@ -322,18 +404,34 @@ export default function AdminApprovalPage() {
                                                 ) : '-'}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                <button
-                                                    onClick={() => handleApprove(task)}
-                                                    disabled={processingId === task.id}
-                                                    className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors shadow-sm"
-                                                >
-                                                    {processingId === task.id ? (
-                                                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                                    ) : (
-                                                        <CheckCircle2 size={16} />
-                                                    )}
-                                                    Approve
-                                                </button>
+                                                {viewMode === 'pending' ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={() => handleApprove(task)}
+                                                            disabled={processingId === task.id}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors shadow-sm text-xs border border-green-700"
+                                                        >
+                                                            {processingId === task.id ? (
+                                                                <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                                            ) : (
+                                                                <CheckCircle2 size={14} />
+                                                            )}
+                                                            Approve
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleReject(task)}
+                                                            disabled={processingId === task.id}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-md hover:bg-red-100 disabled:opacity-50 transition-colors shadow-sm text-xs"
+                                                        >
+                                                            <XCircle size={14} />
+                                                            Reject
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        Approved
+                                                    </span>
+                                                )}
                                             </td>
                                         </tr>
                                     ))

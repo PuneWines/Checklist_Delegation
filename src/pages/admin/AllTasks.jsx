@@ -19,9 +19,13 @@ import {
   Users,
   Play,
   Pause,
+  BellRing,
+  ChevronDown,
+  Filter,
 } from "lucide-react";
 import TaskManagementTabs from "../../components/TaskManagementTabs";
 import { updateRepairData } from "../../redux/api/repairApi";
+import { sendTaskExtensionNotification, sendUrgentTaskNotification } from "../../services/whatsappService";
 
 const isAudioUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
@@ -91,6 +95,26 @@ const AudioPlayer = ({ url }) => {
     </div>
   );
 };
+const RenderDescription = ({ text }) => {
+  if (!text) return "—";
+
+  const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|wav|ogg|webm|m4a|aac)(\?.*)?)/i;
+  const match = text.match(urlRegex);
+
+  if (match) {
+    const url = match[0];
+    const cleanText = text.replace(url, '').replace(/Voice Note Link:/i, '').replace(/Voice Note:/i, '').trim();
+
+    return (
+      <div className="flex flex-col gap-2 min-w-[200px]">
+        {cleanText && <span className="whitespace-pre-wrap text-sm">{cleanText}</span>}
+        <AudioPlayer url={url} />
+      </div>
+    );
+  }
+
+  return <span className="whitespace-pre-wrap">{text}</span>;
+};
 
 const AllTasks = () => {
   // Active tab state
@@ -111,6 +135,8 @@ const AllTasks = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [dateFilter, setDateFilter] = useState("today"); // today, overdue, upcoming
+  const [dropdownOpen, setDropdownOpen] = useState({ dateFilter: false });
 
   // Repair Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -278,6 +304,7 @@ const AllTasks = () => {
             headers = [
               { id: "id", label: "Task ID" },
               { id: "task_description", label: "Task Description" },
+              { id: "department", label: "Department" },
               { id: "machine_name", label: "Machine Name" },
               { id: "part_name", label: "Part Name" },
               { id: "part_area", label: "Part Area" },
@@ -291,6 +318,7 @@ const AllTasks = () => {
             headers = [
               { id: "id", label: "Task ID" },
               { id: "task_description", label: "Task Description" },
+              { id: "department", label: "Department" },
               { id: "machine_name", label: "Machine Name" },
               { id: "part_name", label: "Part Name" },
               { id: "part_area", label: "Part Area" },
@@ -339,18 +367,21 @@ const AllTasks = () => {
           break;
         case "ea":
           tableName = "ea_tasks";
-          dateColumn = "task_start_date"; // Sort by original start date
+          dateColumn = showHistory ? "updated_at" : "planned_date";
           completionField = "status";
           nameField = "doer_name";
           headers = [
             { id: "task_id", label: "Task ID" },
             { id: "task_description", label: "Task Description" },
+            { id: "department", label: "Department" },
             { id: "doer_name", label: "Doer Name" },
             { id: "phone_number", label: "Phone Number" },
-            { id: "task_start_date", label: "Task Start Date" },
             { id: "planned_date", label: "Planned Date" },
             { id: "status", label: "Status" },
           ];
+          if (showHistory) {
+            headers.push({ id: "updated_at", label: "Completed At" });
+          }
           break;
         default: // checklist
           tableName = "checklist";
@@ -359,6 +390,7 @@ const AllTasks = () => {
           headers = [
             { id: "id", label: "Task ID" },
             { id: "task_description", label: "Task Description" },
+            { id: "department", label: "Department" },
             { id: "given_by", label: "Given By" },
             { id: "name", label: "Name" },
             { id: "task_start_date", label: "Task Start Date & Time" },
@@ -381,7 +413,7 @@ const AllTasks = () => {
         if (activeTab === "repair") {
           query = query.neq("status", "Pending").order("submission_date", { ascending: false });
         } else if (activeTab === "ea") {
-          query = query.eq("status", "done").order("created_at", { ascending: false });
+          query = query.in("status", ["done", "approved"]).order("updated_at", { ascending: false });
         } else {
           query = query.not(completionField, "is", null).order(completionField, { ascending: false });
         }
@@ -389,7 +421,7 @@ const AllTasks = () => {
         if (activeTab === "repair") {
           query = query.eq("status", "Pending").order(dateColumn, { ascending: false });
         } else if (activeTab === "ea") {
-          query = query.in("status", ["pending", "extended"]).order(dateColumn, { ascending: true });
+          query = query.in("status", ["pending", "extend", "extended"]).order("planned_date", { ascending: true });
         } else {
           query = query.is(completionField, null).order(dateColumn, { ascending: false });
         }
@@ -403,7 +435,8 @@ const AllTasks = () => {
         // Map task_id to id for consistency if id doesn't exist
         const mappedData = data.map(item => ({
           ...item,
-          id: item.id || item.task_id
+          id: item.id || item.task_id,
+          department: item.department || (activeTab === "ea" ? "EA" : "-")
         }));
 
         // Debug logging for EA tasks
@@ -453,21 +486,30 @@ const AllTasks = () => {
 
       if (!matchesSearch) return false;
 
-      // Filter to only show tasks for today or overdue (past)
-      // This addresses the user request to NOT show tomorrow's tasks
-      if (activeTab === "checklist" || activeTab === "maintenance" || activeTab === "ea") {
-        // For EA tasks, if status is 'extended', we want to keep showing it until it's done
-        // regardless of the date filter.
-        if (activeTab === "ea" && task.status === "extended") {
-          // Keep showing extended tasks
-        } else {
-          const today = new Date();
-          today.setHours(23, 59, 59, 999); // Allow all tasks for today
-          const taskDate = task[dateColumn] ? new Date(task[dateColumn]) : null;
-          if (taskDate) {
-            // If the task date is in the future (beyond today), hide it
-            if (taskDate > today) return false;
-          }
+      // Date filtering logic: Today, Overdue, Upcoming
+      const today = new Date();
+      const todayStart = new Date(today);
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(today);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      // Special case: Extended EA tasks should always be visible in "Today" if filtering for today
+      // or visible in their respective buckets based on their new date.
+      // The current logic handles them based on date, which is standard.
+
+      const taskDateValue = task[dateColumn];
+      if (taskDateValue) {
+        const taskDate = new Date(taskDateValue);
+
+        if (dateFilter === "today") {
+          // Show only tasks for today
+          if (taskDate < todayStart || taskDate > todayEnd) return false;
+        } else if (dateFilter === "overdue") {
+          // Show only past tasks
+          if (taskDate >= todayStart) return false;
+        } else if (dateFilter === "upcoming") {
+          // Show only future tasks
+          if (taskDate <= todayEnd) return false;
         }
       }
 
@@ -546,6 +588,7 @@ const AllTasks = () => {
   const handleSelectAll = useCallback(
     (e) => {
       if (e.target.checked) {
+        if (dateFilter === "upcoming") return; // Cannot select upcoming tasks
         setSelectedItems(new Set(filteredPendingTasks.map((t) => t.id)));
       } else {
         setSelectedItems(new Set());
@@ -554,7 +597,7 @@ const AllTasks = () => {
         setStatusData({});
       }
     },
-    [filteredPendingTasks]
+    [filteredPendingTasks, dateFilter]
   );
 
   // File Upload
@@ -699,49 +742,44 @@ const AllTasks = () => {
         const remarksField = activeTab === "checklist" ? "remark" : "remarks";
         const imageField = activeTab === "checklist" ? "image" : (activeTab === "maintenance" ? "uploaded_image_url" : "image_url");
 
-        // Handle EA tasks differently
+        // Handle EA tasks differently - consolidate into ea_tasks
         if (activeTab === "ea") {
-          const originalTask = tasks.find(t => (t.task_id || t.id) === id);
-          if (!originalTask) {
-            console.warn(`Task with ID ${id} not found in current state.`);
-            return;
-          }
           const taskStatus = statusData[id] || "done";
 
-          // ONLY insert into ea_tasks_done if status is 'done'
-          if (taskStatus === "done") {
-            const { error: doneError } = await supabase.from("ea_tasks_done").insert([{
-              task_id: id,
-              doer_name: originalTask.doer_name,
-              phone_number: originalTask.phone_number,
-              task_start_date: originalTask.task_start_date,
-              planned_date: originalTask.planned_date,
-              task_description: originalTask.task_description,
-              status: taskStatus,
-              remarks: remarksData[id] || null,
-              given_by: originalTask.given_by,
-              extended_date: null,
-              admin_done: false
-            }]);
-            if (doneError) throw doneError;
-          }
-
-          // Update main task for both 'done' and 'extended'
           if (taskStatus === "extended" && extendedDateData[id]) {
-            const { error: updateError } = await supabase.from(tableName).update({
-              planned_date: new Date(extendedDateData[id]).toISOString(),
-              extended_date: new Date(extendedDateData[id]).toISOString(),
-              status: "extended",
+            const extendedDate = new Date(extendedDateData[id]).toISOString();
+            const { error: updateError } = await supabase.from("ea_tasks").update({
+              planned_date: extendedDate,
+              status: "pending", // Reset to pending for the new date
               remarks: remarksData[id] || null,
               updated_at: new Date().toISOString()
             }).eq("task_id", id);
             if (updateError) throw updateError;
+
+            // Send extension notification
+            const task = tasks.find(t => t.task_id === id);
+            if (task) {
+              await sendTaskExtensionNotification({
+                doerName: task.doer_name,
+                taskId: task.task_id,
+                givenBy: task.given_by,
+                description: task.task_description,
+                nextExtendDate: new Date(extendedDate).toLocaleString('en-IN', {
+                  dateStyle: 'medium',
+                  timeStyle: 'short'
+                })
+              });
+            }
           } else if (taskStatus === "done") {
-            const { error: updateError } = await supabase.from(tableName).update({
-              status: "done",
+            const updates = {
+              status: "done", // Mark as done for admin approval
               remarks: remarksData[id] || null,
               updated_at: new Date().toISOString()
-            }).eq("task_id", id);
+            };
+            if (imageUrl) {
+              updates.image_url = imageUrl;
+            }
+            const { error: updateError } = await supabase.from("ea_tasks").update(updates).eq("task_id", id);
             if (updateError) throw updateError;
           }
         } else {
@@ -830,6 +868,43 @@ const AllTasks = () => {
     }
   };
 
+  const handleSendUrgentWhatsApp = async () => {
+    if (selectedItems.size === 0) return;
+
+    setIsSubmitting(true);
+    try {
+      const selectedTasks = tasks.filter(t => selectedItems.has(t.id));
+
+      for (const task of selectedTasks) {
+        const doerName = task.doer_name || task.name || task.assigned_person;
+        const taskId = task.task_id || task.id;
+        const description = task.task_description || task.issue_description;
+        const dueDateRaw = task.planned_date || task.task_start_date || task.created_at;
+        const givenBy = task.given_by || task.filled_by;
+
+        await sendUrgentTaskNotification({
+          doerName,
+          taskId,
+          description,
+          dueDate: formatDateWithTime(dueDateRaw),
+          givenBy,
+          taskType: activeTab,
+          machineName: task.machine_name,
+          partName: task.part_name,
+          department: task.department || task.assigned_dept
+        });
+      }
+
+      setSuccessMessage(`Successfully sent urgent WhatsApp notifications for ${selectedItems.size} task(s)!`);
+      setSelectedItems(new Set());
+    } catch (err) {
+      console.error("WhatsApp error:", err);
+      alert("Failed to send WhatsApp messages: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
   return (
     <AdminLayout>
@@ -841,6 +916,7 @@ const AllTasks = () => {
             setShowHistory(false);
             setSelectedItems(new Set());
             setSearchTerm("");
+            setDateFilter("today");
           }} />
         </div>
 
@@ -886,14 +962,62 @@ const AllTasks = () => {
                 )}
               </button>
 
-              {!showHistory && activeTab !== "repair" && (
-                <button
-                  onClick={handleSubmit}
-                  disabled={selectedItems.size === 0 || isSubmitting}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all h-10"
-                >
-                  {isSubmitting ? "Processing..." : `Submit Selected (${selectedItems.size})`}
-                </button>
+              {!showHistory && (
+                <>
+                  {/* Date Filter Dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setDropdownOpen(prev => ({ ...prev, dateFilter: !prev.dateFilter }))}
+                      className="flex items-center gap-2 px-4 py-2 text-sm sm:text-base font-medium text-purple-700 bg-white border border-purple-200 rounded-md hover:bg-purple-50 transition-colors shadow-sm h-10"
+                    >
+                      <Filter className="h-4 w-4" />
+                      <span className="capitalize">{dateFilter}</span>
+                      <ChevronDown size={16} className={`transition-transform ${dropdownOpen?.dateFilter ? 'rotate-180' : ''}`} />
+                    </button>
+                    {dropdownOpen?.dateFilter && (
+                      <div className="absolute z-50 mt-1 w-40 right-0 rounded-md bg-white shadow-lg border border-gray-200 py-1">
+                        {[
+                          { id: 'overdue', label: 'Overdue' },
+                          { id: 'today', label: 'Today' },
+                          { id: 'upcoming', label: 'Upcoming' }
+                        ].map((filter) => (
+                          <button
+                            key={filter.id}
+                            onClick={() => {
+                              setDateFilter(filter.id);
+                              setSelectedItems(new Set());
+                              setDropdownOpen(prev => ({ ...prev, dateFilter: false }));
+                            }}
+                            className={`block w-full text-left px-4 py-2 text-sm ${dateFilter === filter.id ? 'bg-purple-50 text-purple-700 font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
+                          >
+                            {filter.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={handleSendUrgentWhatsApp}
+                    disabled={selectedItems.size === 0 || isSubmitting}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all h-10"
+                    title="Send Urgent WhatsApp"
+                  >
+                    <BellRing className="h-4 w-4" />
+                    <span className="hidden sm:inline">Urgent WhatsApp</span>
+                    <span className="sm:hidden">Urgent</span>
+                  </button>
+
+                  {activeTab !== "repair" && (
+                    <button
+                      onClick={handleSubmit}
+                      disabled={selectedItems.size === 0 || isSubmitting}
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all h-10"
+                    >
+                      {isSubmitting ? "Processing..." : `Submit Selected (${selectedItems.size})`}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -901,16 +1025,20 @@ const AllTasks = () => {
 
         {/* Success Message */}
         {successMessage && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-3 sm:px-4 py-3 rounded-md flex items-center justify-between text-sm sm:text-base animate-in fade-in duration-300">
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 sm:px-4 py-3 rounded-md flex items-center justify-between text-sm sm:text-base animate-in fade-in duration-300">
             <div className="flex items-center">
-              <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-green-500 flex-shrink-0" />
-              <span className="break-words font-medium">{successMessage}</span>
+              <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-emerald-600 flex-shrink-0" />
+              <span className="break-words font-black uppercase tracking-wide">{successMessage}</span>
             </div>
-            <button onClick={() => setSuccessMessage("")} className="text-green-500 hover:text-green-700 ml-2 flex-shrink-0">
+            <button onClick={() => setSuccessMessage("")} className="text-emerald-600 hover:text-emerald-800 ml-2 flex-shrink-0">
               <X className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
           </div>
         )}
+
+        {/* Removed redundant date filter tabs - now in dropdown */}
+
+
 
         {/* Table Container */}
         <div className="rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden">
@@ -970,13 +1098,14 @@ const AllTasks = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    {!showHistory && activeTab !== "repair" && (
-                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-left">
+                    {!showHistory && (
+                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-left font-bold text-gray-900">
                         <input
                           type="checkbox"
                           checked={selectedItems.size === filteredPendingTasks.length && filteredPendingTasks.length > 0}
                           onChange={handleSelectAll}
-                          className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                          disabled={dateFilter === "upcoming"}
+                          className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
                         />
                       </th>
                     )}
@@ -986,25 +1115,19 @@ const AllTasks = () => {
                       </th>
                     ))}
                     {!showHistory && activeTab === "ea" && (
-                      <>
-                        <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Extended Date</th>
-                        <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
-                      </>
+                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Extended Date</th>
                     )}
-                    {!showHistory && activeTab !== "repair" && activeTab !== "ea" && (
+                    {!showHistory && activeTab !== "repair" && (
                       <>
                         <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
                         <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Image</th>
                       </>
                     )}
-                    {showHistory && activeTab !== "repair" && activeTab !== "ea" && (
+                    {showHistory && (
                       <>
                         <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
                         <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Attachment</th>
                       </>
-                    )}
-                    {showHistory && activeTab === "ea" && (
-                      <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
                     )}
                   </tr>
                 </thead>
@@ -1012,13 +1135,14 @@ const AllTasks = () => {
                   {(showHistory ? filteredHistoryTasks : filteredPendingTasks).length > 0 ? (
                     (showHistory ? filteredHistoryTasks : filteredPendingTasks).map((task) => (
                       <tr key={task.id} className="hover:bg-gray-50">
-                        {!showHistory && activeTab !== "repair" && (
+                        {!showHistory && (
                           <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                             <input
                               type="checkbox"
                               checked={selectedItems.has(task.id)}
                               onChange={(e) => handleSelectItem(task.id, e.target.checked)}
-                              className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                              disabled={dateFilter === "upcoming"}
+                              className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
                             />
                           </td>
                         )}
@@ -1033,13 +1157,16 @@ const AllTasks = () => {
                                 </td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{task.id}</td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
-                                  {isAudioUrl(task.issue_description) ? <AudioPlayer url={task.issue_description} /> : task.issue_description}
+                                  <RenderDescription text={task.issue_description} />
                                 </td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.filled_by}</td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.assigned_person}</td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.machine_name}</td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
-                                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === "Pending" ? "bg-yellow-100 text-yellow-800" : task.status === "Completed" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === "Pending" ? "bg-yellow-100 text-yellow-800" :
+                                    (task.status === "Approved" || task.status === "Completed") ? "bg-green-100 text-green-800" :
+                                      task.status === "Pending Approval" ? "bg-orange-100 text-orange-800" :
+                                        "bg-gray-100 text-gray-800"}`}>
                                     {task.status}
                                   </span>
                                 </td>
@@ -1059,7 +1186,10 @@ const AllTasks = () => {
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.assigned_person}</td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.machine_name}</td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
-                                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === "Pending" ? "bg-yellow-100 text-yellow-800" : task.status === "Completed" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === "Pending" ? "bg-yellow-100 text-yellow-800" :
+                                    (task.status === "Approved" || task.status === "Completed") ? "bg-green-100 text-green-800" :
+                                      task.status === "Pending Approval" ? "bg-orange-100 text-orange-800" :
+                                        "bg-gray-100 text-gray-800"}`}>
                                     {task.status}
                                   </span>
                                 </td>
@@ -1129,43 +1259,48 @@ const AllTasks = () => {
                                             )}
                                           </select>
                                         )
-                                        : <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" ? "bg-green-100 text-green-800" : task[header.id] === "extended" ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-800"}`}>
-                                          {task[header.id]}
-                                        </span>
+                                        : (
+                                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${activeTab === "ea"
+                                            ? (task[header.id]?.toLowerCase() === "approved" ? "bg-green-100 text-green-800" : task[header.id]?.toLowerCase() === "done" ? "bg-orange-100 text-orange-800" : (task[header.id]?.toLowerCase() === "pending" || task[header.id]?.toLowerCase() === "extend" || task[header.id]?.toLowerCase() === "extended") ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-800")
+                                            : (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "approved" || task[header.id] === "Completed")
+                                              ? (task.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
+                                              : (task[header.id] === "extend" || task[header.id] === "pending" || task[header.id] === "extended")
+                                                ? "bg-yellow-100 text-yellow-800"
+                                                : "bg-gray-100 text-gray-800"
+                                            }`}>
+                                            {activeTab === "ea" && showHistory
+                                              ? (task[header.id]?.toLowerCase() === "approved" ? "Approved" : task[header.id]?.toLowerCase() === "done" ? "Pending Approval" : task[header.id])
+                                              : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && !task.admin_done)
+                                                ? "Pending Approval"
+                                                : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && task.admin_done)
+                                                  ? "Approved"
+                                                  : task[header.id]}
+                                          </span>
+                                        )
                                       : (header.id === "enable_reminders" || header.id === "require_attachment" || header.id === "enable_reminder")
                                         ? (task[header.id] ? "Yes" : "No")
                                         : header.id === "machine_name"
                                           ? (task.machine_name || (task.task_description ? task.task_description.split(' - ')[0] : "—"))
-                                          : isAudioUrl(task[header.id])
-                                            ? <AudioPlayer url={task[header.id]} />
-                                            : task[header.id] || "—"}
+                                          : (header.id === 'task_description' || header.id === 'issue_description' || header.id === 'remarks')
+                                            ? <RenderDescription text={task[header.id]} />
+                                            : isAudioUrl(task[header.id])
+                                              ? <AudioPlayer url={task[header.id]} />
+                                              : task[header.id] || "—"}
                               </td>
                             ))}
                             {!showHistory && activeTab === "ea" && (
-                              <>
-                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                  <input
-                                    type="date"
-                                    placeholder="Extended Date"
-                                    value={extendedDateData[task.id] || ""}
-                                    onChange={(e) => setExtendedDateData((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                                    className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
-                                    disabled={!selectedItems.has(task.id) || statusData[task.id] !== 'extended'}
-                                  />
-                                </td>
-                                <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                  <input
-                                    type="text"
-                                    placeholder="Enter remarks"
-                                    value={remarksData[task.id] || ""}
-                                    onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                                    className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
-                                    disabled={!selectedItems.has(task.id)}
-                                  />
-                                </td>
-                              </>
+                              <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                <input
+                                  type="date"
+                                  placeholder="Extended Date"
+                                  value={extendedDateData[task.id] || ""}
+                                  onChange={(e) => setExtendedDateData((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                                  className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
+                                  disabled={!selectedItems.has(task.id) || statusData[task.id] !== 'extended'}
+                                />
+                              </td>
                             )}
-                            {!showHistory && activeTab !== "ea" && (
+                            {!showHistory && activeTab !== "repair" && (
                               <>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
                                   <input
@@ -1204,7 +1339,7 @@ const AllTasks = () => {
                                 </td>
                               </>
                             )}
-                            {showHistory && activeTab !== "ea" && (
+                            {showHistory && (
                               <>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">
                                   {isAudioUrl(task.remark || task.remarks) ? <AudioPlayer url={task.remark || task.remarks} /> : (task.remark || task.remarks || "—")}
@@ -1216,18 +1351,13 @@ const AllTasks = () => {
                                 </td>
                               </>
                             )}
-                            {showHistory && activeTab === "ea" && (
-                              <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">
-                                {isAudioUrl(task.remarks) ? <AudioPlayer url={task.remarks} /> : (task.remarks || "—")}
-                              </td>
-                            )}
                           </>
                         )}
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={tableHeaders.length + (showHistory || activeTab === "repair" ? 1 : 3)} className="px-6 py-20 text-center text-gray-400">
+                      <td colSpan={tableHeaders.length + (!showHistory && activeTab !== "repair" ? 1 : 0) + (!showHistory && activeTab === "ea" ? 1 : 0) + (activeTab !== "repair" ? 2 : 0)} className="px-6 py-20 text-center text-gray-400">
                         <div className="flex flex-col items-center gap-2">
                           <Search size={40} className="text-gray-200" />
                           <p>No {showHistory ? "history" : "pending tasks"} found.</p>

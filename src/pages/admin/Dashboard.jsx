@@ -285,6 +285,7 @@ export default function AdminDashboard() {
           status,
           frequency: task.frequency || "one-time",
           rating: task.color_code_for || 0,
+          admin_done: task.admin_done || false, // Add admin_done for approval status
         };
       })
       .filter(Boolean);
@@ -704,7 +705,8 @@ export default function AdminDashboard() {
             vendor_name: task.vendor_name,
             part_replaced: task.part_replaced,
             work_done: task.work_done,
-            image_url: task.image_url || task.uploaded_image_url
+            image_url: task.image_url || task.uploaded_image_url,
+            admin_done: task.admin_done || false // Add admin_done field for approval status
           };
 
           return mappedTask;

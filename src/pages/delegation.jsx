@@ -10,6 +10,7 @@ import {
   Filter,
   Play,
   Pause,
+  BellRing,
 } from "lucide-react";
 import { useRef } from "react";
 import AdminLayout from "../components/layout/AdminLayout";
@@ -19,6 +20,7 @@ import {
   delegationData,
 } from "../redux/slice/delegationSlice";
 import { insertDelegationDoneAndUpdate } from "../redux/api/delegationApi";
+import { sendUrgentTaskNotification, sendTaskExtensionNotification } from "../services/whatsappService";
 
 // Configuration object - Move all configurations here
 const CONFIG = {
@@ -103,6 +105,28 @@ const AudioPlayer = ({ url }) => {
       <audio ref={audioRef} src={url} className="hidden" />
     </div>
   );
+};
+
+// RenderDescription component to handle text and audio links
+const RenderDescription = ({ text }) => {
+  if (!text) return "—";
+
+  const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|wav|ogg|webm|m4a|aac)(\?.*)?)/i;
+  const match = text && text.match(urlRegex);
+
+  if (match) {
+    const url = match[0];
+    const cleanText = text.replace(url, '').replace(/Voice Note Link:/i, '').replace(/Voice Note:/i, '').trim();
+
+    return (
+      <div className="flex flex-col gap-2 min-w-[200px]">
+        {cleanText && <span className="whitespace-pre-wrap text-sm">{cleanText}</span>}
+        <AudioPlayer url={url} />
+      </div>
+    );
+  }
+
+  return <span className="whitespace-pre-wrap" title={text}>{text}</span>;
 };
 
 // Debounce hook for search optimization
@@ -659,6 +683,23 @@ function DelegationDataPage() {
         const results = action.payload;
         const failedTasks = results.filter(r => r.status === 'error');
 
+        // Send WhatsApp notifications for extensions
+        for (const task of selectedData) {
+          if (task.status === 'extend' && task.next_extend_date) {
+            try {
+              await sendTaskExtensionNotification({
+                doerName: task.name,
+                taskId: task.id,
+                description: task.task_description,
+                nextExtendDate: formatDateToDDMMYYYY(new Date(task.next_extend_date)),
+                givenBy: task.given_by || username
+              });
+            } catch (waErr) {
+              console.error("WhatsApp extension notification failed:", waErr);
+            }
+          }
+        }
+
         if (failedTasks.length > 0) {
           console.error('Some tasks failed to submit:', failedTasks);
           alert(`${failedTasks.length} task(s) failed to submit. Please check console for details.`);
@@ -689,6 +730,36 @@ function DelegationDataPage() {
       setIsSubmitting(false);
     }
   };
+
+  const handleSendUrgentWhatsApp = async () => {
+    if (selectedItems.size === 0) return;
+
+    setIsSubmitting(true);
+    try {
+      const selectedTasks = delegation.filter(t => selectedItems.has(t.id));
+
+      for (const task of selectedTasks) {
+        await sendUrgentTaskNotification({
+          doerName: task.name,
+          taskId: task.id,
+          description: task.task_description,
+          dueDate: formatDateTimeForDisplay(task.planned_date || task.task_start_date),
+          givenBy: task.given_by || username,
+          taskType: 'delegation',
+          department: task.department
+        });
+      }
+
+      setSuccessMessage(`Successfully sent urgent WhatsApp notifications for ${selectedItems.size} task(s)!`);
+      setSelectedItems(new Set());
+    } catch (err) {
+      console.error("WhatsApp error:", err);
+      alert("Failed to send WhatsApp messages: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
   const selectedItemsCount = selectedItems.size;
 
@@ -757,20 +828,33 @@ function DelegationDataPage() {
               </button>
 
               {!showHistory && (
-                <button
-                  onClick={handleSubmit}
-                  disabled={selectedItemsCount === 0 || isSubmitting}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
-                >
-                  {isSubmitting
-                    ? "Processing..."
-                    : (
-                      <>
-                        <span className="hidden sm:inline">Submit Selected ({selectedItemsCount})</span>
-                        <span className="sm:hidden">Submit ({selectedItemsCount})</span>
-                      </>
-                    )}
-                </button>
+                <>
+                  <button
+                    onClick={handleSendUrgentWhatsApp}
+                    disabled={selectedItems.size === 0 || isSubmitting}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base font-medium text-white bg-amber-500 rounded-md hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all h-10"
+                    title="Send Urgent WhatsApp"
+                  >
+                    <BellRing className="h-4 w-4" />
+                    <span className="hidden sm:inline">Urgent WhatsApp</span>
+                    <span className="sm:hidden">Urgent</span>
+                  </button>
+
+                  <button
+                    onClick={handleSubmit}
+                    disabled={selectedItemsCount === 0 || isSubmitting}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors h-10"
+                  >
+                    {isSubmitting
+                      ? "Processing..."
+                      : (
+                        <>
+                          <span className="hidden sm:inline">Submit Selected ({selectedItemsCount})</span>
+                          <span className="sm:hidden">Submit ({selectedItemsCount})</span>
+                        </>
+                      )}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -942,16 +1026,16 @@ function DelegationDataPage() {
                           </td>
                           <td className="px-3 sm:px-6 py-2 sm:py-4">
                             <span
-                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-normal ${history.status === "done"
-                                  ? (history.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
-                                  : history.status === "pending_approval"
-                                    ? "bg-orange-100 text-orange-800"
-                                    : history.status === "extend"
-                                      ? "bg-yellow-100 text-yellow-800"
-                                      : "bg-gray-100 text-gray-800"
+                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-normal ${history.status?.toLowerCase() === "done"
+                                ? (history.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
+                                : history.status === "pending_approval"
+                                  ? "bg-orange-100 text-orange-800"
+                                  : history.status === "extend"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : "bg-gray-100 text-gray-800"
                                 }`}
                             >
-                              {history.status === "done"
+                              {history.status?.toLowerCase() === "done"
                                 ? (history.admin_done ? "Approved" : "Pending Approval")
                                 : (history.status === "pending_approval" ? "Pending Approval" : (history.status || "—"))}
                             </span>
@@ -1109,13 +1193,8 @@ function DelegationDataPage() {
                           <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
                             <div
                               className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
-                              title={account.task_description}
                             >
-                              {isAudioUrl(account.task_description) ? (
-                                <AudioPlayer url={account.task_description} />
-                              ) : (
-                                account.task_description || "—"
-                              )}
+                              <RenderDescription text={account.task_description} />
                             </div>
                           </td>
                           <td className="px-2 sm:px-6 py-2 sm:py-4">

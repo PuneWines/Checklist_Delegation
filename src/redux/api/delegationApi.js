@@ -267,9 +267,10 @@ export const fetchDelegationDataSortByDate = async () => {
 export const fetchDelegation_DoneDataSortByDate = async () => {
   const role = localStorage.getItem("role");
   const username = localStorage.getItem("user-name");
-  const userAccess = localStorage.getItem("user_access"); // Add this line
+  const userAccess = localStorage.getItem("user_access");
 
   try {
+    // Fetch delegation_done records
     let query = supabase
       .from('delegation_done')
       .select('*')
@@ -286,15 +287,47 @@ export const fetchDelegation_DoneDataSortByDate = async () => {
       }
     }
 
-    const { data, error } = await query;
+    const { data: doneData, error } = await query;
 
     if (error) {
-      console.log("Error when fetching data", error);
+      console.log("Error when fetching delegation_done data", error);
       return [];
     }
 
-    console.log("Fetched successfully", data);
-    return (data || []).map(row => ({ ...row, id: row.task_id }));
+    // Fetch related delegation records to get all task details
+    if (!doneData || doneData.length === 0) {
+      return [];
+    }
+
+    const taskIds = doneData.map(d => d.task_id).filter(id => id);
+
+    let delegationData = [];
+    if (taskIds.length > 0) {
+      const { data: delData, error: delError } = await supabase
+        .from('delegation')
+        .select('*') // Fetch all fields from delegation table
+        .in('task_id', taskIds);
+
+      if (delError) {
+        console.log("Error fetching delegation details:", delError);
+      } else {
+        delegationData = delData || [];
+      }
+    }
+
+    // Merge all delegation fields with delegation_done records
+    const mergedData = doneData.map(doneItem => {
+      const delegationItem = delegationData.find(d => d.task_id === doneItem.task_id);
+      return {
+        ...delegationItem,  // All fields from delegation table (name, department, task_description, etc.)
+        ...doneItem,        // Fields from delegation_done (status, created_at, image_url, etc.)
+        id: doneItem.task_id,
+        admin_done: delegationItem?.admin_done || false
+      };
+    });
+
+    console.log("Fetched delegation history with full details:", mergedData);
+    return mergedData;
 
   } catch (error) {
     console.log("Error from Supabase", error);
@@ -400,6 +433,73 @@ export const fetchPendingApprovals = async () => {
     return mergedData;
   } catch (error) {
     console.error('Error fetching pending approvals:', error);
+    return [];
+  }
+};
+
+export const rejectDelegationTask = async (id, taskId, reason) => {
+  try {
+    // 1. Mark delegation_done as rejected
+    const { error: doneError } = await supabase
+      .from('delegation_done')
+      .update({ status: 'rejected', remarks: reason })
+      .eq('id', id);
+
+    if (doneError) throw doneError;
+
+    // 2. Reset delegation task to pending so user can see it again
+    const { error: mainError } = await supabase
+      .from('delegation')
+      .update({
+        status: 'pending',
+        submission_date: null,
+        admin_done: false
+      })
+      .eq('task_id', taskId);
+
+    if (mainError) throw mainError;
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error rejecting delegation task:", error);
+    throw error;
+  }
+};
+
+export const fetchDelegationHistory = async () => {
+  try {
+    // Fetch only approved tasks
+    const { data: doneData, error } = await supabase
+      .from('delegation_done')
+      .select('*')
+      .eq('status', 'done')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    if (!doneData || doneData.length === 0) return [];
+
+    const taskIds = doneData.map(d => d.task_id);
+    const { data: taskDetails, error: detailsError } = await supabase
+      .from('delegation')
+      .select('*')
+      .in('task_id', taskIds);
+
+    if (detailsError) throw detailsError;
+
+    const mergedData = doneData.map(doneItem => {
+      const detail = taskDetails.find(t => t.task_id === doneItem.task_id);
+      return {
+        ...detail,
+        ...doneItem,
+        id: doneItem.id, // delegation_done id
+        taskId: doneItem.task_id
+      };
+    });
+
+    return mergedData;
+  } catch (error) {
+    console.error("Error fetching delegation history:", error);
     return [];
   }
 };
