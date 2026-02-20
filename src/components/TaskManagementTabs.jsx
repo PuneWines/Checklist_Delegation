@@ -11,7 +11,7 @@ export default function TaskManagementTabs({ activeTab, setActiveTab }) {
     ]
 
     return (
-        <div className="sticky top-0 z-30 bg-gray-50/95 backdrop-blur-md border-b border-gray-200 -mx-4 px-4 py-3 md:py-4 md:bg-transparent md:border-none md:static md:mx-0 md:px-0 mb-6 transition-all duration-300">
+        <div className="sticky top-0 z-30 bg-gray-50/95 backdrop-blur-md border-b border-gray-200 px-2 py-3 md:py-4 md:bg-transparent md:border-none md:static md:px-0 mb-6 transition-all duration-300">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
 
                 {/* Title / Brand Section */}

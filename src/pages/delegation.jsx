@@ -620,6 +620,7 @@ function DelegationDataPage() {
           status: dbStatus,
           next_extend_date: statusData[id] === "Extend date" ? ensureISO(nextTargetDate[id]) : null,
           reason: remarksData[id] || "",
+          duration: item.duration || "",
           image_url: uploadedImages[id] ? null : item.image,
           require_attachment: item.require_attachment,
           submission_timestamp: new Date().toISOString()
@@ -746,24 +747,22 @@ function DelegationDataPage() {
               />
             </div>
 
-            {!showHistory && (
-              <div className="flex items-center gap-2">
-                {/* <Filter className="h-4 w-4 text-gray-500 flex-shrink-0" /> */}
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="flex-1 sm:flex-none border border-gray-300 rounded-md px-2 py-1 text-xs sm:text-sm"
-                >
-                  {filterOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+              {!showHistory && (
+                <div className="flex items-center gap-2 flex-1 sm:flex-none">
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="w-full sm:w-auto border border-purple-200 rounded-md px-3 py-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 h-10"
+                  >
+                    {filterOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <button
                 onClick={toggleHistory}
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base font-medium text-purple-700 bg-white border border-purple-200 rounded-md hover:bg-purple-50 transition-colors shadow-sm"

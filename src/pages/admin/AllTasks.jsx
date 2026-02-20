@@ -98,6 +98,8 @@ const AllTasks = () => {
   const [userRole, setUserRole] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const statusDateColumn = activeTab === "repair" ? "created_at" : "planned_date";
+  const sortDateColumn = activeTab === "repair" ? "created_at" : "task_start_date";
   const [holidaysList, setHolidaysList] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
 
@@ -181,7 +183,7 @@ const AllTasks = () => {
     }
   }, []);
 
-  const getTimeStatus = useCallback((dateString) => {
+  const getTimeStatus = useCallback((dateString, taskStatus) => {
     if (!dateString) return "—";
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return "—";
@@ -191,6 +193,14 @@ const AllTasks = () => {
 
     const taskDate = new Date(date);
     taskDate.setHours(0, 0, 0, 0);
+
+    const isExtended = taskStatus?.toLowerCase() === "extended" || taskStatus?.toLowerCase() === "extend";
+
+    // Extended tasks should show as "Today" until the planned date passes
+    if (isExtended) {
+      if (taskDate < today) return "Overdue";
+      return "Today"; // Treat both today and upcoming as "Today" for extended tasks
+    }
 
     if (taskDate < today) return "Overdue";
     if (taskDate.getTime() === today.getTime()) return "Today";
@@ -263,7 +273,7 @@ const AllTasks = () => {
       switch (activeTab) {
         case "maintenance":
           tableName = "maintenance_tasks";
-          dateColumn = "task_start_date";
+          dateColumn = "planned_date";
           completionField = "submission_date";
           if (showHistory) {
             headers = [
@@ -274,7 +284,8 @@ const AllTasks = () => {
               { id: "machine_name", label: "Machine Name" },
               { id: "part_name", label: "Part Name" },
               { id: "part_area", label: "Part Area" },
-              { id: "task_start_date", label: "Task Start Date & Time" },
+              { id: "task_start_date", label: "Start Date" },
+              { id: "planned_date", label: "Planned Date" },
               { id: "freq", label: "Freq" },
               { id: "require_attachment", label: "Require Attachment" },
               { id: "submission_date", label: "Actual Date & Time" },
@@ -291,7 +302,8 @@ const AllTasks = () => {
               { id: "part_area", label: "Part Area" },
               { id: "given_by", label: "Given By" },
               { id: "name", label: "Name" },
-              { id: "task_start_date", label: "Task Start Date & Time" },
+              { id: "task_start_date", label: "Start Date" },
+              { id: "planned_date", label: "Planned Date" },
               { id: "freq", label: "Freq" },
               { id: "enable_reminders", label: "Enable Reminders" },
               { id: "require_attachment", label: "Require Attachment" },
@@ -355,7 +367,7 @@ const AllTasks = () => {
         case "checklist":
         default:
           tableName = "checklist";
-          dateColumn = "task_start_date";
+          dateColumn = "planned_date";
           completionField = "submission_date";
           headers = [
             { id: "id", label: "Task ID" },
@@ -364,7 +376,8 @@ const AllTasks = () => {
             { id: "department", label: "Department" },
             { id: "given_by", label: "Given By" },
             { id: "name", label: "Name" },
-            { id: "task_start_date", label: "Task Start Date & Time" },
+            { id: "task_start_date", label: "Start Date" },
+            { id: "planned_date", label: "Planned Date" },
             { id: "frequency", label: "Freq" },
             { id: "enable_reminder", label: "Enable Reminders" },
             { id: "require_attachment", label: "Require Attachment" },
@@ -386,7 +399,8 @@ const AllTasks = () => {
           // Use status until admin_done column is added
           query = query.not("submission_date", "is", null).order("submission_date", { ascending: false });
         } else if (activeTab === "ea") {
-          query = query.in("status", ["done", "approved"]).order("updated_at", { ascending: false });
+          // Fetch historical records from ea_tasks_done for EA
+          query = supabase.from("ea_tasks_done").select("*").order("created_at", { ascending: false });
         } else {
           query = query.not(completionField, "is", null).order(completionField, { ascending: false });
         }
@@ -434,12 +448,10 @@ const AllTasks = () => {
 
   // Filtering Logic
   const filteredPendingTasks = useMemo(() => {
-    const dateColumn = activeTab === "repair" ? "created_at" : (activeTab === "ea" ? "task_start_date" : "task_start_date");
-
-    // First, sort tasks by date to ensure we handle them in order
+    // First, sort tasks by original start date to ensure we handle them in order
     const sortedTasks = [...tasks].sort((a, b) => {
-      const dateA = a[dateColumn] ? new Date(a[dateColumn]) : new Date(0);
-      const dateB = b[dateColumn] ? new Date(b[dateColumn]) : new Date(0);
+      const dateA = a[sortDateColumn] ? new Date(a[sortDateColumn]) : new Date(0);
+      const dateB = b[sortDateColumn] ? new Date(b[sortDateColumn]) : new Date(0);
       return dateA - dateB;
     });
 
@@ -465,28 +477,28 @@ const AllTasks = () => {
       // or visible in their respective buckets based on their new date.
       // The current logic handles them based on date, which is standard.
 
-      const taskDateValue = task[dateColumn];
+      const taskDateValue = task[statusDateColumn];
       if (taskDateValue) {
-        const taskDate = new Date(taskDateValue);
+        const status = getTimeStatus(taskDateValue, task.status);
 
         if (dateFilter === "all") {
           // Show all tasks, no date filtering
         } else if (dateFilter === "today") {
           // Show only tasks for today
-          if (taskDate < todayStart || taskDate > todayEnd) return false;
+          if (status !== "Today") return false;
         } else if (dateFilter === "overdue") {
           // Show only past tasks
-          if (taskDate >= todayStart) return false;
+          if (status !== "Overdue") return false;
         } else if (dateFilter === "upcoming") {
           // Show only future tasks
-          if (taskDate <= todayEnd) return false;
+          if (status !== "Upcoming") return false;
         }
       }
 
       // Deduplication logic for checklist tasks
       if (activeTab === "checklist") {
         // Include date in key to avoid hiding different occurrences of the same recurring task
-        const taskDate = task[dateColumn] ? new Date(task[dateColumn]).toDateString() : "";
+        const taskDate = task[statusDateColumn] ? new Date(task[statusDateColumn]).toDateString() : "";
         const key = `${task.task_description}-${task.name}-${taskDate}`;
         if (seen.has(key)) return false;
         seen.add(key);
@@ -559,11 +571,10 @@ const AllTasks = () => {
     (e) => {
       if (e.target.checked) {
         // Use the same dateColumn logic as in the render loop
-        const col = activeTab === "repair" ? "created_at" : (activeTab === "ea" ? "planned_date" : "task_start_date");
+        const col = activeTab === "repair" ? "created_at" : "planned_date"; // Changed to planned_date for EA and others
         const submittableTasks = filteredPendingTasks.filter(t => {
-          const timeStatus = getTimeStatus(t[col]);
-          const isExtended = t.status?.toLowerCase() === "extended" || t.status?.toLowerCase() === "extend";
-          return timeStatus !== "Upcoming" || isExtended;
+          const timeStatus = getTimeStatus(t[col], t.status);
+          return timeStatus !== "Upcoming";
         });
         setSelectedItems(new Set(submittableTasks.map((t) => t.id)));
       } else {
@@ -719,22 +730,35 @@ const AllTasks = () => {
 
         // Handle EA tasks differently - consolidate into ea_tasks
         if (activeTab === "ea") {
+          const task = tasks.find(t => t.task_id === id);
           const taskStatus = statusData[id] || "done";
 
           if (taskStatus === "extended" && extendedDateData[id]) {
-            // 1. Insert extension record into ea_tasks_done
+            const extendedDate = new Date(extendedDateData[id]).toISOString();
+
+            // 1. Insert extension record into ea_tasks_done (Snapshot - using delegation names)
             const { error: doneError } = await supabase.from("ea_tasks_done").insert([{
               task_id: id,
-              status: "extended",
-              remarks: remarksData[id] || null,
-              given_by: localStorage.getItem("user-name") || "Admin"
+              doer_name: task?.doer_name, // Aligned with delegation
+              phone_number: task?.phone_number,
+              planned_date: task?.planned_date,
+              task_description: task?.task_description,
+              status: "extended", // Lowercase
+              submission_date: new Date().toISOString(),
+              reason: remarksData[id] || null, // Aligned with delegation
+              image_url: imageUrl, // Added to store image proof for extensions
+              given_by: task?.given_by || localStorage.getItem("user-name") || "Admin",
+              next_extend_date: extendedDate, // Aligned with delegation
+              task_start_date: task?.task_start_date,
+              duration: task?.duration || null,
+              admin_done: false
             }]);
             if (doneError) throw doneError;
 
             // 2. Update ea_tasks
-            const extendedDate = new Date(extendedDateData[id]).toISOString();
-            const { error: updateError } = await supabase.from("ea_tasks").update({
+            const { error: updateError = null } = await supabase.from("ea_tasks").update({
               planned_date: extendedDate,
+              extended_date: extendedDate, // Added to store extended date explicitly
               status: "extended", // Keep as extended so it's visible as such
               remarks: remarksData[id] || null,
               updated_at: new Date().toISOString()
@@ -742,7 +766,6 @@ const AllTasks = () => {
             if (updateError) throw updateError;
 
             // Send extension notification
-            const task = tasks.find(t => t.task_id === id);
             if (task) {
               await sendTaskExtensionNotification({
                 doerName: task.doer_name,
@@ -756,13 +779,21 @@ const AllTasks = () => {
               });
             }
           } else if (taskStatus === "done") {
-            // 1. Insert completion record into ea_tasks_done
-            const { error: doneError } = await supabase.from("ea_tasks_done").insert([{
+            // 1. Insert completion record into ea_tasks_done (Snapshot)
+            const { error: doneError = null } = await supabase.from("ea_tasks_done").insert([{
               task_id: id,
-              status: "pending", // Waiting for admin approval
-              remarks: remarksData[id] || null,
+              doer_name: task?.doer_name,
+              phone_number: task?.phone_number,
+              planned_date: task?.planned_date,
+              task_description: task?.task_description,
+              status: "pending", // Waiting for admin approval (Lowercase)
+              submission_date: new Date().toISOString(),
+              reason: remarksData[id] || null,
               image_url: imageUrl,
-              given_by: localStorage.getItem("user-name") || "Admin"
+              given_by: task?.given_by || localStorage.getItem("user-name") || "Admin",
+              task_start_date: task?.task_start_date,
+              duration: task?.duration || null,
+              admin_done: false
             }]);
             if (doneError) throw doneError;
 
@@ -776,7 +807,7 @@ const AllTasks = () => {
             if (imageUrl) {
               updates.image_url = imageUrl;
             }
-            const { error: updateError } = await supabase.from("ea_tasks").update(updates).eq("task_id", id);
+            const { error: updateError = null } = await supabase.from("ea_tasks").update(updates).eq("task_id", id);
             if (updateError) throw updateError;
           }
         } else {
@@ -937,7 +968,7 @@ const AllTasks = () => {
             </div>
 
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
               <button
                 onClick={() => {
                   setShowHistory(!showHistory);
@@ -1140,7 +1171,7 @@ const AllTasks = () => {
                               type="checkbox"
                               checked={selectedItems.has(task.id)}
                               onChange={(e) => handleSelectItem(task.id, e.target.checked)}
-                              disabled={getTimeStatus(task[dateColumn]) === "Upcoming" && !(task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend")}
+                              disabled={getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"}
                               className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
                             />
                           </td>
@@ -1156,8 +1187,8 @@ const AllTasks = () => {
                                 </td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{task.id}</td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
-                                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task.created_at) === 'Overdue' ? 'bg-red-100 text-red-800' : getTimeStatus(task.created_at) === 'Today' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
-                                    {getTimeStatus(task.created_at)}
+                                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task.created_at, task.status) === 'Overdue' ? 'bg-red-100 text-red-800' : getTimeStatus(task.created_at, task.status) === 'Today' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                                    {getTimeStatus(task.created_at, task.status)}
                                   </span>
                                 </td>
                                 <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
@@ -1227,13 +1258,10 @@ const AllTasks = () => {
                               <td key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 ${header.id === 'task_description' || header.id === 'issue_description' ? 'min-w-[200px] whitespace-normal' : 'whitespace-nowrap'} ${header.id === 'task_start_date' ? 'bg-yellow-50' : ''}`}>
                                 {header.id === "time_status"
                                   ? (
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${(activeTab === "ea" && (task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend")) ? 'bg-amber-100 text-amber-800' :
-                                      getTimeStatus(task[dateColumn]) === 'Overdue' ? 'bg-red-100 text-red-800' :
-                                        getTimeStatus(task[dateColumn]) === 'Today' ? 'bg-green-100 text-green-800' :
-                                          'bg-blue-100 text-blue-800'}`}>
-                                      {(activeTab === "ea" && (task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend"))
-                                        ? "Extended"
-                                        : getTimeStatus(task[dateColumn])}
+                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task[statusDateColumn], task.status) === 'Overdue' ? 'bg-red-100 text-red-800' :
+                                      getTimeStatus(task[statusDateColumn], task.status) === 'Today' ? 'bg-green-100 text-green-800' :
+                                        'bg-blue-100 text-blue-800'}`}>
+                                      {getTimeStatus(task[statusDateColumn], task.status)}
                                     </span>
                                   )
                                   : header.id === "task_start_date" || header.id === "created_at" || header.id === "planned_date" || header.id === "updated_at"

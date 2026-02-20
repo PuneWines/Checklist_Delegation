@@ -15,10 +15,14 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
           // Step 1: Insert into delegation_done table
           const delegationDoneData = {
             task_id: taskData.id || taskData.task_id,
-            given_by: taskData.given_by,
-            image_url: taskData.image_url, // Will be updated after image upload
-            // Use 'pending' status for completion requests to track approval - Handle various casings
             status: String(taskData.status).toLowerCase() === 'done' ? 'pending' : taskData.status,
+            next_extend_date: taskData.next_extend_date || null,
+            reason: taskData.reason || '',
+            name: taskData.name,
+            task_description: taskData.task_description,
+            given_by: taskData.given_by,
+            duration: taskData.duration || '',
+            image_url: taskData.image_url,
           };
 
           console.log('Inserting into delegation_done:', delegationDoneData);

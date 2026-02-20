@@ -117,7 +117,7 @@ export default function AdminApprovalPage() {
 
             // Send notification
             await sendTaskRejectionNotification({
-                doerName: task.name || task.filled_by || task.doer_name,
+                doerName: task.doer_name || task.name || task.filled_by,
                 taskId: task.id, // Or visible task ID
                 description: task.task_description || task.issue_description,
                 taskType: activeTab,
@@ -138,6 +138,7 @@ export default function AdminApprovalPage() {
         if (!searchTerm) return true;
         const term = searchTerm.toLowerCase();
         return (
+            task.doer_name?.toLowerCase().includes(term) ||
             task.name?.toLowerCase().includes(term) ||
             task.task_description?.toLowerCase().includes(term) ||
             task.given_by?.toLowerCase().includes(term) ||
@@ -294,7 +295,7 @@ export default function AdminApprovalPage() {
                                     filteredTasks.map((task) => (
                                         <tr key={task.id} className="hover:bg-gray-50">
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-medium text-gray-900">{task.name || task.filled_by || task.doer_name}</div>
+                                                <div className="text-sm font-medium text-gray-900">{task.doer_name || task.name || task.filled_by}</div>
                                                 <div className="text-xs text-gray-500">By: {task.given_by || '-'}</div>
                                             </td>
                                             <td className="px-6 py-4">

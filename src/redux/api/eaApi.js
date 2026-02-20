@@ -17,17 +17,15 @@ export const fetchEATasks = async () => {
     }
 };
 
-// Fetch EA task history (completed/approved) from ea_tasks_done
+// Fetch EA task history (from ea_tasks_done merged with ea_tasks) - Same as delegation
 export const fetchEATasksHistory = async () => {
     try {
-        const { data: doneData, error } = await supabase
+        const { data: doneData, error: doneError } = await supabase
             .from('ea_tasks_done')
             .select('*')
-            .in('status', ['done', 'approved', 'Approved', 'Done', 'extended', 'Extended'])
             .order('created_at', { ascending: false });
 
-        if (error) throw error;
-
+        if (doneError) throw doneError;
         if (!doneData || doneData.length === 0) return [];
 
         const taskIds = doneData.map(d => d.task_id).filter(id => id);
@@ -45,6 +43,12 @@ export const fetchEATasksHistory = async () => {
             return {
                 ...detail,
                 ...doneItem,
+                // Map snapshot names back to frontend field names for consistency
+                doer_name: doneItem.doer_name || detail?.doer_name,
+                remarks: doneItem.reason || detail?.remarks,
+                planned_date: (doneItem.status?.toLowerCase() === 'extended' || doneItem.status?.toLowerCase() === 'extend')
+                    ? (doneItem.next_extend_date || detail?.planned_date)
+                    : (doneItem.planned_date || detail?.planned_date),
                 id: doneItem.task_id,
                 department: "EA"
             };
@@ -93,15 +97,23 @@ export const completeEATask = async (task, remarks = '', imageUrl = '') => {
     try {
         const givenBy = localStorage.getItem("user-name") || "Admin";
 
-        // 1. Insert into ea_tasks_done
+        // 1. Insert into ea_tasks_done (snapshot - using delegation column names)
         const { error: doneError } = await supabase
             .from('ea_tasks_done')
             .insert([{
                 task_id: task.id || task.task_id,
-                status: 'pending', // Waiting for admin approval
-                remarks: remarks,
+                doer_name: task.doer_name, // Aligned with delegation
+                phone_number: task.phone_number,
+                planned_date: task.planned_date,
+                task_description: task.task_description,
+                status: 'pending', // Lowercase to match delegation pattern
+                submission_date: new Date().toISOString(),
+                reason: remarks, // Aligned with delegation
                 image_url: imageUrl,
-                given_by: givenBy
+                given_by: task.given_by || givenBy,
+                task_start_date: task.task_start_date,
+                duration: task.duration || null,
+                admin_done: false
             }]);
         if (doneError) throw doneError;
 
@@ -127,26 +139,36 @@ export const completeEATask = async (task, remarks = '', imageUrl = '') => {
 };
 
 // Extend EA task deadline
-export const extendEATask = async (task, newPlannedDate, remarks = '') => {
+export const extendEATask = async (task, newPlannedDate, remarks = '', imageUrl = null) => {
     try {
         const givenBy = localStorage.getItem("user-name") || "Admin";
 
-        // 1. Insert into ea_tasks_done as an 'extend' record
+        // 1. Insert into ea_tasks_done as an 'extended' record (snapshot)
         const { error: doneError } = await supabase
             .from('ea_tasks_done')
             .insert([{
                 task_id: task.id || task.task_id,
-                status: 'extended',
-                remarks: remarks,
-                given_by: givenBy
+                doer_name: task.doer_name,
+                phone_number: task.phone_number,
+                planned_date: task.planned_date,
+                task_description: task.task_description,
+                status: 'extended', // Lowercase
+                submission_date: new Date().toISOString(),
+                reason: remarks,
+                image_url: imageUrl, // Added to store image proof
+                given_by: task.given_by || givenBy,
+                next_extend_date: newPlannedDate, // Aligned with delegation
+                task_start_date: task.task_start_date,
+                duration: task.duration || null,
+                admin_done: false
             }]);
         if (doneError) throw doneError;
 
-        // 2. Update ea_tasks
         const { data, error } = await supabase
             .from('ea_tasks')
             .update({
                 planned_date: newPlannedDate,
+                extended_date: newPlannedDate, // Added to store extended date explicitly
                 status: 'extended',
                 remarks: remarks,
                 updated_at: new Date().toISOString()
@@ -205,6 +227,12 @@ export const fetchPendingEAApprovals = async () => {
             return {
                 ...detail,
                 ...doneItem,
+                // Map snapshot names back to frontend field names
+                doer_name: doneItem.doer_name || detail?.doer_name,
+                remarks: doneItem.reason || detail?.remarks,
+                planned_date: (doneItem.status?.toLowerCase() === 'extended' || doneItem.status?.toLowerCase() === 'extend')
+                    ? (doneItem.next_extend_date || detail?.planned_date)
+                    : (doneItem.planned_date || detail?.planned_date),
                 done_id: doneItem.id, // Record the entry ID from ea_tasks_done
                 id: doneItem.task_id,
                 department: "EA"

@@ -433,6 +433,7 @@ export default function MaintenanceTask() {
                 name: task.doerName,
                 given_by: task.givenBy,
                 task_start_date: `${getLocalDateString(date)}T${task.startTime}:00`,
+                planned_date: `${getLocalDateString(date)}T${task.startTime}:00`,
                 task_description: description,
                 machine_name: task.machineName,
                 part_name: (task.partName || []).join(', '),

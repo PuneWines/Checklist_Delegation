@@ -7,15 +7,13 @@ import { Play, Pause } from "lucide-react";
  */
 const AudioPlayer = ({ url, className = "" }) => {
     const [isPlaying, setIsPlaying] = useState(false);
+    const [hasInteracted, setHasInteracted] = useState(false);
     const audioRef = useRef(null);
 
     // 🛡️ Add cache-buster to prevent net::ERR_CACHE_OPERATION_NOT_SUPPORTED
-    // This error often occurs when the browser's cache interaction with media streams fails.
     const cacheBustedUrl = useMemo(() => {
         if (!url) return url;
-        // 🚨 Do NOT cache-bust blob: URLs. They do not support query parameters and will fail with net::ERR_FILE_NOT_FOUND.
         if (url.startsWith('blob:')) return url;
-
         const separator = url.includes('?') ? '&' : '?';
         return `${url}${separator}cb=${Date.now()}`;
     }, [url]);
@@ -23,16 +21,30 @@ const AudioPlayer = ({ url, className = "" }) => {
     const togglePlay = (e) => {
         if (e && e.stopPropagation) e.stopPropagation();
 
+        if (!hasInteracted) {
+            setHasInteracted(true);
+            // The audio element won't be in the DOM yet, so we'll handle play in useEffect
+            return;
+        }
+
         if (isPlaying) {
             audioRef.current.pause();
         } else {
-            // Check if audio is already loaded/valid
             audioRef.current.play().catch(err => {
                 console.error("Playback failed:", err);
             });
         }
-        setIsPlaying(!isPlaying);
     };
+
+    // Handle play if we just started interacting
+    useEffect(() => {
+        if (hasInteracted && audioRef.current && !isPlaying) {
+            audioRef.current.play().catch(err => {
+                console.error("Lazy Playback failed:", err);
+            });
+            setIsPlaying(true);
+        }
+    }, [hasInteracted]);
 
     useEffect(() => {
         const audio = audioRef.current;
@@ -51,7 +63,7 @@ const AudioPlayer = ({ url, className = "" }) => {
             audio.removeEventListener('pause', handlePause);
             audio.removeEventListener('play', handlePlay);
         };
-    }, []);
+    }, [hasInteracted]);
 
     return (
         <div className={`flex items-center gap-3 px-3 py-1.5 rounded-xl border transition-all duration-300 min-w-[140px] shadow-sm bg-white border-gray-100 hover:border-indigo-100 hover:shadow-md ${isPlaying ? 'bg-indigo-50/80 border-indigo-200 scale-[1.02]' : ''} ${className}`}>
@@ -82,7 +94,7 @@ const AudioPlayer = ({ url, className = "" }) => {
                     </div>
                 )}
             </div>
-            <audio ref={audioRef} src={cacheBustedUrl} className="hidden" preload="metadata" />
+            {hasInteracted && <audio ref={audioRef} src={cacheBustedUrl} className="hidden" preload="auto" />}
         </div>
     );
 };
