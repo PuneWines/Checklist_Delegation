@@ -2,18 +2,19 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { CheckCircle2, Upload, X, Search, History, ArrowLeft } from "lucide-react"
 import AdminLayout from "../../components/layout/AdminLayout"
+import { useMagicToast } from "../../context/MagicToastContext"
 
 // Configuration object - Move all configurations here
 const CONFIG = {
   // Google Apps Script URL
   APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbz47q4SiLvJJom8dRGteqjhufs0Iui4rYTLMeTYqOgY_MFrS0C0o0XkRCPzAOdEeg4jqg/exec",
-  
+
   // Google Drive folder ID for file uploads
   DRIVE_FOLDER_ID: "1IENpXhLEgB7lI8VAMc0qPIqtQgBcPDcM",
-  
+
   // Sheet name to work with
   SHEET_NAME: "PURAB",
-  
+
   // Page configuration
   PAGE_CONFIG: {
     title: "PURAB Tasks",
@@ -24,14 +25,13 @@ const CONFIG = {
 }
 
 function AccountDataPage() {
+  const { showToast } = useMagicToast()
   const [accountData, setAccountData] = useState([])
   const [selectedItems, setSelectedItems] = useState(new Set()) // Changed to Set for better performance
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [successMessage, setSuccessMessage] = useState("")
   const [additionalData, setAdditionalData] = useState({})
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [remarksData, setRemarksData] = useState({})
   const [historyData, setHistoryData] = useState([])
   const [showHistory, setShowHistory] = useState(false)
@@ -117,10 +117,10 @@ function AccountDataPage() {
   const filteredAccountData = useMemo(() => {
     const filtered = searchTerm
       ? accountData.filter((account) =>
-          Object.values(account).some(
-            (value) => value && value.toString().toLowerCase().includes(searchTerm.toLowerCase()),
-          ),
-        )
+        Object.values(account).some(
+          (value) => value && value.toString().toLowerCase().includes(searchTerm.toLowerCase()),
+        ),
+      )
       : accountData
 
     return filtered.sort(sortDateWise)
@@ -131,8 +131,8 @@ function AccountDataPage() {
       .filter((item) => {
         const matchesSearch = searchTerm
           ? Object.values(item).some(
-              (value) => value && value.toString().toLowerCase().includes(searchTerm.toLowerCase()),
-            )
+            (value) => value && value.toString().toLowerCase().includes(searchTerm.toLowerCase()),
+          )
           : true
 
         const matchesMember = selectedMembers.length > 0 ? selectedMembers.includes(item["col4"]) : true
@@ -173,12 +173,12 @@ function AccountDataPage() {
     const memberStats =
       selectedMembers.length > 0
         ? selectedMembers.reduce((stats, member) => {
-            const memberTasks = historyData.filter((task) => task["col4"] === member).length
-            return {
-              ...stats,
-              [member]: memberTasks,
-            }
-          }, {})
+          const memberTasks = historyData.filter((task) => task["col4"] === member).length
+          return {
+            ...stats,
+            [member]: memberTasks,
+          }
+        }, {})
         : {}
     const filteredTotal = filteredHistoryData.length
 
@@ -357,7 +357,7 @@ function AccountDataPage() {
       setLoading(false)
     } catch (error) {
       console.error("Error fetching sheet data:", error)
-      setError("Failed to load account data: " + error.message)
+      showToast("Failed to load account data: " + error.message, "error")
       setLoading(false)
     }
   }, [])
@@ -369,10 +369,10 @@ function AccountDataPage() {
   // Fixed checkbox handlers with better state management
   const handleSelectItem = useCallback((id, isChecked) => {
     console.log(`Checkbox action: ${id} -> ${isChecked}`)
-   
+
     setSelectedItems((prev) => {
       const newSelected = new Set(prev)
-     
+
       if (isChecked) {
         newSelected.add(id)
       } else {
@@ -389,7 +389,7 @@ function AccountDataPage() {
           return newRemarksData
         })
       }
-     
+
       console.log(`Updated selection: ${Array.from(newSelected)}`)
       return newSelected
     })
@@ -422,7 +422,7 @@ function AccountDataPage() {
   const handleImageUpload = async (id, e) => {
     const file = e.target.files[0]
     if (!file) return
-   
+
     console.log(`Image upload for: ${id}`)
     setAccountData((prev) => prev.map((item) => (item._id === id ? { ...item, image: file } : item)))
   }
@@ -443,9 +443,9 @@ function AccountDataPage() {
 
   const handleSubmit = async () => {
     const selectedItemsArray = Array.from(selectedItems)
-   
+
     if (selectedItemsArray.length === 0) {
-      alert("Please select at least one item to submit")
+      showToast("Please select at least one item to submit", "error")
       return
     }
 
@@ -456,7 +456,7 @@ function AccountDataPage() {
     })
 
     if (missingRemarks.length > 0) {
-      alert(`Please provide remarks for items marked as "No". ${missingRemarks.length} item(s) are missing remarks.`)
+      showToast(`Please provide remarks for items marked as "No". ${missingRemarks.length} item(s) are missing remarks.`, "error")
       return
     }
 
@@ -467,8 +467,9 @@ function AccountDataPage() {
     })
 
     if (missingRequiredImages.length > 0) {
-      alert(
+      showToast(
         `Please upload images for all required attachments. ${missingRequiredImages.length} item(s) are missing required images.`,
+        "error"
       )
       return
     }
@@ -547,8 +548,9 @@ function AccountDataPage() {
           prev.map((item) => (selectedItems.has(item._id) ? { ...item, status: "completed", image: null } : item)),
         )
 
-        setSuccessMessage(
-          `Successfully processed ${selectedItemsArray.length} task records! Columns K, M, N, and O updated.`,
+        showToast(
+          `Successfully processed ${selectedItemsArray.length} task records!`,
+          "success"
         )
         setSelectedItems(new Set())
         setAdditionalData({})
@@ -562,7 +564,7 @@ function AccountDataPage() {
       }
     } catch (error) {
       console.error("Submission error:", error)
-      alert("Failed to submit task records: " + error.message)
+      showToast("Failed to submit task records: " + error.message, "error")
     } finally {
       setIsSubmitting(false)
     }
@@ -620,17 +622,6 @@ function AccountDataPage() {
           </div>
         </div>
 
-        {successMessage && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md flex items-center justify-between">
-            <div className="flex items-center">
-              <CheckCircle2 className="h-5 w-5 mr-2 text-green-500" />
-              {successMessage}
-            </div>
-            <button onClick={() => setSuccessMessage("")} className="text-green-500 hover:text-green-700">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        )}
 
         <div className="rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden">
           <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-4">
@@ -646,13 +637,6 @@ function AccountDataPage() {
             <div className="text-center py-10">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500 mb-4"></div>
               <p className="text-purple-600">Loading task data...</p>
-            </div>
-          ) : error ? (
-            <div className="bg-red-50 p-4 rounded-md text-red-800 text-center">
-              {error}{" "}
-              <button className="underline ml-2" onClick={() => window.location.reload()}>
-                Try again
-              </button>
             </div>
           ) : showHistory ? (
             <>

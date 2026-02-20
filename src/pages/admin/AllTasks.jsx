@@ -27,7 +27,7 @@ import TaskManagementTabs from "../../components/TaskManagementTabs";
 import { updateRepairData } from "../../redux/api/repairApi";
 import { sendTaskExtensionNotification, sendUrgentTaskNotification } from "../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
-
+import { useMagicToast } from "../../context/MagicToastContext";
 const isAudioUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
   return url.startsWith('http') && (
@@ -59,6 +59,7 @@ const RenderDescription = ({ text }) => {
 };
 
 const AllTasks = () => {
+  const { showToast } = useMagicToast();
   // Active tab state
   const [activeTab, setActiveTab] = useState("checklist"); // checklist, maintenance, repair, ea
   const [showHistory, setShowHistory] = useState(false);
@@ -672,11 +673,11 @@ const AllTasks = () => {
       }]);
 
       setIsModalOpen(false);
-      setSuccessMessage("Repair task updated successfully!");
+      showToast("Repair task updated successfully!", "success");
       fetchData(); // Refresh list
     } catch (error) {
       console.error(error);
-      alert("Failed to update task: " + error.message);
+      showToast("Failed to update task: " + error.message, "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -684,7 +685,7 @@ const AllTasks = () => {
 
   const handleSubmit = async () => {
     if (selectedItems.size === 0) {
-      alert("Please select at least one task to submit");
+      showToast("Please select at least one task to submit", "error");
       return;
     }
 
@@ -695,11 +696,11 @@ const AllTasks = () => {
       for (const id of selectedArray) {
         if (statusData[id] === "extended") {
           if (!extendedDateData[id]) {
-            alert("Please provide an extended date for tasks with 'Extend' status");
+            showToast("Please provide an extended date for tasks with 'Extend' status", "error");
             return;
           }
           if (!remarksData[id] || remarksData[id].trim() === "") {
-            alert("Please provide remarks for tasks with 'Extend' status");
+            showToast("Please provide remarks for tasks with 'Extend' status", "error");
             return;
           }
         }

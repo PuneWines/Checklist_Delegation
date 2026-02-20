@@ -14,7 +14,7 @@ const parseJsonIfNeeded = (val) => {
 };
 
 // Fetch Maintenance Tasks (Active/Pending)
-export const fetchMaintenanceDataSortByDate = async (page = 1, limit = 50, searchTerm = '', frequency = '') => {
+export const fetchMaintenanceDataSortByDate = async (page = 1, limit = 50, searchTerm = '', frequency = '', dateFilter = 'all') => {
     const role = (localStorage.getItem('role') || "").toLowerCase();
     const username = localStorage.getItem('user-name');
     console.log(`DEBUG: fetchMaintenanceDataSortByDate - Role: ${role}, User: ${username}, Page: ${page}, Frequency: ${frequency}`);
@@ -41,6 +41,33 @@ export const fetchMaintenanceDataSortByDate = async (page = 1, limit = 50, searc
         if (role === 'user' && username) {
             console.log(`DEBUG: Applying user filter for ${username}`);
             query = query.eq('name', username);
+        }
+
+        // Apply Date Filter
+        const formatLocalISO = (date) => {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            const hh = String(date.getHours()).padStart(2, '0');
+            const mm = String(date.getMinutes()).padStart(2, '0');
+            const ss = String(date.getSeconds()).padStart(2, '0');
+            return `${y}-${m}-${d}T${hh}:${mm}:${ss}`;
+        };
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayEnd = new Date(today);
+        todayEnd.setHours(23, 59, 59, 999);
+
+        const todayStartStr = formatLocalISO(today);
+        const todayEndStr = formatLocalISO(todayEnd);
+
+        if (dateFilter === 'today') {
+            query = query.gte('planned_date', todayStartStr).lte('planned_date', todayEndStr);
+        } else if (dateFilter === 'overdue') {
+            query = query.lt('planned_date', todayStartStr);
+        } else if (dateFilter === 'upcoming') {
+            query = query.gt('planned_date', todayEndStr);
         }
 
         const { data, error, count } = await query;

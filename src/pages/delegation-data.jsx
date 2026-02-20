@@ -1,9 +1,11 @@
-"use client"
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
-import { CheckCircle2, Trash2, X, Search, Play, Pause, Edit, Save } from "lucide-react"
+import { CheckCircle2, Trash2, X, Search, Play, Pause, Edit, Save, Mic, Square } from "lucide-react"
 import { useDispatch, useSelector } from "react-redux"
 import { deleteDelegationTask, uniqueDelegationTaskData, updateDelegationTask } from "../redux/slice/quickTaskSlice"
+import { ReactMediaRecorder } from "react-media-recorder"
+import supabase from "../SupabaseClient"
 import AudioPlayer from "../components/AudioPlayer"
+import { useMagicToast } from "../context/MagicToastContext"
 
 const isAudioUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
@@ -35,7 +37,7 @@ function DelegationPage({
   givenByList = [],
   doersList = []
 }) {
-  const [successMessage, setSuccessMessage] = useState("")
+  const { showToast } = useMagicToast();
   const [error, setError] = useState(null)
   const [userRole, setUserRole] = useState("")
   const [username, setUsername] = useState("")
@@ -45,6 +47,8 @@ function DelegationPage({
   const [editingTaskId, setEditingTaskId] = useState(null)
   const [editFormData, setEditFormData] = useState({})
   const [isSaving, setIsSaving] = useState(false)
+  const [recordedAudio, setRecordedAudio] = useState(null)
+  const [isUploading, setIsUploading] = useState(false)
 
   const isControlled = externalSelectedTasks !== null;
   const selectedTasks = isControlled ? externalSelectedTasks : internalSelectedTasks;
@@ -94,13 +98,11 @@ function DelegationPage({
     try {
       await dispatch(deleteDelegationTask(selectedTasks)).unwrap()
       setInternalSelectedTasks([])
-      setSuccessMessage("Tasks deleted successfully")
+      showToast("Tasks deleted successfully", "success")
       dispatch(uniqueDelegationTaskData({}))
-
-      setTimeout(() => setSuccessMessage(""), 3000)
     } catch (error) {
       console.error("Failed to delete tasks:", error)
-      setError("Failed to delete tasks")
+      showToast("Failed to delete tasks", "error")
     } finally {
       setInternalIsDeleting(false)
     }
@@ -120,13 +122,15 @@ function DelegationPage({
       duration: task.duration || '',
       enable_reminder: task.enable_reminder || '',
       require_attachment: task.require_attachment || '',
-      remarks: task.remarks || ''
+      remarks: task.remarks || '',
+      originalAudioUrl: isAudioUrl(task.task_description) ? task.task_description : null
     });
   };
 
   const handleCancelEdit = () => {
     setEditingTaskId(null);
     setEditFormData({});
+    setRecordedAudio(null);
   };
 
   const handleSaveEdit = async () => {
@@ -134,16 +138,70 @@ function DelegationPage({
 
     setIsSaving(true);
     try {
-      await dispatch(updateDelegationTask(editFormData)).unwrap();
+      let finalEditData = { ...editFormData };
+      let audioToCleanup = null;
+
+      if (recordedAudio && recordedAudio.blob) {
+        setIsUploading(true);
+        try {
+          const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('audio-recordings')
+            .upload(fileName, recordedAudio.blob, {
+              contentType: recordedAudio.blob.type || 'audio/webm',
+              upsert: false
+            });
+
+          if (uploadError) throw uploadError;
+
+          const { data: publicUrlData } = supabase.storage
+            .from('audio-recordings')
+            .getPublicUrl(fileName);
+
+          finalEditData.task_description = publicUrlData.publicUrl;
+
+          if (editFormData.originalAudioUrl) {
+            audioToCleanup = editFormData.originalAudioUrl;
+          }
+        } catch (error) {
+          console.error("Audio upload failed:", error);
+          showToast("Failed to upload voice note. Saving without it.", "error");
+        } finally {
+          setIsUploading(false);
+        }
+      } else if (editFormData.originalAudioUrl && !isAudioUrl(editFormData.task_description)) {
+        audioToCleanup = editFormData.originalAudioUrl;
+      }
+
+      const originalTask = delegationTasks.find(task => task.id === editFormData.id);
+
+      await dispatch(updateDelegationTask({
+        updatedTask: finalEditData,
+        originalTask: originalTask ? {
+          department: originalTask.department,
+          name: originalTask.name,
+          task_description: originalTask.task_description
+        } : null
+      })).unwrap();
+
+      if (audioToCleanup) {
+        try {
+          const path = audioToCleanup.split('audio-recordings/').pop().split('?')[0];
+          await supabase.storage.from('audio-recordings').remove([path]);
+        } catch (cleanupError) {
+          console.error("Failed to cleanup old audio:", cleanupError);
+        }
+      }
+
       setEditingTaskId(null);
       setEditFormData({});
+      setRecordedAudio(null);
       // Refresh
       dispatch(uniqueDelegationTaskData({}));
-      setSuccessMessage("Task updated successfully");
-      setTimeout(() => setSuccessMessage(""), 3000);
+      showToast("Task updated successfully", "success");
     } catch (error) {
-      console.error("Failed to update task:", error);
-      setError("Failed to update task");
+      console.error("Failed to update task:", error)
+      showToast("Failed to update task", "error");
     } finally {
       setIsSaving(false);
     }
@@ -201,45 +259,25 @@ function DelegationPage({
       filtered = filtered.filter(task => task.department?.toLowerCase().includes(departmentFilter.toLowerCase()))
     }
 
-    // Today and Overdue Filter (Hide Upcoming)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Today and Overdue Filter (Hide Upcoming) - REMOVED because filtering is handled at API level
+    // const today = new Date();
+    // today.setHours(0, 0, 0, 0);
 
-    filtered = filtered.filter(task => {
-      const taskDate = task.task_start_date ? new Date(task.task_start_date) : null;
-      if (taskDate) {
-        const taskDay = new Date(taskDate);
-        taskDay.setHours(0, 0, 0, 0);
-        return taskDay <= today; // Only show today and past
-      }
-      return true; // Show tasks without dates (e.g. manual entries)
-    });
+    // filtered = filtered.filter(task => {
+    //   const taskDate = task.task_start_date ? new Date(task.task_start_date) : null;
+    //   if (taskDate) {
+    //     const taskDay = new Date(taskDate);
+    //     taskDay.setHours(0, 0, 0, 0);
+    //     return taskDay <= today; // Only show today and past
+    //   }
+    //   return true; // Show tasks without dates (e.g. manual entries)
+    // });
 
     return filtered
   }, [delegationTasks, searchTerm, freqFilter, departmentFilter])
 
   return (
     <>
-      {/* Success Message */}
-      {successMessage && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md flex items-center justify-between shadow-lg">
-          <div className="flex items-center">
-            <CheckCircle2 className="h-5 w-5 mr-2 text-green-500" />
-            {successMessage}
-          </div>
-          <button onClick={() => setSuccessMessage("")} className="text-green-500 hover:text-green-700 ml-4">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-      )}
-
-      {/* Error Message */}
-      {error && (
-        <div className="mt-4 bg-red-50 p-4 rounded-md text-red-800 text-center">
-          {error}
-        </div>
-      )}
-
       {/* Main Content */}
       {isInitialized && (
         <div className="mt-4 rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden">
@@ -269,7 +307,7 @@ function DelegationPage({
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 sticky top-0 z-20">
                 <tr>
-                  <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                  <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
                     #
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
@@ -279,6 +317,9 @@ function DelegationPage({
                       onChange={handleSelectAll}
                       className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                     />
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                    Actions
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Task ID
@@ -313,9 +354,6 @@ function DelegationPage({
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Attachment
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                    Actions
-                  </th>
                 </tr>
               </thead>
 
@@ -337,15 +375,121 @@ function DelegationPage({
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {editingTaskId === task.id ? (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleSaveEdit}
+                              disabled={isSaving}
+                              className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                            >
+                              <Save size={14} />
+                              {isSaving ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
+                            >
+                              <X size={14} />
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleEditClick(task)}
+                            className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                          >
+                            <Edit size={14} />
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {task.id || "—"}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500 min-w-[300px] max-w-[400px]">
                         {editingTaskId === task.id ? (
-                          <textarea
-                            value={editFormData.task_description}
-                            onChange={(e) => handleInputChange('task_description', e.target.value)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                            rows="3"
+                          <ReactMediaRecorder
+                            audio
+                            onStop={(blobUrl, blob) => setRecordedAudio({ blobUrl, blob })}
+                            render={({ status, startRecording, stopRecording, clearBlobUrl }) => (
+                              <div className="space-y-2">
+                                {status !== 'recording' && !recordedAudio && (
+                                  <div className="relative">
+                                    {isAudioUrl(editFormData.task_description) ? (
+                                      <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <AudioPlayer url={editFormData.task_description} />
+                                          <button
+                                            type="button"
+                                            onClick={() => handleInputChange('task_description', '')}
+                                            className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                                          >
+                                            <Trash2 size={10} /> Remove
+                                          </button>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={startRecording}
+                                          className="mt-2 w-full flex items-center justify-center gap-2 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 transition-all"
+                                        >
+                                          <Mic size={12} /> Replace with Recording
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="relative">
+                                        <textarea
+                                          value={editFormData.task_description}
+                                          onChange={(e) => handleInputChange('task_description', e.target.value)}
+                                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm pr-10"
+                                          rows="3"
+                                          placeholder="Enter task text..."
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={startRecording}
+                                          className="absolute bottom-2 right-2 p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200"
+                                          title="Record Audio"
+                                        >
+                                          <Mic size={16} />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {status === 'recording' && (
+                                  <div className="flex flex-col items-center justify-center p-4 bg-red-50 border border-red-100 rounded-lg space-y-2 animate-pulse">
+                                    <Mic size={20} className="text-red-600" />
+                                    <button
+                                      type="button"
+                                      onClick={stopRecording}
+                                      className="flex items-center gap-2 px-3 py-1 bg-red-600 text-white rounded-full hover:bg-red-700 text-xs font-bold"
+                                    >
+                                      <Square size={10} /> Stop
+                                    </button>
+                                  </div>
+                                )}
+
+                                {recordedAudio && status !== 'recording' && (
+                                  <div className="bg-purple-50 border border-purple-100 rounded-lg p-2">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-[10px] font-bold text-purple-600 uppercase">New Voice Note Attached</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          clearBlobUrl();
+                                          setRecordedAudio(null);
+                                        }}
+                                        className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                                      >
+                                        <Trash2 size={10} /> Remove
+                                      </button>
+                                    </div>
+                                    <AudioPlayer url={recordedAudio.blobUrl} />
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           />
                         ) : (
                           <div className="whitespace-normal break-words underline-offset-2">
@@ -399,8 +543,10 @@ function DelegationPage({
                             className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                           >
                             <option value="">Select Name</option>
-                            {doersList.map(name => (
-                              <option key={name} value={name}>{name}</option>
+                            {doersList.map(user => (
+                              <option key={user.user_name || user} value={user.user_name || user}>
+                                {user.user_name || user}
+                              </option>
                             ))}
                           </select>
                         ) : (

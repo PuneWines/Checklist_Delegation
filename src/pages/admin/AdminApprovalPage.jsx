@@ -9,6 +9,7 @@ import { fetchPendingChecklistApprovals, approveChecklistTask, rejectChecklistTa
 import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase, XCircle, History, Clock } from "lucide-react";
 import { sendTaskRejectionNotification } from "../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
+import { useMagicToast } from "../../context/MagicToastContext";
 
 // Helper to extract audio URL from text
 const extractAudioUrl = (text) => {
@@ -19,6 +20,7 @@ const extractAudioUrl = (text) => {
 };
 
 export default function AdminApprovalPage() {
+    const { showToast } = useMagicToast();
     const [activeTab, setActiveTab] = useState("delegation");
     const [viewMode, setViewMode] = useState("pending"); // 'pending' or 'history'
     const [pendingTasks, setPendingTasks] = useState([]);
@@ -61,7 +63,7 @@ export default function AdminApprovalPage() {
         setProcessingId(task.id);
         if (!task.id) {
             console.error("Task ID is missing!", task);
-            alert("Failed to approve task: Task ID is missing");
+            showToast("Failed to approve task: Task ID is missing", "error");
             setProcessingId(null);
             return;
         }
@@ -85,9 +87,10 @@ export default function AdminApprovalPage() {
 
             // Remove from list
             setPendingTasks(prev => prev.filter(t => t.id !== task.id));
+            showToast("Task approved successfully!", "success");
         } catch (error) {
             console.error("Detailed error in handleApprove:", error);
-            alert("Failed to approve task: " + (error.message || "Unknown error"));
+            showToast("Failed to approve task: " + (error.message || "Unknown error"), "error");
         } finally {
             setProcessingId(null);
         }
@@ -97,7 +100,7 @@ export default function AdminApprovalPage() {
         const reason = window.prompt("Enter rejection reason (User will be notified via WhatsApp):");
         if (reason === null) return; // Cancelled
         if (!reason.trim()) {
-            alert("Rejection reason is required.");
+            showToast("Rejection reason is required.", "error");
             return;
         }
 
@@ -126,9 +129,10 @@ export default function AdminApprovalPage() {
 
             // Remove from list
             setPendingTasks(prev => prev.filter(t => t.id !== task.id));
+            showToast("Task rejected successfully!", "success");
         } catch (error) {
             console.error("Error rejecting task:", error);
-            alert("Failed to reject task: " + (error.message || "Unknown error"));
+            showToast("Failed to reject task: " + (error.message || "Unknown error"), "error");
         } finally {
             setProcessingId(null);
         }

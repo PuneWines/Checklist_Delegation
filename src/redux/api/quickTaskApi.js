@@ -1,3 +1,5 @@
+import supabase from "../../SupabaseClient";
+
 // Helper to parse JSON strings if accidentally stored as such
 const parseJsonIfNeeded = (val) => {
   if (typeof val === 'string' && val.trim().startsWith('{')) {
@@ -12,11 +14,17 @@ const parseJsonIfNeeded = (val) => {
 };
 
 // Update fetchChecklistData to support pagination and filtering
-// More efficient approach using window functions (if supported by Supabase)
-export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '') => {
+export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all') => {
   try {
     const start = page * pageSize;
     const end = start + pageSize - 1;
+
+    // Dates for filtering
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+    const todayStr = today.toISOString().split('T')[0];
 
     // Step 1: Get unique task_descriptions with conditions applied at database level
     let uniqueQuery = supabase
@@ -27,6 +35,14 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
 
     if (nameFilter) {
       uniqueQuery = uniqueQuery.eq('name', nameFilter);
+    }
+
+    if (dateFilter === 'today') {
+      uniqueQuery = uniqueQuery.gte('planned_date', today.toISOString()).lte('planned_date', todayEnd.toISOString());
+    } else if (dateFilter === 'overdue') {
+      uniqueQuery = uniqueQuery.lt('planned_date', today.toISOString());
+    } else if (dateFilter === 'upcoming') {
+      uniqueQuery = uniqueQuery.gt('planned_date', todayEnd.toISOString());
     }
 
     const { data: allUniqueDescriptions, error: uniqueError } = await uniqueQuery;
@@ -71,6 +87,14 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
       dataQuery = dataQuery.eq('name', nameFilter);
     }
 
+    if (dateFilter === 'today') {
+      dataQuery = dataQuery.gte('planned_date', today.toISOString()).lte('planned_date', todayEnd.toISOString());
+    } else if (dateFilter === 'overdue') {
+      dataQuery = dataQuery.lt('planned_date', today.toISOString());
+    } else if (dateFilter === 'upcoming') {
+      dataQuery = dataQuery.gt('planned_date', todayEnd.toISOString());
+    }
+
     const { data, error } = await dataQuery;
 
     if (error) {
@@ -108,10 +132,16 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
 };
 
 // Update fetchDelegationData similarly
-export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = '') => {
+export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all') => {
   try {
     const start = page * pageSize;
     const end = start + pageSize - 1;
+
+    // Dates for filtering
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
 
     // Step 1: Get unique task_descriptions with conditions applied at database level
     let uniqueQuery = supabase
@@ -122,6 +152,14 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
 
     if (nameFilter) {
       uniqueQuery = uniqueQuery.eq('name', nameFilter);
+    }
+
+    if (dateFilter === 'today') {
+      uniqueQuery = uniqueQuery.gte('planned_date', today.toISOString()).lte('planned_date', todayEnd.toISOString());
+    } else if (dateFilter === 'overdue') {
+      uniqueQuery = uniqueQuery.lt('planned_date', today.toISOString());
+    } else if (dateFilter === 'upcoming') {
+      uniqueQuery = uniqueQuery.gt('planned_date', todayEnd.toISOString());
     }
 
     const { data: allUniqueDescriptions, error: uniqueError } = await uniqueQuery;
@@ -164,6 +202,14 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
 
     if (nameFilter) {
       dataQuery = dataQuery.eq('name', nameFilter);
+    }
+
+    if (dateFilter === 'today') {
+      dataQuery = dataQuery.gte('planned_date', today.toISOString()).lte('planned_date', todayEnd.toISOString());
+    } else if (dateFilter === 'overdue') {
+      dataQuery = dataQuery.lt('planned_date', today.toISOString());
+    } else if (dateFilter === 'upcoming') {
+      dataQuery = dataQuery.gt('planned_date', todayEnd.toISOString());
     }
 
     const { data, error } = await dataQuery;

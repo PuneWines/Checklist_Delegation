@@ -8,6 +8,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { userDetails } from "../../redux/slice/settingSlice";
 import CalendarComponent from "../../components/CalendarComponent";
 import { sendTaskAssignmentNotification } from "../../services/whatsappService";
+import { useMagicToast } from "../../context/MagicToastContext";
 
 
 
@@ -273,14 +274,21 @@ function TaskCard({ task, index, total, allDoers, onUpdate, onRemove }) {
 export default function EATask() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const { showToast } = useMagicToast();
     const { userData } = useSelector((state) => state.setting || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
     const [tasks, setTasks] = useState([defaultTask()]);
     const [allDoers, setAllDoers] = useState([]);
     const [historicalDoers, setHistoricalDoers] = useState([]);
+    const [holidays, setHolidays] = useState([]);
 
     useEffect(() => {
+        const fetchHolidays = async () => {
+            const { data } = await supabase.from('holidays').select('holiday_date');
+            if (data) setHolidays(data.map(h => h.holiday_date));
+        };
+        fetchHolidays();
         fetchUniqueDoers();
         dispatch(userDetails());
     }, [dispatch]);
@@ -329,11 +337,16 @@ export default function EATask() {
     };
 
     const handleSubmitAll = async () => {
-        // Validate all tasks
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i];
             if (!t.doer_name || !t.planned_date || (!t.task_description && !t.recordedAudio)) {
-                alert(`Task ${i + 1}: Please fill in all required fields (Doer, Date, and Description or Voice Note).`);
+                showToast(`Task ${i + 1}: Please fill in all required fields.`, 'error');
+                return;
+            }
+
+            // Holiday check
+            if (holidays.includes(t.planned_date)) {
+                showToast(`Task ${i + 1}: The selected date (${t.planned_date}) is a holiday.`, 'error');
                 return;
             }
         }
@@ -390,13 +403,13 @@ export default function EATask() {
                 console.error('WhatsApp notification error:', whatsappError);
             }
 
-            setSuccessMessage(`${tasksToInsert.length} EA Task(s) assigned successfully!`);
+            showToast(`${tasksToInsert.length} EA Task(s) assigned successfully!`, 'success');
             setTasks([defaultTask()]);
             fetchUniqueDoers();
-            setTimeout(() => navigate("/dashboard/assign-task"), 1500);
+            setTimeout(() => navigate("/dashboard/assign-task"), 2000);
         } catch (err) {
             console.error("Error creating EA tasks:", err);
-            alert("Failed to assign tasks: " + err.message);
+            showToast("Failed to assign tasks: " + err.message, 'error');
         } finally {
             setIsSubmitting(false);
         }

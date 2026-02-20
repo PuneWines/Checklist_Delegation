@@ -5,12 +5,14 @@ import { useDispatch, useSelector } from "react-redux"
 import { useNavigate } from "react-router-dom"
 import { loginUser } from "../redux/slice/loginSlice"
 import { LoginCredentialsApi } from "../redux/api/loginApi"
+import { useMagicToast } from "../context/MagicToastContext"
 import supabase from "../SupabaseClient"
 
 const LoginPage = () => {
   const navigate = useNavigate()
   const { isLoggedIn, userData, error } = useSelector((state) => state.login);
   const dispatch = useDispatch();
+  const { showToast } = useMagicToast();
 
   const [isDataLoading, setIsDataLoading] = useState(false)
   const [isLoginLoading, setIsLoginLoading] = useState(false)
@@ -21,9 +23,7 @@ const LoginPage = () => {
   const [formData, setFormData] = useState({
     username: "",
     password: "",
-    // Remove email_id from here since it's not a login input
   })
-  const [toast, setToast] = useState({ show: false, message: "", type: "" })
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -43,6 +43,7 @@ const LoginPage = () => {
 
       console.log("Stored email:", userData.email_id || userData.email); // Debug log
 
+      showToast(`Welcome back, ${userData.user_name || userData.username}!`, "success");
       navigate("/dashboard/admin")
     } else if (error) {
       showToast(error, "error");
@@ -74,7 +75,7 @@ const LoginPage = () => {
             if (updatedUser.status === 'inactive') {
               // 🚨 Auto logout when status becomes inactive
               localStorage.clear();
-              setToast({ show: true, message: "Your account has been deactivated.", type: "error" });
+              showToast("Your account has been deactivated.", "error");
               setTimeout(() => {
                 navigate("/login");
               }, 2000);
@@ -97,13 +98,6 @@ const LoginPage = () => {
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const showToast = (message, type) => {
-    setToast({ show: true, message, type })
-    setTimeout(() => {
-      setToast({ show: false, message: "", type: "" })
-    }, 5000)
   }
 
   return (
@@ -175,16 +169,6 @@ const LoginPage = () => {
           </a>
         </div>
       </div>
-
-      {/* Toast Notification */}
-      {toast.show && (
-        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg transition-all duration-300 ${toast.type === "success"
-          ? "bg-green-100 text-green-800 border-l-4 border-green-500"
-          : "bg-red-100 text-red-800 border-l-4 border-red-500"
-          }`}>
-          {toast.message}
-        </div>
-      )}
     </div>
   )
 }

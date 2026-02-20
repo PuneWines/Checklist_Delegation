@@ -10,6 +10,7 @@ import { ReactMediaRecorder } from "react-media-recorder";
 import supabase from "../../SupabaseClient";
 import { sendTaskAssignmentNotification } from "../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
+import { useMagicToast } from "../../context/MagicToastContext";
 
 
 
@@ -191,11 +192,13 @@ function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions,
 export default function RepairTask() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const { showToast } = useMagicToast();
     const { givenBy } = useSelector((state) => state.assignTask);
     const { customDropdowns = [], userData = [] } = useSelector((state) => state.setting || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
     const [tasks, setTasks] = useState([defaultTask()]);
+    const [holidays, setHolidays] = useState([]);
 
     const getUniqueDropdownValues = (category) => {
         const items = customDropdowns.filter(item => item.category === category);
@@ -204,6 +207,11 @@ export default function RepairTask() {
     };
 
     useEffect(() => {
+        const fetchHolidays = async () => {
+            const { data } = await supabase.from('holidays').select('holiday_date');
+            if (data) setHolidays(data.map(h => h.holiday_date));
+        };
+        fetchHolidays();
         dispatch(uniqueGivenByData());
         dispatch(customDropdownDetails());
         dispatch(userDetails());
@@ -221,13 +229,20 @@ export default function RepairTask() {
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i];
             if (!t.filledBy) {
-                alert(`Request ${i + 1}: Please select 'Assign From' (Filled By).`);
+                showToast(`Request ${i + 1}: Please select 'Assign From' (Filled By).`, 'error');
                 return;
             }
             if (!t.assignedPerson || !t.machineName || (!t.issueDetails && !t.recordedAudio)) {
-                alert(`Request ${i + 1}: Please fill in all required fields (Assign To, Machine, and Issue Details or Voice Note).`);
+                showToast(`Request ${i + 1}: Please fill in all required fields.`, 'error');
                 return;
             }
+        }
+
+        // Holiday check for today (Repairs are created for today)
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (holidays.includes(todayStr)) {
+            showToast(`Cannot submit repair requests today as it is a holiday (${todayStr}).`, 'error');
+            return;
         }
 
         setIsSubmitting(true);
@@ -275,12 +290,12 @@ export default function RepairTask() {
                 console.error('WhatsApp notification error:', whatsappError);
             }
 
-            setSuccessMessage(`${tasks.length} Repair Request(s) submitted successfully!`);
+            showToast(`${tasks.length} Repair Request(s) submitted successfully!`, 'success');
             setTasks([defaultTask()]);
-            setTimeout(() => navigate('/dashboard/assign-task'), 1500);
+            setTimeout(() => navigate('/dashboard/assign-task'), 2000);
         } catch (error) {
             console.error("Submission failed:", error);
-            alert("Failed to submit requests. Please try again.");
+            showToast("Failed to submit requests. Please try again.", 'error');
         } finally {
             setIsSubmitting(false);
         }

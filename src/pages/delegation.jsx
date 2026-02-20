@@ -22,6 +22,7 @@ import {
 } from "../redux/slice/delegationSlice";
 import { insertDelegationDoneAndUpdate } from "../redux/api/delegationApi";
 import { sendUrgentTaskNotification, sendTaskExtensionNotification } from "../services/whatsappService";
+import { useMagicToast } from "../context/MagicToastContext";
 
 // Configuration object - Move all configurations here
 const CONFIG = {
@@ -88,6 +89,7 @@ function useDebounce(value, delay) {
 }
 
 function DelegationDataPage() {
+  const { showToast } = useMagicToast();
   const [uploadedImages, setUploadedImages] = useState({});
   const [accountData, setAccountData] = useState([]);
   const [selectedItems, setSelectedItems] = useState(new Set());
@@ -523,14 +525,14 @@ function DelegationDataPage() {
     const selectedItemsArray = Array.from(selectedItems);
 
     if (selectedItemsArray.length === 0) {
-      alert("Please select at least one item to submit");
+      showToast("Please select at least one item to submit", "error");
       return;
     }
 
     const missingStatus = selectedItemsArray.filter((id) => !statusData[id]);
     if (missingStatus.length > 0) {
-      alert(
-        `Please select a status for all selected items. ${missingStatus.length} item(s) are missing status.`
+      showToast(
+        `Please select a status for all selected items.`, "error"
       );
       return;
     }
@@ -539,8 +541,8 @@ function DelegationDataPage() {
       (id) => statusData[id] === "Extend date" && !nextTargetDate[id]
     );
     if (missingNextDate.length > 0) {
-      alert(
-        `Please select a next target date for all items with "Extend date" status. ${missingNextDate.length} item(s) are missing target date.`
+      showToast(
+        `Please select a next target date for extensions.`, "error"
       );
       return;
     }
@@ -554,8 +556,8 @@ function DelegationDataPage() {
     });
 
     if (missingRequiredImages.length > 0) {
-      alert(
-        `Please upload images for all required attachments. ${missingRequiredImages.length} item(s) are missing required images.`
+      showToast(
+        `Please upload images for all required attachments.`, "error"
       );
       return;
     }
@@ -659,11 +661,9 @@ function DelegationDataPage() {
 
         if (failedTasks.length > 0) {
           console.error('Some tasks failed to submit:', failedTasks);
-          alert(`${failedTasks.length} task(s) failed to submit. Please check console for details.`);
+          showToast(`${failedTasks.length} task(s) failed to submit.`, "error");
         } else {
-          setSuccessMessage(
-            `Successfully submitted ${selectedItemsArray.length} task records!`
-          );
+          showToast(`Successfully submitted ${selectedItemsArray.length} task records!`, "success");
           setSelectedItems(new Set());
           setAdditionalData({});
           setRemarksData({});
@@ -682,7 +682,7 @@ function DelegationDataPage() {
 
     } catch (error) {
       console.error('Submission error:', error);
-      alert('An error occurred during submission: ' + (error.message || 'Please try again.'));
+      showToast('An error occurred during submission.', "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -707,11 +707,11 @@ function DelegationDataPage() {
         });
       }
 
-      setSuccessMessage(`Successfully sent urgent WhatsApp notifications for ${selectedItems.size} task(s)!`);
+      showToast(`Urgent WhatsApp notifications sent successfully!`, "success");
       setSelectedItems(new Set());
     } catch (err) {
       console.error("WhatsApp error:", err);
-      alert("Failed to send WhatsApp messages: " + err.message);
+      showToast("Failed to send WhatsApp messages.", "error");
     } finally {
       setIsSubmitting(false);
     }

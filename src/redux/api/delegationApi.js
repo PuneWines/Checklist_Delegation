@@ -23,6 +23,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
             given_by: taskData.given_by,
             duration: taskData.duration || '',
             image_url: taskData.image_url,
+            admin_done: false, // Added to match schema
           };
 
           console.log('Inserting into delegation_done:', delegationDoneData);

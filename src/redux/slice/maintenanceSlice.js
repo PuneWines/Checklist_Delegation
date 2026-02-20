@@ -20,8 +20,9 @@ export const maintenanceData = createAsyncThunk("maintenanceData", async (arg = 
         const frequency = typeof arg === 'object' ? (arg.frequency || '') : '';
         const limit = typeof arg === 'object' ? (arg.limit || 50) : 50;
         const searchTerm = typeof arg === 'object' ? (arg.searchTerm || '') : '';
+        const dateFilter = typeof arg === 'object' ? (arg.dateFilter || 'all') : 'all';
 
-        const response = await fetchMaintenanceDataSortByDate(page, limit, searchTerm, frequency);
+        const response = await fetchMaintenanceDataSortByDate(page, limit, searchTerm, frequency, dateFilter);
         return response;
     } catch (error) {
         return rejectWithValue(error.message);

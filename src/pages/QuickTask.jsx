@@ -8,9 +8,11 @@ import { useDispatch, useSelector } from "react-redux";
 import { deleteChecklistTask, deleteDelegationTask, uniqueChecklistTaskData, uniqueDelegationTaskData, updateChecklistTask, fetchUsers, resetChecklistPagination, resetDelegationPagination } from "../redux/slice/quickTaskSlice";
 import { maintenanceData, deleteMaintenanceTask, updateMaintenanceTask } from "../redux/slice/maintenanceSlice";
 import { fetchUniqueDepartmentDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../redux/api/assignTaskApi";
+import { fetchCustomDropdownsApi } from "../redux/api/settingApi";
 import { ReactMediaRecorder } from "react-media-recorder";
 import supabase from "../SupabaseClient";
 import AudioPlayer from "../components/AudioPlayer";
+import { useMagicToast } from "../context/MagicToastContext";
 
 const isAudioUrl = (url) => {
   if (typeof url !== 'string') return false;
@@ -43,6 +45,7 @@ const RenderDescription = ({ text }) => {
 };
 
 export default function QuickTask() {
+  const { showToast } = useMagicToast();
   const [tasks, setTasks] = useState([]);
   const [delegationLoading, setDelegationLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -66,6 +69,7 @@ export default function QuickTask() {
   const [departments, setDepartments] = useState([]);
   const [givenByList, setGivenByList] = useState([]);
   const [doersList, setDoersList] = useState([]);
+  const [customOptions, setCustomOptions] = useState([]);
 
   // const { quickTask, loading, delegationTasks, users } = useSelector((state) => state.quickTask);
   const {
@@ -94,17 +98,32 @@ export default function QuickTask() {
 
     // Fetch dropdown data
     const fetchDropdownData = async () => {
-      const [depts, givens, doers] = await Promise.all([
+      const [depts, givens, doers, customs] = await Promise.all([
         fetchUniqueDepartmentDataApi(),
         fetchUniqueGivenByDataApi(),
-        fetchUniqueDoerNameDataApi()
+        fetchUniqueDoerNameDataApi(),
+        fetchCustomDropdownsApi()
       ]);
       setDepartments(depts);
       setGivenByList(givens);
       setDoersList(doers);
+      setCustomOptions(customs);
     };
     fetchDropdownData();
   }, [dispatch]);
+
+  // Re-fetch when dateFilter or activeTab changes
+  useEffect(() => {
+    if (activeTab === 'checklist') {
+      dispatch(resetChecklistPagination());
+      dispatch(uniqueChecklistTaskData({ page: 0, pageSize: 50, dateFilter }));
+    } else if (activeTab === 'delegation') {
+      dispatch(resetDelegationPagination());
+      dispatch(uniqueDelegationTaskData({ page: 0, pageSize: 50, dateFilter }));
+    } else if (activeTab === 'maintenance') {
+      dispatch(maintenanceData({ page: 1, frequency: freqFilter, searchTerm: searchTerm, dateFilter }));
+    }
+  }, [dateFilter, dispatch, activeTab, freqFilter, searchTerm]);
 
 
   // Add this new function
@@ -119,23 +138,45 @@ export default function QuickTask() {
         dispatch(uniqueChecklistTaskData({
           page: checklistPage,
           pageSize: 50,
+          dateFilter,
           append: true
         }));
       } else if (activeTab === 'delegation' && delegationHasMore) {
         dispatch(uniqueDelegationTaskData({
           page: delegationPage,
           pageSize: 50,
+          dateFilter,
           append: true
         }));
       } else if (activeTab === 'maintenance' && maintenanceHasMore) {
         dispatch(maintenanceData({
           page: maintenancePage + 1,
           frequency: freqFilter,
-          searchTerm: searchTerm
+          searchTerm: searchTerm,
+          dateFilter
         }));
       }
     }
-  }, [loading, maintenanceLoading, activeTab, checklistHasMore, delegationHasMore, maintenanceHasMore, checklistPage, delegationPage, maintenancePage, dispatch]);
+  }, [loading, maintenanceLoading, activeTab, checklistHasMore, delegationHasMore, maintenanceHasMore, checklistPage, delegationPage, maintenancePage, dispatch, dateFilter, freqFilter, searchTerm]);
+
+  // Options for Maintenance dropdowns
+  const machineOptions = useMemo(() =>
+    [...new Set(customOptions.filter(o => o.category === "Machine Name").map(o => o.value))].sort(),
+    [customOptions]
+  );
+
+  const areaOptions = useMemo(() =>
+    [...new Set(customOptions.filter(o => o.category === "Machine Area").map(o => o.value))].sort(),
+    [customOptions]
+  );
+
+  const partOptions = useMemo(() => {
+    let filtered = customOptions.filter(o => o.category === "Part Name");
+    if (editFormData.machine_name) {
+      filtered = filtered.filter(o => o.parent === editFormData.machine_name);
+    }
+    return [...new Set(filtered.map(o => o.value))].sort();
+  }, [customOptions, editFormData.machine_name]);
 
   // Add scroll listener
   useEffect(() => {
@@ -161,7 +202,8 @@ export default function QuickTask() {
         task_start_date: task.task_start_date || '',
         freq: task.freq || '',
         status: task.status || '',
-        remarks: task.remarks || ''
+        remarks: task.remarks || '',
+        originalAudioUrl: isAudioUrl(task.task_description) ? task.task_description : null,
       });
     } else {
       setEditFormData({
@@ -281,6 +323,8 @@ export default function QuickTask() {
       setEditFormData({});
       setRecordedAudio(null);
 
+      showToast("Task updated successfully!", "success");
+
       // Refresh the data
       if (activeTab === 'checklist') {
         dispatch(uniqueChecklistTaskData());
@@ -290,17 +334,21 @@ export default function QuickTask() {
 
     } catch (error) {
       console.error("Failed to update task:", error);
-      setError("Failed to update task");
+      showToast("Failed to update task", "error");
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleInputChange = async (field, value) => {
-    setEditFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setEditFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      // If machine_name changes, clear part_name
+      if (field === 'machine_name') {
+        newData.part_name = '';
+      }
+      return newData;
+    });
 
     // If department changes, refresh doers list
     if (field === 'department') {
@@ -347,10 +395,11 @@ export default function QuickTask() {
         await dispatch(deleteDelegationTask(selectedTasks)).unwrap();
         dispatch(uniqueDelegationTaskData({}));
       }
+      showToast(`${selectedTasks.length} task(s) deleted successfully!`, "success");
       setSelectedTasks([]);
     } catch (error) {
       console.error("Failed to delete tasks:", error);
-      setError("Failed to delete tasks");
+      showToast("Failed to delete tasks", "error");
     } finally {
       setIsDeleting(false);
     }
@@ -410,7 +459,28 @@ export default function QuickTask() {
       task.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.given_by?.toLowerCase().includes(searchTerm.toLowerCase())
     );
-    return freqFilterPass && searchTermPass;
+
+    // Date Filtering Logic
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const taskDateStr = task.task_start_date || task.planned_date;
+    const taskDate = taskDateStr ? new Date(taskDateStr) : null;
+
+    let matchesDate = true;
+    if (taskDate) {
+      if (dateFilter === "today") {
+        matchesDate = (taskDate >= today && taskDate <= todayEnd);
+      } else if (dateFilter === "overdue") {
+        matchesDate = (taskDate < today);
+      } else if (dateFilter === "upcoming") {
+        matchesDate = (taskDate > todayEnd);
+      }
+    }
+
+    return freqFilterPass && searchTermPass && matchesDate;
   });
 
   // Keep allFrequencies as is (or modify if you want to fetch frequencies from elsewhere)
@@ -482,7 +552,8 @@ export default function QuickTask() {
     const todayEnd = new Date(today);
     todayEnd.setHours(23, 59, 59, 999);
 
-    const taskDate = task.task_start_date ? new Date(task.task_start_date) : null;
+    const taskDateStr = task.planned_date || task.task_start_date;
+    const taskDate = taskDateStr ? new Date(taskDateStr) : null;
 
     let matchesDate = true;
     if (taskDate) {
@@ -518,152 +589,151 @@ export default function QuickTask() {
   return (
     <AdminLayout>
       <div className="sticky top-0 z-30 bg-white pb-4 border-b border-gray-200">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-purple-700">
-              {CONFIG.PAGE_CONFIG.title}
-            </h1>
-            <p className="text-purple-600 text-sm">
-              {activeTab === 'checklist'
-                ? `Showing ${quickTask.length} checklist tasks`
-                : activeTab === 'maintenance'
-                  ? `Showing ${filteredMaintenance.length} maintenance tasks`
-                  : `Showing delegation tasks`}
-            </p>
-          </div>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-purple-700">
+                  {CONFIG.PAGE_CONFIG.title}
+                </h1>
+                <p className="text-purple-600 text-[11px] font-bold uppercase tracking-wider opacity-80">
+                  {activeTab === 'checklist'
+                    ? `Showing ${quickTask.length} checklist tasks`
+                    : activeTab === 'maintenance'
+                      ? `Showing ${filteredMaintenance.length} maintenance tasks`
+                      : `Showing delegation tasks`}
+                </p>
+              </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            <div className="flex gap-2 self-start overflow-x-auto no-scrollbar pb-1 max-w-full">
-              <button
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md border-2 transition-all ${activeTab === 'checklist'
-                  ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                  : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50 hover:border-purple-300'
-                  }`}
-                onClick={() => {
-                  setActiveTab('checklist');
-                  setSelectedTasks([]);
-                  dispatch(resetChecklistPagination());
-                  dispatch(uniqueChecklistTaskData({ page: 0, pageSize: 50 }));
-                }}
-              >
-                Checklist
-              </button>
-              <button
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md border-2 transition-all ${activeTab === 'delegation'
-                  ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                  : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50 hover:border-purple-300'
-                  }`}
-                onClick={() => {
-                  setActiveTab('delegation');
-                  setSelectedTasks([]);
-                  dispatch(resetDelegationPagination());
-                  dispatch(uniqueDelegationTaskData({ page: 0, pageSize: 50 }));
-                }}
-              >
-                Delegation
-              </button>
-              <button
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md border-2 transition-all ${activeTab === 'maintenance'
-                  ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                  : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50 hover:border-purple-300'
-                  }`}
-                onClick={() => {
-                  setActiveTab('maintenance');
-                  setSelectedTasks([]);
-                  dispatch(maintenanceData({ page: 1, frequency: freqFilter, searchTerm: searchTerm }));
-                }}
-              >
-                Maintenance
-              </button>
+              {selectedTasks.length > 0 && (
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={isDeleting}
+                  className="flex items-center gap-2 px-4 py-1.5 bg-red-600 text-white text-xs font-black rounded-full hover:bg-red-700 transition-all shadow-md animate-in fade-in zoom-in duration-300 transform active:scale-95 flex-shrink-0"
+                >
+                  <Trash2 size={14} className="stroke-[3]" />
+                  {isDeleting ? 'Deleting...' : `Delete (${selectedTasks.length})`}
+                </button>
+              )}
             </div>
 
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <div className="flex bg-gray-100 p-1 rounded-xl shadow-inner w-full sm:w-auto overflow-x-auto no-scrollbar">
+              {[
+                { id: 'checklist', label: 'Checklist' },
+                { id: 'delegation', label: 'Delegation' },
+                { id: 'maintenance', label: 'Maintenance' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  className={`flex-1 sm:flex-none px-6 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === tab.id
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-gray-500 hover:text-purple-600 hover:bg-white/50'
+                    }`}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setSelectedTasks([]);
+                    if (tab.id === 'checklist') {
+                      dispatch(resetChecklistPagination());
+                      dispatch(uniqueChecklistTaskData({ page: 0, pageSize: 50, dateFilter }));
+                    } else if (tab.id === 'delegation') {
+                      dispatch(resetDelegationPagination());
+                      dispatch(uniqueDelegationTaskData({ page: 0, pageSize: 50, dateFilter }));
+                    } else {
+                      dispatch(maintenanceData({ page: 1, frequency: freqFilter, searchTerm: searchTerm }));
+                    }
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-grow md:max-w-xs min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-400" size={16} />
               <input
                 type="text"
-                placeholder="Search tasks..."
+                placeholder="Search database..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-purple-200 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full pl-10 pr-4 py-2 bg-purple-50/50 border border-purple-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium transition-all"
                 disabled={loading || delegationLoading}
               />
             </div>
 
-            <div className="flex gap-2">
-              <div className="relative">
-                <button
-                  onClick={() => setDropdownOpen(prev => ({ ...prev, dateFilter: !prev.dateFilter }))}
-                  className="flex items-center gap-2 px-3 py-2 border border-purple-200 rounded-md bg-white text-sm text-gray-700 hover:bg-gray-50 capitalize"
-                >
-                  <Filter className="h-4 w-4" />
-                  {dateFilter === 'all' ? 'All Tasks' : dateFilter}
-                  <ChevronDown size={16} className={`transition-transform ${dropdownOpen.dateFilter ? 'rotate-180' : ''}`} />
-                </button>
-                {dropdownOpen.dateFilter && (
-                  <div className="absolute z-50 mt-1 w-40 right-0 rounded-md bg-white shadow-lg border border-gray-200 py-1">
-                    {[
-                      { id: 'all', label: 'All Tasks' },
-                      { id: 'today', label: 'Today' },
-                      { id: 'overdue', label: 'Overdue' },
-                      { id: 'upcoming', label: 'Upcoming' }
-                    ].map((filter) => (
-                      <button
-                        key={filter.id}
-                        onClick={() => {
-                          setDateFilter(filter.id);
-                          setDropdownOpen(prev => ({ ...prev, dateFilter: false }));
-                        }}
-                        className={`block w-full text-left px-4 py-2 text-sm ${dateFilter === filter.id ? 'bg-purple-50 text-purple-700 font-bold' : 'text-gray-700 hover:bg-gray-100'}`}
-                      >
-                        {filter.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex bg-gray-50 border border-gray-100 p-1 rounded-xl gap-1">
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'overdue', label: 'Overdue' },
+                  { id: 'today', label: 'Today' },
+                  { id: 'upcoming', label: 'Upcoming' }
+                ].map((filter) => (
+                  <button
+                    key={filter.id}
+                    onClick={() => {
+                      setDateFilter(filter.id);
+                      setSelectedTasks([]);
+                    }}
+                    className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${dateFilter === filter.id
+                      ? 'bg-white text-purple-700 shadow-sm ring-1 ring-purple-100'
+                      : 'text-gray-400 hover:text-gray-600'
+                      }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
               </div>
 
-              <div className="relative">
-                <button
-                  onClick={() => setDropdownOpen(prev => ({ ...prev, frequency: !prev.frequency }))}
-                  className="flex items-center gap-2 px-3 py-2 border border-purple-200 rounded-md bg-white text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  <Filter className="h-4 w-4" />
-                  {freqFilter || 'Filter by Frequency'}
-                  <ChevronDown size={16} className={`transition-transform ${dropdownOpen.frequency ? 'rotate-180' : ''}`} />
-                </button>
-                {dropdownOpen.frequency && (
-                  <div className="absolute z-50 mt-1 w-56 rounded-md bg-white shadow-lg border border-gray-200 max-h-60 overflow-auto">
-                    <div className="py-1">
-                      <button
-                        onClick={clearFrequencyFilter}
-                        className={`block w-full text-left px-4 py-2 text-sm ${!freqFilter ? 'bg-purple-100 text-purple-900' : 'text-gray-700 hover:bg-gray-100'}`}
-                      >
-                        All Frequencies
-                      </button>
-                      {allFrequencies.map(freq => (
-                        <button
-                          key={freq}
-                          onClick={() => handleFrequencyFilterSelect(freq)}
-                          className={`block w-full text-left px-4 py-2 text-sm ${freqFilter === freq ? 'bg-purple-100 text-purple-900' : 'text-gray-700 hover:bg-gray-100'}`}
-                        >
-                          <span className="capitalize">{freq}</span>
-                        </button>
-                      ))}
-                    </div>
+              <div className="flex bg-gray-50 border border-gray-100 p-1 rounded-xl gap-1">
+                {[
+                  { id: '', label: 'All Frequencies' },
+                  { id: 'daily', label: 'Daily' },
+                  { id: 'fortnight', label: 'Fortnight' },
+                  { id: 'monthly', label: 'Monthly' }
+                ].map((freq) => (
+                  <button
+                    key={freq.id}
+                    onClick={() => handleFrequencyFilterSelect(freq.id)}
+                    className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${freqFilter === freq.id
+                      ? 'bg-white text-purple-700 shadow-sm ring-1 ring-purple-100'
+                      : 'text-gray-400 hover:text-gray-600'
+                      }`}
+                  >
+                    {freq.label}
+                  </button>
+                ))}
+
+                {/* Overflow/More Dropdown for less common frequencies */}
+                {allFrequencies.filter(f => !['daily', 'fortnight', 'monthly', ''].includes(f)).length > 0 && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setDropdownOpen(prev => ({ ...prev, frequency: !prev.frequency }))}
+                      className={`px-2 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all flex items-center gap-1 ${!['daily', 'fortnight', 'monthly', ''].includes(freqFilter)
+                        ? 'bg-white text-purple-700 shadow-sm ring-1 ring-purple-100'
+                        : 'text-gray-400 hover:text-gray-600'
+                        }`}
+                    >
+                      {!['daily', 'fortnight', 'monthly', ''].includes(freqFilter) ? freqFilter : <ChevronDown size={14} />}
+                    </button>
+                    {dropdownOpen.frequency && (
+                      <div className="absolute right-0 z-50 mt-2 w-48 rounded-xl bg-white shadow-2xl border border-purple-50 max-h-60 overflow-y-auto p-1 animate-in slide-in-from-top-2">
+                        {allFrequencies.filter(f => !['daily', 'fortnight', 'monthly', ''].includes(f)).map(freq => (
+                          <button
+                            key={freq}
+                            onClick={() => handleFrequencyFilterSelect(freq)}
+                            className={`block w-full text-left px-4 py-2.5 text-[10px] font-bold uppercase rounded-lg transition-colors ${freqFilter === freq ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-purple-50'}`}
+                          >
+                            {freq}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
-            {(selectedTasks.length > 0 && (activeTab === 'checklist' || activeTab === 'maintenance' || activeTab === 'delegation')) && (
-              <button
-                onClick={handleDeleteSelected}
-                disabled={isDeleting}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-              >
-                <Trash2 size={16} />
-                {isDeleting ? 'Deleting...' : `Delete (${selectedTasks.length})`}
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -722,17 +792,17 @@ export default function QuickTask() {
                         />
                       </th>
                       {[
+                        { key: 'actions', label: 'Actions' },
                         { key: 'id', label: 'Task ID' },
                         { key: 'task_description', label: 'Task Description', minWidth: 'min-w-[300px]' },
                         { key: 'department', label: 'Department' },
                         { key: 'given_by', label: 'Assign From' },
                         { key: 'name', label: 'Name' },
-                        { key: 'task_start_date', label: 'Start Date', bg: 'bg-yellow-50' },
+                        { key: 'task_start_date', label: 'Working Day', bg: 'bg-yellow-50' },
                         { key: 'frequency', label: 'Frequency' },
                         { key: 'enable_reminder', label: 'Reminders' },
                         { key: 'require_attachment', label: 'Attachment' },
                         { key: 'remarks', label: 'Remarks' },
-                        { key: 'actions', label: 'Actions' },
                       ].map((column) => (
                         <th
                           key={column.label}
@@ -763,6 +833,38 @@ export default function QuickTask() {
                               onChange={() => handleCheckboxChange(task)}
                               className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                             />
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {editingTaskId === task.id ? (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={handleSaveEdit}
+                                  disabled={isSaving}
+                                  className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                                >
+                                  <Save size={14} />
+                                  {isSaving ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
+                                >
+                                  <X size={14} />
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              // REMOVED THE submission_date CHECK - ALWAYS SHOW EDIT BUTTON
+                              <button
+                                onClick={() => handleEditClick(task)}
+                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                              >
+                                <Edit size={14} />
+                                Edit
+                              </button>
+                            )}
                           </td>
 
                           {/* Task ID */}
@@ -915,8 +1017,10 @@ export default function QuickTask() {
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                               >
                                 <option value="">Select Name</option>
-                                {doersList.map(name => (
-                                  <option key={name} value={name}>{name}</option>
+                                {doersList.map(user => (
+                                  <option key={user.user_name || user} value={user.user_name || user}>
+                                    {user.user_name || user}
+                                  </option>
                                 ))}
                               </select>
                             ) : (
@@ -1015,37 +1119,7 @@ export default function QuickTask() {
                             )}
                           </td>
 
-                          {/* Actions */}
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={handleSaveEdit}
-                                  disabled={isSaving}
-                                  className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                                >
-                                  <Save size={14} />
-                                  {isSaving ? 'Saving...' : 'Save'}
-                                </button>
-                                <button
-                                  onClick={handleCancelEdit}
-                                  className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
-                                >
-                                  <X size={14} />
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              // REMOVED THE submission_date CHECK - ALWAYS SHOW EDIT BUTTON
-                              <button
-                                onClick={() => handleEditClick(task)}
-                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                              >
-                                <Edit size={14} />
-                                Edit
-                              </button>
-                            )}
-                          </td>
+
                         </tr>
                       ))
                     ) : (
@@ -1089,6 +1163,7 @@ export default function QuickTask() {
                         />
                       </th>
                       {[
+                        { label: 'Actions' },
                         { label: 'Task ID' },
                         { label: 'Task Description', minWidth: 'min-w-[200px]' },
                         { label: 'Machine Name' },
@@ -1096,11 +1171,10 @@ export default function QuickTask() {
                         { label: 'Part Area' },
                         { label: 'Assign From' },
                         { label: 'Name' },
-                        { label: 'Start Date', bg: 'bg-yellow-50' },
+                        { label: 'Working Day', bg: 'bg-yellow-50' },
                         { label: 'Frequency' },
                         { label: 'Status' },
                         { label: 'Remarks' },
-                        { label: 'Actions' },
                       ].map((column) => (
                         <th
                           key={column.label}
@@ -1123,14 +1197,120 @@ export default function QuickTask() {
                               className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                             />
                           </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {editingTaskId === task.id ? (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={handleSaveEdit}
+                                  disabled={isSaving}
+                                  className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                                >
+                                  <Save size={14} />
+                                  {isSaving ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
+                                >
+                                  <X size={14} />
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleEditClick(task)}
+                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                              >
+                                <Edit size={14} />
+                                Edit
+                              </button>
+                            )}
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.id}</td>
                           <td className="px-6 py-4 text-sm text-gray-500 min-w-[200px] max-w-[400px]">
                             {editingTaskId === task.id ? (
-                              <textarea
-                                value={editFormData.task_description}
-                                onChange={(e) => handleInputChange('task_description', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                rows="3"
+                              <ReactMediaRecorder
+                                audio
+                                onStop={(blobUrl, blob) => setRecordedAudio({ blobUrl, blob })}
+                                render={({ status, startRecording, stopRecording, clearBlobUrl }) => (
+                                  <div className="space-y-2">
+                                    {status !== 'recording' && !recordedAudio && (
+                                      <div className="relative">
+                                        {isAudioUrl(editFormData.task_description) ? (
+                                          <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2">
+                                            <div className="flex items-center justify-between mb-2">
+                                              <AudioPlayer url={editFormData.task_description} />
+                                              <button
+                                                type="button"
+                                                onClick={() => handleInputChange('task_description', '')}
+                                                className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                                              >
+                                                <Trash2 size={10} /> Remove
+                                              </button>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={startRecording}
+                                              className="mt-2 w-full flex items-center justify-center gap-2 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 transition-all"
+                                            >
+                                              <Mic size={12} /> Replace with Recording
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div className="relative">
+                                            <textarea
+                                              value={editFormData.task_description}
+                                              onChange={(e) => handleInputChange('task_description', e.target.value)}
+                                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm pr-10"
+                                              rows="3"
+                                              placeholder="Enter task text..."
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={startRecording}
+                                              className="absolute bottom-2 right-2 p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200"
+                                              title="Record Audio"
+                                            >
+                                              <Mic size={16} />
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {status === 'recording' && (
+                                      <div className="flex flex-col items-center justify-center p-4 bg-red-50 border border-red-100 rounded-lg space-y-2 animate-pulse">
+                                        <Mic size={20} className="text-red-600" />
+                                        <button
+                                          type="button"
+                                          onClick={stopRecording}
+                                          className="flex items-center gap-2 px-3 py-1 bg-red-600 text-white rounded-full hover:bg-red-700 text-xs font-bold"
+                                        >
+                                          <Square size={10} /> Stop
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {recordedAudio && status !== 'recording' && (
+                                      <div className="bg-purple-50 border border-purple-100 rounded-lg p-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-[10px] font-bold text-purple-600 uppercase">New Voice Note Attached</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              clearBlobUrl();
+                                              setRecordedAudio(null);
+                                            }}
+                                            className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
+                                          >
+                                            <Trash2 size={10} /> Remove
+                                          </button>
+                                        </div>
+                                        <AudioPlayer url={recordedAudio.blobUrl} />
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               />
                             ) : (
                               <RenderDescription text={task.task_description || task.work_description} />
@@ -1138,36 +1318,48 @@ export default function QuickTask() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {editingTaskId === task.id ? (
-                              <input
-                                type="text"
+                              <select
                                 value={editFormData.machine_name}
                                 onChange={(e) => handleInputChange('machine_name', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              />
+                                className="w-full px-2 py-1 border border-purple-200 rounded text-[11px] font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                              >
+                                <option value="">Select Machine</option>
+                                {machineOptions.map((opt, idx) => (
+                                  <option key={`m-${idx}`} value={opt}>{opt}</option>
+                                ))}
+                              </select>
                             ) : (
                               task.machine_name
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {editingTaskId === task.id ? (
-                              <input
-                                type="text"
+                              <select
                                 value={editFormData.part_name}
                                 onChange={(e) => handleInputChange('part_name', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              />
+                                className="w-full px-2 py-1 border border-purple-200 rounded text-[11px] font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                              >
+                                <option value="">Select Part</option>
+                                {partOptions.map((opt, idx) => (
+                                  <option key={`p-${idx}`} value={opt}>{opt}</option>
+                                ))}
+                              </select>
                             ) : (
                               task.part_name
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {editingTaskId === task.id ? (
-                              <input
-                                type="text"
+                              <select
                                 value={editFormData.part_area}
                                 onChange={(e) => handleInputChange('part_area', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              />
+                                className="w-full px-2 py-1 border border-purple-200 rounded text-[11px] font-bold focus:ring-1 focus:ring-purple-500 outline-none"
+                              >
+                                <option value="">Select Area</option>
+                                {areaOptions.map((opt, idx) => (
+                                  <option key={`a-${idx}`} value={opt}>{opt}</option>
+                                ))}
+                              </select>
                             ) : (
                               task.part_area
                             )}
@@ -1196,8 +1388,10 @@ export default function QuickTask() {
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                               >
                                 <option value="">Select Name</option>
-                                {doersList.map(name => (
-                                  <option key={name} value={name}>{name}</option>
+                                {doersList.map(user => (
+                                  <option key={user.user_name || user} value={user.user_name || user}>
+                                    {user.user_name || user}
+                                  </option>
                                 ))}
                               </select>
                             ) : (
@@ -1260,35 +1454,7 @@ export default function QuickTask() {
                               task.remarks || '—'
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={handleSaveEdit}
-                                  disabled={isSaving}
-                                  className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                                >
-                                  <Save size={14} />
-                                  {isSaving ? 'Saving...' : 'Save'}
-                                </button>
-                                <button
-                                  onClick={handleCancelEdit}
-                                  className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
-                                >
-                                  <X size={14} />
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => handleEditClick(task)}
-                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                              >
-                                <Edit size={14} />
-                                Edit
-                              </button>
-                            )}
-                          </td>
+
                         </tr>
                       ))
                     ) : (

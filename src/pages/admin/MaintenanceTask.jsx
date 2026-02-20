@@ -11,6 +11,7 @@ import supabase from "../../SupabaseClient";
 import CalendarComponent from "../../components/CalendarComponent";
 import { sendTaskAssignmentNotification, sendUrgentTaskNotification } from "../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
+import { useMagicToast } from "../../context/MagicToastContext";
 
 const formatDateLong = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
 const formatDateISO = (date) => {
@@ -389,6 +390,7 @@ function MaintenanceTaskCard({
 export default function MaintenanceTask() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const { showToast } = useMagicToast();
     const { department, doerName, givenBy } = useSelector((state) => state.assignTask);
     const { customDropdowns = [] } = useSelector((state) => state.setting || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -446,6 +448,10 @@ export default function MaintenanceTask() {
         };
 
         if (freq === 'one-time') {
+            const dateStr = getLocalDateString(startDate);
+            if (holidays.includes(dateStr)) {
+                return []; // Prevent assignment on holiday
+            }
             addEntry(startDate, task.workDescription);
             return generatedList;
         }
@@ -495,12 +501,21 @@ export default function MaintenanceTask() {
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i];
             if (!t.givenBy) {
-                alert(`Task ${i + 1}: Please select 'Assign From'.`);
+                showToast(`Task ${i + 1}: Please select 'Assign From'.`, 'error');
                 return;
             }
             if (!t.doerName || !t.startDate) {
-                alert(`Task ${i + 1}: Please fill in Doer's Name and Start Date.`);
+                showToast(`Task ${i + 1}: Please fill in Doer's Name and Start Date.`, 'error');
                 return;
+            }
+
+            // Holiday check for one-time tasks
+            if (t.frequency === "one-time") {
+                const dateStr = t.startDate; // Already in YYYY-MM-DD
+                if (holidays.includes(dateStr)) {
+                    showToast(`Task ${i + 1}: The selected date (${dateStr}) is a holiday.`, 'error');
+                    return;
+                }
             }
         }
         setIsSubmitting(true);
@@ -510,7 +525,7 @@ export default function MaintenanceTask() {
                 const generated = await generateDatesForTask(task);
                 allTasks.push(...generated);
             }
-            if (allTasks.length === 0) { alert("No valid tasks generated."); return; }
+            if (allTasks.length === 0) { showToast("No valid tasks generated.", "error"); return; }
             setAllGeneratedTasks(allTasks);
             setShowPreviewModal(true);
         } catch (err) {
@@ -576,13 +591,13 @@ export default function MaintenanceTask() {
                 console.error('WhatsApp notification error:', whatsappError);
             }
 
-            setSuccessMessage(`${finalTasks.length} Maintenance Task(s) assigned successfully!`);
+            showToast(`${finalTasks.length} Maintenance Task(s) assigned successfully!`, 'success');
             setTasks([defaultTask()]);
             setShowPreviewModal(false);
-            setTimeout(() => navigate('/dashboard/admin'), 1500);
+            setTimeout(() => navigate('/dashboard/admin'), 2200);
         } catch (error) {
             console.error(error);
-            alert("Error assigning tasks: " + error.message);
+            showToast("Error assigning tasks: " + error.message, 'error');
         } finally {
             setIsSubmitting(false);
         }

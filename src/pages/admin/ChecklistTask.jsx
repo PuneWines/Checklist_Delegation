@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-    ClipboardList, Calendar, X, Mic, Square, Trash2, Plus, Save, Loader2, CheckCircle2, Clock, Play, Pause
+    ClipboardList, Calendar, X, Mic, Square, Trash2, Plus, Save, Loader2, CheckCircle2, Clock, Play, Pause, FileCheck
 } from "lucide-react";
 import { ReactMediaRecorder } from "react-media-recorder";
 import AdminLayout from "../../components/layout/AdminLayout";
@@ -11,6 +11,7 @@ import { customDropdownDetails } from "../../redux/slice/settingSlice";
 import supabase from "../../SupabaseClient";
 import CalendarComponent from "../../components/CalendarComponent";
 import { sendTaskAssignmentNotification } from "../../services/whatsappService";
+import { useMagicToast } from "../../context/MagicToastContext";
 
 const formatDate = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
 const formatDateISO = (date) => {
@@ -370,6 +371,7 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
 export default function ChecklistTask() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const { showToast } = useMagicToast();
     const { department, doerName, givenBy } = useSelector((state) => state.assignTask);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
@@ -377,6 +379,8 @@ export default function ChecklistTask() {
 
     // Per-task list
     const [tasks, setTasks] = useState([defaultTask()]);
+    const [showPreviewModal, setShowPreviewModal] = useState(false);
+    const [allGeneratedTasks, setAllGeneratedTasks] = useState([]);
 
     useEffect(() => {
         const fetchHolidays = async () => {
@@ -413,7 +417,14 @@ export default function ChecklistTask() {
 
         if (freqKey === "one-time") {
             const d = new Date(startDate);
-            dates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${time}:00`);
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+            // Check if it's a holiday
+            if (holidays.includes(dateStr)) {
+                return []; // Return empty to prevent assignment on holiday
+            }
+
+            dates.push(`${dateStr}T${time}:00`);
             return dates;
         }
 
@@ -459,7 +470,57 @@ export default function ChecklistTask() {
         return dates;
     };
 
-    const handleSubmitAll = async () => {
+    const handlePreview = async () => {
+        for (let i = 0; i < tasks.length; i++) {
+            const t = tasks[i];
+            if (!t.department || !t.givenBy) {
+                showToast(`Task ${i + 1}: Please select Department and Assign From.`, 'error');
+                return;
+            }
+            if (!t.doer || !t.date || (!t.description && !t.recordedAudio)) {
+                showToast(`Task ${i + 1}: Please fill in Doer, Date, and Description or Voice Note.`, 'error');
+                return;
+            }
+
+            // Holiday check for one-time tasks
+            if (t.frequency === "One Time (No Recurrence)") {
+                const dateStr = formatDateISO(t.date);
+                if (holidays.includes(dateStr)) {
+                    showToast(`Task ${i + 1}: The selected date (${dateStr}) is a holiday.`, 'error');
+                    return;
+                }
+            }
+        }
+
+        setIsSubmitting(true);
+        try {
+            const allTasks = [];
+            for (const task of tasks) {
+                const dates = await generateDatesForTask(task);
+                const freqKey = freqMap[task.frequency] || "one-time";
+                for (const dueDate of dates) {
+                    allTasks.push({
+                        ...task,
+                        dueDate,
+                        frequency: freqKey
+                    });
+                }
+            }
+            if (allTasks.length === 0) {
+                showToast("No valid tasks generated based on calendar and holidays.", "error");
+                return;
+            }
+            setAllGeneratedTasks(allTasks);
+            setShowPreviewModal(true);
+        } catch (err) {
+            console.error(err);
+            alert("Error generating preview: " + err.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const confirmSubmission = async () => {
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i];
             if (!t.department || !t.givenBy) {
@@ -469,6 +530,15 @@ export default function ChecklistTask() {
             if (!t.doer || !t.date || (!t.description && !t.recordedAudio)) {
                 alert(`Task ${i + 1}: Please fill in Doer, Date, and Description or Voice Note.`);
                 return;
+            }
+
+            // Holiday check for one-time tasks
+            if (t.frequency === "One Time (No Recurrence)") {
+                const dateStr = formatDateISO(t.date);
+                if (holidays.includes(dateStr)) {
+                    alert(`Task ${i + 1}: The selected date (${dateStr}) is a holiday. One-time tasks cannot be assigned on holidays.`);
+                    return;
+                }
             }
         }
 
@@ -507,6 +577,11 @@ export default function ChecklistTask() {
                 }
             }
 
+            if (allTasksToSubmit.length === 0) {
+                alert("No tasks to submit.");
+                return;
+            }
+
             const result = await dispatch(assignTaskInTable({ tasks: allTasksToSubmit, table: null }));
             if (result.error) throw new Error(result.error.message || "Failed to assign tasks");
 
@@ -543,12 +618,13 @@ export default function ChecklistTask() {
                 console.error('WhatsApp notification error:', whatsappError);
             }
 
-            setSuccessMessage(`Successfully assigned ${allTasksToSubmit.length} task(s)!`);
+            showToast(`Successfully assigned ${allTasksToSubmit.length} task(s)!`, 'success');
             setTasks([defaultTask()]);
-            setTimeout(() => navigate('/dashboard/admin'), 1500);
+            setShowPreviewModal(false);
+            setTimeout(() => navigate('/dashboard/admin'), 2000);
         } catch (e) {
             console.error("Submission error", e);
-            alert(`Failed to assign tasks: ${e.message || "Unknown error"}`);
+            showToast(`Failed to assign tasks: ${e.message || "Unknown error"}`, 'error');
         } finally {
             setIsSubmitting(false);
         }
@@ -634,19 +710,78 @@ export default function ChecklistTask() {
                         </button>
                         <button
                             type="button"
-                            onClick={handleSubmitAll}
+                            onClick={handlePreview}
                             disabled={isSubmitting}
                             className="flex-grow py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-md transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
                             {isSubmitting ? (
-                                <><Loader2 size={18} className="animate-spin" /> Submitting...</>
+                                <><Loader2 size={18} className="animate-spin" /> Generating...</>
                             ) : (
-                                <><Save size={18} /> Submit All {tasks.length} Task{tasks.length !== 1 ? 's' : ''}</>
+                                <><Calendar size={18} /> Preview Tasks</>
                             )}
                         </button>
                     </div>
                 </div>
             </div>
+
+            {/* Preview Modal */}
+            {showPreviewModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+                        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl">
+                            <h3 className="text-lg font-bold text-gray-800">Confirm Task Assignment</h3>
+                            <button onClick={() => setShowPreviewModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-all">
+                                <X className="h-5 w-5 text-gray-500" />
+                            </button>
+                        </div>
+                        <div className="p-5 overflow-y-auto flex-1">
+                            <div className="mb-4 bg-purple-50 text-purple-800 p-4 rounded-xl flex items-start gap-3">
+                                <FileCheck className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                                <div>
+                                    <p className="font-bold">Summary</p>
+                                    <p className="text-sm">You are about to assign <span className="font-bold">{allGeneratedTasks.length}</span> task(s) across {tasks.length} entries.</p>
+                                    <p className="text-xs mt-1 opacity-80">Recurring tasks are filtered based on holidays and working day calendar.</p>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                {allGeneratedTasks.slice(0, 20).map((task, index) => (
+                                    <div key={index} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 text-sm">
+                                        <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                        <span className="font-medium text-gray-700">
+                                            {new Date(task.dueDate).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                                        </span>
+                                        <span className="text-gray-400">—</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-gray-600 text-xs font-bold">{task.doer}</span>
+                                            <span className="text-[10px] text-gray-400 truncate max-w-[200px]">
+                                                {isAudioUrl(task.description) ? "Voice Note" : task.description}
+                                            </span>
+                                        </div>
+                                        <span className="ml-auto text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-500 uppercase font-black">
+                                            {task.frequency}
+                                        </span>
+                                    </div>
+                                ))}
+                                {allGeneratedTasks.length > 20 && (
+                                    <p className="text-center text-sm text-gray-400 py-2">...and {allGeneratedTasks.length - 20} more tasks</p>
+                                )}
+                            </div>
+                        </div>
+                        <div className="p-5 border-t border-gray-100 flex gap-3 rounded-b-2xl bg-gray-50">
+                            <button onClick={() => setShowPreviewModal(false)} className="flex-1 py-3 px-4 rounded-xl border border-gray-200 text-gray-600 font-bold hover:bg-gray-100 transition-colors">
+                                Edit Details
+                            </button>
+                            <button
+                                onClick={confirmSubmission}
+                                disabled={isSubmitting}
+                                className="flex-1 py-3 px-4 rounded-xl bg-purple-600 text-white font-bold hover:bg-purple-700 transition-colors shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Assigning...</> : <><Save size={16} /> Confirm & Assign</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AdminLayout>
     );
 }
