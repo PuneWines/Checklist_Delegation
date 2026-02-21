@@ -728,6 +728,26 @@ export const sendTaskReassignmentNotification = async (taskDetails) => {
     }
 };
 
+/**
+ * Send Password Reset OTP to Admin
+ */
+export const sendPasswordResetOTP = async (username, otp) => {
+    try {
+        const adminNumber = "9691207533";
+        const message = `🔐 *PASSWORD RESET REQUEST*\n\n` +
+            `A password reset has been requested for:\n` +
+            `👤 User: *${username}*\n` +
+            `🔢 OTP Code: *${otp}*\n\n` +
+            `Please provide this code to the user if the request is valid.\n\n` +
+            `_Acemark Stationers_`;
+
+        return await sendWhatsAppMessage(adminNumber, message);
+    } catch (error) {
+        console.error('Error sending password reset OTP:', error);
+        return false;
+    }
+};
+
 export default {
     sendUrgentTaskNotification,
     sendTaskExtensionNotification,
@@ -740,5 +760,6 @@ export default {
     sendTaskReminderNotification,
     sendTaskCompletionNotification,
     sendTaskRejectionNotification,
-    sendTaskReassignmentNotification
+    sendTaskReassignmentNotification,
+    sendPasswordResetOTP
 };
