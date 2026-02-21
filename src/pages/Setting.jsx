@@ -1362,10 +1362,6 @@ const Setting = () => {
                           Department Name
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Assign From
-                        </th>
-
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
@@ -1376,15 +1372,6 @@ const Setting = () => {
                           <tr key={`dept-${dept.id || index}`} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{dept.department}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {dept.given_by ? (
-                                <span className="px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg font-bold text-xs ring-1 ring-purple-100 italic">
-                                  {dept.given_by}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 italic text-xs">—</span>
-                              )}
-                            </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                               <div className="flex space-x-2 justify-end">
                                 <button
@@ -1409,7 +1396,7 @@ const Setting = () => {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="4" className="px-6 py-4 text-center text-sm text-gray-500">
+                          <td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500">
                             No departments found
                           </td>
                         </tr>
@@ -1860,23 +1847,6 @@ const Setting = () => {
                     )}
                   </div>
 
-                  {activeTab === 'departments' && activeDeptSubTab === 'departments' && (
-                    <div className="space-y-2">
-                      <label htmlFor="givenBy" className="block text-sm font-bold text-gray-700 ml-1">
-                        Assign From (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        name="givenBy"
-                        id="givenBy"
-                        value={deptForm.givenBy}
-                        onChange={handleDeptInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-                        placeholder="e.g. Manager A"
-                      />
-                      <p className="text-[10px] text-gray-400 ml-1 italic">Adding here will also include it in the global Assign From list.</p>
-                    </div>
-                  )}
 
                   {deptForm.name === "Temperature" && (
                     <p className="text-xs text-amber-600 ml-1 mt-1 font-bold">

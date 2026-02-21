@@ -195,20 +195,19 @@ const WorkingDayCalendarPage = () => {
                                     <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase">Day</th>
                                     <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase">Week #</th>
                                     <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase">Status</th>
-                                    <th className="px-4 py-3 font-bold text-gray-600 text-xs uppercase text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan="5" className="px-4 py-10 text-center text-gray-400 italic">
+                                        <td colSpan="4" className="px-4 py-10 text-center text-gray-400 italic">
                                             <Loader2 className="inline animate-spin mr-2" size={16} />
                                             Loading data...
                                         </td>
                                     </tr>
                                 ) : allDaysInMonth.length === 0 ? (
                                     <tr>
-                                        <td colSpan="5" className="px-4 py-10 text-center text-gray-400 font-bold">
+                                        <td colSpan="4" className="px-4 py-10 text-center text-gray-400 font-bold">
                                             NO RECORDS FOUND
                                         </td>
                                     </tr>
@@ -249,30 +248,6 @@ const WorkingDayCalendarPage = () => {
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-3 text-right">
-                                                {!dayInfo.isHoliday && (
-                                                    <button
-                                                        onClick={() => toggleWorkingDay(dayInfo.date, dayInfo.isWorking, dayInfo.isHoliday)}
-                                                        disabled={isProcessing}
-                                                        className={`px-3 py-1.5 text-xs font-bold rounded transition-colors flex items-center gap-1 ml-auto ${dayInfo.isWorking
-                                                            ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                                                            : 'bg-green-100 text-green-700 hover:bg-green-200'
-                                                            } disabled:opacity-50`}
-                                                    >
-                                                        {dayInfo.isWorking ? (
-                                                            <>
-                                                                <Trash2 size={12} />
-                                                                Remove
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <Plus size={12} />
-                                                                Add
-                                                            </>
-                                                        )}
-                                                    </button>
-                                                )}
-                                            </td>
                                         </tr>
                                     ))
                                 )}
@@ -282,26 +257,15 @@ const WorkingDayCalendarPage = () => {
                 </div>
 
                 {/* Legend/Info Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-gray-50 border border-gray-200 p-4 rounded flex items-start gap-4 shadow-sm">
-                        <div className="p-2 bg-white border border-gray-200 rounded text-green-600">
-                            <CheckCircle2 size={18} />
-                        </div>
-                        <div>
-                            <h3 className="text-xs font-bold text-gray-900 uppercase mb-1">Interactive Management</h3>
-                            <p className="text-[10px] font-medium text-gray-500 leading-relaxed uppercase">
-                                Click Add/Remove buttons to toggle between Working Day and Off Day.
-                            </p>
-                        </div>
-                    </div>
+                <div className="grid grid-cols-1 gap-4">
                     <div className="bg-gray-50 border border-gray-200 p-4 rounded flex items-start gap-4 shadow-sm">
                         <div className="p-2 bg-white border border-gray-200 rounded text-red-600">
                             <ShieldAlert size={18} />
                         </div>
                         <div>
-                            <h3 className="text-xs font-bold text-gray-900 uppercase mb-1">Holiday Lock</h3>
+                            <h3 className="text-xs font-bold text-gray-900 uppercase mb-1">Holiday Information</h3>
                             <p className="text-[10px] font-medium text-gray-500 leading-relaxed uppercase">
-                                Holidays are managed via the Holiday List. They cannot be toggled here to prevent scheduling conflicts.
+                                Holidays are managed via the Holiday List. They are displayed here for operational visibility.
                             </p>
                         </div>
                     </div>
