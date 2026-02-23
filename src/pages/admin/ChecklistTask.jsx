@@ -10,7 +10,7 @@ import { assignTaskInTable, uniqueDepartmentData, uniqueDoerNameData, uniqueGive
 import { customDropdownDetails } from "../../redux/slice/settingSlice";
 import supabase from "../../SupabaseClient";
 import CalendarComponent from "../../components/CalendarComponent";
-import { sendTaskAssignmentNotification } from "../../services/whatsappService";
+// import { sendTaskAssignmentNotification } from "../../services/whatsappService"; // TEMPORARILY DISABLED
 import { useMagicToast } from "../../context/MagicToastContext";
 
 const formatDate = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
@@ -598,38 +598,35 @@ export default function ChecklistTask() {
             const result = await dispatch(assignTaskInTable({ tasks: allTasksToSubmit, table: null }));
             if (result.error) throw new Error(result.error.message || "Failed to assign tasks");
 
-            // Send WhatsApp notifications (one per unique doer)
-            try {
-                const insertedTasks = result.payload;
-                if (insertedTasks && insertedTasks.length > 0) {
-                    for (const uiTask of tasks) {
-                        // Find matching task from inserted data
-                        // it.frequency from DB is lowercase (e.g. 'daily'), uiTask.frequency from UI is Title Case (e.g. 'Daily')
-                        const t = insertedTasks.find(it =>
-                            it.name === uiTask.doer &&
-                            it.frequency?.toLowerCase() === freqMap[uiTask.frequency]?.toLowerCase() &&
-                            (it.task_description === uiTask.description || (uiTask.recordedAudio && it.task_description?.includes('audio-recordings')))
-                        );
-                        if (t) {
-                            const isOneTime = t.frequency?.toLowerCase().includes('one time') ||
-                                t.frequency?.toLowerCase().includes('one-time') ||
-                                t.frequency?.toLowerCase().includes('no recurrence');
-
-                            await sendTaskAssignmentNotification({
-                                doerName: t.name,
-                                taskId: t.id,
-                                description: t.task_description,
-                                startDate: new Date(t.task_start_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-                                givenBy: t.given_by,
-                                department: t.department,
-                                taskType: isOneTime ? 'delegation' : 'checklist'
-                            });
-                        }
-                    }
-                }
-            } catch (whatsappError) {
-                console.error('WhatsApp notification error:', whatsappError);
-            }
+            // TEMPORARILY DISABLED: WhatsApp notifications for checklist & delegation task assignment
+            // try {
+            //     const insertedTasks = result.payload;
+            //     if (insertedTasks && insertedTasks.length > 0) {
+            //         for (const uiTask of tasks) {
+            //             const t = insertedTasks.find(it =>
+            //                 it.name === uiTask.doer &&
+            //                 it.frequency?.toLowerCase() === freqMap[uiTask.frequency]?.toLowerCase() &&
+            //                 (it.task_description === uiTask.description || (uiTask.recordedAudio && it.task_description?.includes('audio-recordings')))
+            //             );
+            //             if (t) {
+            //                 const isOneTime = t.frequency?.toLowerCase().includes('one time') ||
+            //                     t.frequency?.toLowerCase().includes('one-time') ||
+            //                     t.frequency?.toLowerCase().includes('no recurrence');
+            //                 await sendTaskAssignmentNotification({
+            //                     doerName: t.name,
+            //                     taskId: t.id,
+            //                     description: t.task_description,
+            //                     startDate: new Date(t.task_start_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+            //                     givenBy: t.given_by,
+            //                     department: t.department,
+            //                     taskType: isOneTime ? 'delegation' : 'checklist'
+            //                 });
+            //             }
+            //         }
+            //     }
+            // } catch (whatsappError) {
+            //     console.error('WhatsApp notification error:', whatsappError);
+            // }
 
             showToast(`Successfully assigned ${allTasksToSubmit.length} task(s)!`, 'success');
             setTasks([defaultTask()]);

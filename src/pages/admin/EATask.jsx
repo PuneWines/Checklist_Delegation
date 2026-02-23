@@ -385,23 +385,23 @@ export default function EATask() {
             const { data: insertedData, error } = await supabase.from('ea_tasks').insert(tasksToInsert).select();
             if (error) throw error;
 
-            // Send WhatsApp notifications (one per unique doer)
-            try {
-                if (insertedData && insertedData.length > 0) {
-                    for (const task of insertedData) {
-                        await sendTaskAssignmentNotification({
-                            doerName: task.doer_name,
-                            taskId: task.task_id || task.id,
-                            description: task.task_description,
-                            startDate: new Date(task.planned_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-                            givenBy: task.given_by,
-                            taskType: 'ea'
-                        });
-                    }
-                }
-            } catch (whatsappError) {
-                console.error('WhatsApp notification error:', whatsappError);
-            }
+            // // Send WhatsApp notifications (one per unique doer)
+            // try {
+            //     if (insertedData && insertedData.length > 0) {
+            //         for (const task of insertedData) {
+            //             await sendTaskAssignmentNotification({
+            //                 doerName: task.doer_name,
+            //                 taskId: task.task_id || task.id,
+            //                 description: task.task_description,
+            //                 startDate: new Date(task.planned_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+            //                 givenBy: task.given_by,
+            //                 taskType: 'ea'
+            //             });
+            //         }
+            //     }
+            // } catch (whatsappError) {
+            //     console.error('WhatsApp notification error:', whatsappError);
+            // }
 
             showToast(`${tasksToInsert.length} EA Task(s) assigned successfully!`, 'success');
             setTasks([defaultTask()]);
