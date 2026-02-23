@@ -780,7 +780,8 @@ export default function QuickTask() {
                 ref={tableContainerRef}
                 className="overflow-x-auto"
               >
-                <table className="min-w-full divide-y divide-gray-200">
+                {/* Desktop View */}
+                <table className="hidden md:table min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0 z-20">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
@@ -1133,6 +1134,101 @@ export default function QuickTask() {
                     )}
                   </tbody>
                 </table>
+
+                {/* Mobile View - Checklist Cards */}
+                <div className="md:hidden divide-y divide-gray-100">
+                  {filteredChecklistTasks.length > 0 ? (
+                    filteredChecklistTasks.map((task, index) => (
+                      <div key={index} className={`p-4 bg-white space-y-3 ${selectedTasks.find(t => t.id === task.id) ? 'bg-purple-50/50' : ''}`}>
+                        <div className="flex justify-between items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedTasks.find(t => t.id === task.id)}
+                            onChange={() => handleCheckboxChange(task)}
+                            className="mt-1 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          />
+                          <div className="flex-grow min-w-0">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[10px] font-black text-purple-500 uppercase tracking-wider">#{task.id}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tight ${task.frequency?.toLowerCase() === 'daily' ? 'bg-blue-100 text-blue-800' :
+                                  task.frequency?.toLowerCase() === 'weekly' ? 'bg-green-100 text-green-800' :
+                                    'bg-purple-100 text-purple-800'
+                                }`}>
+                                {task.frequency || 'Manual'}
+                              </span>
+                            </div>
+                            {editingTaskId === task.id ? (
+                              <div className="space-y-4 py-2">
+                                {/* Mobile Edit Form */}
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-gray-400 uppercase">Description</label>
+                                  <textarea
+                                    value={editFormData.task_description}
+                                    onChange={(e) => handleInputChange('task_description', e.target.value)}
+                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold"
+                                    rows="3"
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase">Department</label>
+                                    <select
+                                      value={editFormData.department}
+                                      onChange={(e) => handleInputChange('department', e.target.value)}
+                                      className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold"
+                                    >
+                                      {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                                    </select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase">Assign From</label>
+                                    <select
+                                      value={editFormData.given_by}
+                                      onChange={(e) => handleInputChange('given_by', e.target.value)}
+                                      className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold"
+                                    >
+                                      {givenByList.map(g => <option key={g} value={g}>{g}</option>)}
+                                    </select>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 pt-2">
+                                  <button onClick={handleSaveEdit} className="flex-1 flex justify-center items-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-green-100">
+                                    <Save size={14} /> Save
+                                  </button>
+                                  <button onClick={handleCancelEdit} className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-xs font-black uppercase tracking-widest">
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="text-sm font-bold text-gray-800 leading-tight mb-2">
+                                  <RenderDescription text={task.task_description} />
+                                </div>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold text-gray-500">
+                                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>{task.department}</span>
+                                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>{task.name}</span>
+                                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>{formatTimestampToDDMMYYYY(task.task_start_date)}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          {!editingTaskId && (
+                            <button
+                              onClick={() => handleEditClick(task)}
+                              className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95"
+                            >
+                              <Edit size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-gray-400 text-sm font-bold">No checklist tasks found</div>
+                  )}
+                </div>
+
                 {loading && checklistHasMore && (
                   <div className="text-center py-4">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-purple-500"></div>
@@ -1151,7 +1247,8 @@ export default function QuickTask() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                {/* Desktop view */}
+                <table className="hidden md:table min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0 z-20">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
@@ -1466,6 +1563,109 @@ export default function QuickTask() {
                     )}
                   </tbody>
                 </table>
+
+                {/* Mobile View - Maintenance Cards */}
+                <div className="md:hidden divide-y divide-gray-100">
+                  {filteredMaintenance.length > 0 ? (
+                    filteredMaintenance.map((task, index) => (
+                      <div key={index} className={`p-5 bg-white space-y-4 ${selectedTasks.find(t => t.id === task.id) ? "bg-purple-50/50" : ""}`}>
+                        <div className="flex justify-between items-start gap-4">
+                          <input
+                            type="checkbox"
+                            checked={!!selectedTasks.find(t => t.id === task.id)}
+                            onChange={() => handleCheckboxChange(task)}
+                            className="mt-1 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          />
+                          <div className="flex-grow min-w-0">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[10px] font-black text-purple-500 uppercase tracking-wider">#{task.id}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tight ${task.status === 'Done' ? 'bg-green-100 text-green-800' :
+                                  task.status === 'Issue' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                {task.status || 'Pending'}
+                              </span>
+                            </div>
+
+                            {editingTaskId === task.id ? (
+                              <div className="space-y-4 py-2">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-gray-400 uppercase">Description</label>
+                                  <textarea
+                                    value={editFormData.task_description}
+                                    onChange={(e) => handleInputChange('task_description', e.target.value)}
+                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold"
+                                    rows="3"
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase">Machine</label>
+                                    <select
+                                      value={editFormData.machine_name}
+                                      onChange={(e) => handleInputChange('machine_name', e.target.value)}
+                                      className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold"
+                                    >
+                                      {machineOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                                    </select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase">Part</label>
+                                    <select
+                                      value={editFormData.part_name}
+                                      onChange={(e) => handleInputChange('part_name', e.target.value)}
+                                      className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold"
+                                    >
+                                      {partOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                    </select>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 pt-2">
+                                  <button onClick={handleSaveEdit} className="flex-1 flex justify-center items-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-green-100">
+                                    <Save size={14} /> Save
+                                  </button>
+                                  <button onClick={handleCancelEdit} className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-xs font-black uppercase tracking-widest">
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="text-sm font-bold text-gray-800 leading-tight mb-3">
+                                  <RenderDescription text={task.task_description || task.work_description} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Resource</span>
+                                    <div className="text-xs font-bold text-gray-700">{task.machine_name || '—'}</div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Component</span>
+                                    <div className="text-xs font-bold text-gray-700">{task.part_name || '—'}</div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Assignee</span>
+                                    <div className="text-xs font-bold text-gray-700">{task.name || '—'}</div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Schedule</span>
+                                    <div className="text-xs font-bold text-gray-700">{formatTimestampToDDMMYYYY(task.task_start_date)}</div>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          {!editingTaskId && (
+                            <button onClick={() => handleEditClick(task)} className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                              <Edit size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-gray-400 text-sm font-bold">No maintenance tasks found</div>
+                  )}
+                </div>
               </div>
             </div>
           ) : (

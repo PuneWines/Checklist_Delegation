@@ -68,22 +68,43 @@ const WorkingDayCalendarPage = () => {
             } else {
                 // Add to working days
                 const dateObj = new Date(dateStr);
-                const dayName = dateObj.toLocaleDateString('en-GB', { weekday: 'long' });
-                const monthNum = dateObj.getMonth() + 1;
+                const dow = dateObj.getDay();
 
-                const firstDayOfYear = new Date(dateObj.getFullYear(), 0, 1);
-                const pastDaysOfYear = (dateObj - firstDayOfYear) / 86400000;
-                const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+                // Only proceed if not Sunday (to match database rules)
+                if (dow !== 0) {
+                    const hindiDays = {
+                        1: 'सोम',
+                        2: 'मंगल',
+                        3: 'बुध',
+                        4: 'गुरु',
+                        5: 'शुक्र',
+                        6: 'शनि'
+                    };
 
-                const { error } = await supabase
-                    .from('working_day_calender')
-                    .insert([{
-                        working_date: dateStr,
-                        day: dayName,
-                        week_num: weekNum,
-                        month: monthNum
-                    }]);
-                if (error) throw error;
+                    const dayName = hindiDays[dow];
+                    const monthNum = dateObj.getMonth() + 1;
+
+                    // ISO Week Number calculation
+                    const getISOWeek = (date) => {
+                        const d = new Date(date);
+                        d.setHours(0, 0, 0, 0);
+                        d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+                        const yearStart = new Date(d.getFullYear(), 0, 1);
+                        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+                    };
+
+                    const weekNum = getISOWeek(dateObj);
+
+                    const { error } = await supabase
+                        .from('working_day_calender')
+                        .insert([{
+                            working_date: dateStr,
+                            day: dayName,
+                            week_num: weekNum,
+                            month: monthNum
+                        }]);
+                    if (error) throw error;
+                }
             }
             await fetchData();
         } catch (err) {

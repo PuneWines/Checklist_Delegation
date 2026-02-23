@@ -110,18 +110,40 @@ const HolidayListPage = () => {
             if (deleteError) throw deleteError;
 
             const dateObj = new Date(holiday.holiday_date);
-            const dayName = dateObj.toLocaleDateString('en-GB', { weekday: 'long' });
-            const monthNum = dateObj.getMonth() + 1;
-            const firstDayOfYear = new Date(dateObj.getFullYear(), 0, 1);
-            const pastDaysOfYear = (dateObj - firstDayOfYear) / 86400000;
-            const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+            const dow = dateObj.getDay(); // 0 = Sunday, 1 = Monday, ...
 
-            await supabase.from('working_day_calender').insert([{
-                working_date: holiday.holiday_date,
-                day: dayName,
-                week_num: weekNum,
-                month: monthNum
-            }]);
+            // Only insert into working_day_calender if it's not a Sunday (matches WHERE EXTRACT(DOW FROM gs) != 0)
+            if (dow !== 0) {
+                const hindiDays = {
+                    1: 'सोम',
+                    2: 'मंगल',
+                    3: 'बुध',
+                    4: 'गुरु',
+                    5: 'शुक्र',
+                    6: 'शनि'
+                };
+
+                const dayName = hindiDays[dow];
+                const monthNum = dateObj.getMonth() + 1;
+
+                // ISO Week Number calculation (matches Postgres EXTRACT(WEEK FROM ...))
+                const getISOWeek = (date) => {
+                    const d = new Date(date);
+                    d.setHours(0, 0, 0, 0);
+                    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+                    const yearStart = new Date(d.getFullYear(), 0, 1);
+                    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+                };
+
+                const weekNum = getISOWeek(dateObj);
+
+                await supabase.from('working_day_calender').insert([{
+                    working_date: holiday.holiday_date,
+                    day: dayName,
+                    week_num: weekNum,
+                    month: monthNum
+                }]);
+            }
 
             fetchHolidays();
         } catch (err) {

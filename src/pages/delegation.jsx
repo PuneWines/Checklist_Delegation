@@ -917,7 +917,7 @@ function DelegationDataPage() {
               </div>
 
               {/* History Table - Mobile Responsive */}
-              <div className="overflow-x-auto">
+              <div className="hidden md:block overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
@@ -1065,256 +1065,455 @@ function DelegationDataPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile History Cards */}
+              <div className="md:hidden space-y-4 p-4 bg-gray-50/50">
+                {filteredHistoryData.length > 0 ? (
+                  filteredHistoryData.map((history, index) => (
+                    <div key={index} className="bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden">
+                      <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
+                        <span className="text-xs font-bold text-purple-800">#{history.id || index}</span>
+                        <span
+                          className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${history.status?.toLowerCase() === "done"
+                            ? (history.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
+                            : history.status === "pending_approval"
+                              ? "bg-orange-100 text-orange-800"
+                              : history.status === "extend"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}
+                        >
+                          {history.status?.toLowerCase() === "done"
+                            ? (history.admin_done ? "Approved" : "Pending Approval")
+                            : (history.status === "pending_approval" ? "Pending Approval" : (history.status || "—"))}
+                        </span>
+                      </div>
+                      <div className="p-4 space-y-3">
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-gray-400 uppercase font-semibold">Task</p>
+                          <div className="text-sm text-gray-800">
+                            {isAudioUrl(history.task_description) ? (
+                              <AudioPlayer url={history.task_description} />
+                            ) : (
+                              history.task_description || "—"
+                            )}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-gray-400 uppercase font-semibold">Timestamp</p>
+                            <p className="text-xs text-gray-700">{formatDateTimeForDisplay(history.created_at)}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-gray-400 uppercase font-semibold">Given By</p>
+                            <p className="text-xs text-gray-700 font-bold">{history.given_by || "—"}</p>
+                          </div>
+                        </div>
+                        {history.next_extend_date && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-gray-400 uppercase font-semibold">Next Target</p>
+                            <p className="text-xs text-indigo-600 font-bold">{formatDateTimeForDisplay(history.next_extend_date)}</p>
+                          </div>
+                        )}
+                        {history.reason && (
+                          <div className="space-y-1 p-2 bg-purple-50 rounded">
+                            <p className="text-[10px] text-purple-400 uppercase font-semibold">Remarks</p>
+                            <p className="text-xs text-purple-700 italic">{history.reason}</p>
+                          </div>
+                        )}
+                        {history.image_url && (
+                          <div className="pt-2 border-t border-gray-50">
+                            <a href={history.image_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 font-bold text-xs">
+                              <img src={history.image_url} className="w-8 h-8 rounded object-cover border" alt="preview" />
+                              View Attachment
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-10 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+                    <p>No records found</p>
+                  </div>
+                )}
+              </div>
+
             </>
           ) : (
-            /* Regular Tasks Table - Mobile Responsive */
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                        checked={
-                          filteredDelegationTasks.length > 0 &&
-                          selectedItems.size === filteredDelegationTasks.length
-                        }
-                        onChange={handleSelectAllItems}
-                      />
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      Task ID
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
-                      Task Description
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      Department
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      Given By
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      Name
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-yellow-50">
-                      Start Date
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-green-50">
-                      Planned Date
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-blue-50">
-                      Status
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-indigo-50">
-                      Next Target
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px] bg-purple-50">
-                      Remarks
-                    </th>
-                    <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-orange-50">
-                      Upload
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredDelegationTasks.length > 0 ? (
-                    filteredDelegationTasks.map((account, index) => {
-                      const isSelected = selectedItems.has(account.id);
-                      const rowColorClass = getRowColor(account.color_code_for);
-                      const sequenceNumber = index + 1;
-                      return (
-                        <tr
-                          key={index}
-                          className={`${isSelected ? "bg-purple-50" : ""
-                            } hover:bg-gray-50 ${rowColorClass}`}
+            <>
+              {/* Regular Tasks Table - Mobile Responsive */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          checked={
+                            filteredDelegationTasks.length > 0 &&
+                            selectedItems.size === filteredDelegationTasks.length
+                          }
+                          onChange={handleSelectAllItems}
+                        />
+                      </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Task ID
+                      </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
+                        Task Description
+                      </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Department
+                      </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Given By
+                      </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Name
+                      </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-yellow-50">
+                        Start Date
+                      </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-green-50">
+                        Planned Date
+                      </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-blue-50">
+                        Status
+                      </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-indigo-50">
+                        Next Target
+                      </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px] bg-purple-50">
+                        Remarks
+                      </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-orange-50">
+                        Upload
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredDelegationTasks.length > 0 ? (
+                      filteredDelegationTasks.map((account, index) => {
+                        const isSelected = selectedItems.has(account.id);
+                        const rowColorClass = getRowColor(account.color_code_for);
+                        const sequenceNumber = index + 1;
+                        return (
+                          <tr
+                            key={index}
+                            className={`${isSelected ? "bg-purple-50" : ""
+                              } hover:bg-gray-50 ${rowColorClass}`}
+                          >
+                            <td className="px-2 sm:px-6 py-2 sm:py-4">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                checked={isSelected}
+                                onChange={(e) =>
+                                  handleCheckboxClick(e, account.id)
+                                }
+                              />
+                            </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4">
+                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                {account.id || "—"}
+                              </div>
+                            </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
+                              <div
+                                className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
+                              >
+                                <RenderDescription text={account.task_description} />
+                              </div>
+                            </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4">
+                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                {account.department || "—"}
+                              </div>
+                            </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4">
+                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                {account.given_by || "—"}
+                              </div>
+                            </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4">
+                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                {account.name || "—"}
+                              </div>
+                            </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4 bg-yellow-50">
+                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                {formatDateTimeForDisplay(
+                                  account.task_start_date
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4 bg-green-50">
+                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                {formatDateTimeForDisplay(account.planned_date)}
+                              </div>
+                            </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4 bg-blue-50">
+                              <select
+                                disabled={!isSelected}
+                                value={statusData[account.id] || ""}
+                                onChange={(e) =>
+                                  handleStatusChange(
+                                    account.id,
+                                    e.target.value
+                                  )
+                                }
+                                className="border border-gray-300 rounded-md px-2 py-1 w-full disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm"
+                              >
+                                <option value="">Select</option>
+                                <option value="Done">Done</option>
+                                <option value="Extend date">Extend</option>
+                              </select>
+                            </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4 bg-indigo-50">
+                              <input
+                                type="date"
+                                disabled={
+                                  !isSelected ||
+                                  statusData[account.id] !== "Extend date"
+                                }
+                                value={nextTargetDate[account.id] || ""}
+                                onChange={(e) => {
+                                  handleNextTargetDateChange(
+                                    account.id,
+                                    e.target.value
+                                  );
+                                }}
+                                className="border border-gray-300 rounded-md px-2 py-1 w-full disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm"
+                              />
+                            </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[150px] max-w-[250px] bg-purple-50">
+                              <textarea
+                                placeholder="Enter remarks"
+                                disabled={!isSelected}
+                                value={remarksData[account.id] || ""}
+                                onChange={(e) =>
+                                  setRemarksData((prev) => ({
+                                    ...prev,
+                                    [account.id]: e.target.value,
+                                  }))
+                                }
+                                className="border rounded-md px-2 py-1 w-full border-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm resize-none whitespace-normal"
+                                rows="2"
+                              />
+                            </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4 bg-orange-50">
+                              {uploadedImages[account.id] ? (
+                                <div className="flex items-center">
+                                  <img
+                                    src={URL.createObjectURL(
+                                      uploadedImages[account.id]
+                                    )}
+                                    alt="Receipt"
+                                    className="h-8 w-8 sm:h-10 sm:w-10 object-cover rounded-md mr-2 flex-shrink-0"
+                                  />
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-xs text-gray-500 whitespace-normal break-words">
+                                      {uploadedImages[account.id].name}
+                                    </span>
+                                    <span className="text-xs text-green-600">
+                                      Ready
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : account.image ? (
+                                <div className="flex items-center">
+                                  <img
+                                    src={account.image}
+                                    alt="Receipt"
+                                    className="h-8 w-8 sm:h-10 sm:w-10 object-cover rounded-md mr-2 flex-shrink-0"
+                                  />
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-xs text-gray-500 whitespace-normal break-words">
+                                      Uploaded
+                                    </span>
+                                    <button
+                                      className="text-xs text-purple-600 hover:text-purple-800"
+                                      onClick={() =>
+                                        window.open(account.image, "_blank")
+                                      }
+                                    >
+                                      View
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <label
+                                  htmlFor={`file-upload-${account.id}`}
+                                  className={`flex items-center cursor-pointer ${account.require_attachment?.toUpperCase() ===
+                                    "YES"
+                                    ? "text-red-600 font-medium"
+                                    : "text-purple-600"
+                                    } hover:text-purple-800`}
+                                >
+                                  <Upload className="h-4 w-4 mr-1 flex-shrink-0" />
+                                  <span className="text-xs whitespace-normal break-words">
+                                    {account.require_attachment?.toUpperCase() ===
+                                      "YES"
+                                      ? "Required*"
+                                      : "Upload"}
+                                  </span>
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    accept="image/*"
+                                    onChange={(e) =>
+                                      handleImageUpload(account.id, e)
+                                    }
+                                    disabled={!isSelected}
+                                    id={`file-upload-${account.id}`}
+                                  />
+                                </label>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={12}
+                          className="px-4 sm:px-6 py-4 text-center text-gray-500 text-xs sm:text-sm"
                         >
-                          <td className="px-2 sm:px-6 py-2 sm:py-4">
+                          {searchTerm
+                            ? "No tasks matching your search"
+                            : "No pending tasks found"}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Regular Task Cards */}
+              <div className="md:hidden space-y-4 p-4 bg-gray-50/50">
+                {filteredDelegationTasks.length > 0 ? (
+                  filteredDelegationTasks.map((account, index) => {
+                    const isSelected = selectedItems.has(account.id);
+                    const rowColorClass = getRowColor(account.color_code_for);
+                    return (
+                      <div key={index} className={`bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden ${isSelected ? "ring-2 ring-purple-400" : ""} ${rowColorClass}`}>
+                        <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
+                          <div className="flex items-center gap-3">
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                              className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                               checked={isSelected}
-                              onChange={(e) =>
-                                handleCheckboxClick(e, account.id)
-                              }
+                              onChange={(e) => handleCheckboxClick(e, account.id)}
                             />
-                          </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4">
-                            <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {account.id || "—"}
-                            </div>
-                          </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
-                            <div
-                              className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
-                            >
+                            <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">#{account.id}</span>
+                          </div>
+                        </div>
+                        <div className="p-4 space-y-4">
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-gray-400 uppercase font-semibold">Description</p>
+                            <div className="text-sm text-gray-800">
                               <RenderDescription text={account.task_description} />
                             </div>
-                          </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4">
-                            <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {account.department || "—"}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Department</p>
+                              <p className="text-xs font-bold text-gray-700">{account.department || "—"}</p>
                             </div>
-                          </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4">
-                            <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {account.given_by || "—"}
+                            <div className="space-y-1">
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Given By</p>
+                              <p className="text-xs font-bold text-gray-700">{account.given_by || "—"}</p>
                             </div>
-                          </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4">
-                            <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {account.name || "—"}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50">
+                            <div className="space-y-1">
+                              <p className="text-[10px] text-amber-500 uppercase font-semibold">Start Date</p>
+                              <p className="text-xs font-medium text-gray-600">{formatDateTimeForDisplay(account.task_start_date)}</p>
                             </div>
-                          </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4 bg-yellow-50">
-                            <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {formatDateTimeForDisplay(
-                                account.task_start_date
+                            <div className="space-y-1">
+                              <p className="text-[10px] text-green-500 uppercase font-semibold">Planned Date</p>
+                              <p className="text-xs font-black text-gray-900">{formatDateTimeForDisplay(account.planned_date)}</p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3 pt-3 border-t border-gray-50">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Status</p>
+                                <select
+                                  disabled={!isSelected}
+                                  value={statusData[account.id] || ""}
+                                  onChange={(e) => handleStatusChange(account.id, e.target.value)}
+                                  className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:ring-purple-400"
+                                >
+                                  <option value="">Select</option>
+                                  <option value="Done">Done</option>
+                                  <option value="Extend date">Extend</option>
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Next Target</p>
+                                <input
+                                  type="date"
+                                  disabled={!isSelected || statusData[account.id] !== "Extend date"}
+                                  value={nextTargetDate[account.id] || ""}
+                                  onChange={(e) => handleNextTargetDateChange(account.id, e.target.value)}
+                                  className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs disabled:bg-gray-50"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Remarks</p>
+                              <textarea
+                                placeholder="Enter remarks"
+                                disabled={!isSelected}
+                                value={remarksData[account.id] || ""}
+                                onChange={(e) => setRemarksData((prev) => ({ ...prev, [account.id]: e.target.value }))}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs focus:ring-purple-400 resize-none"
+                                rows="2"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Attachment</p>
+                              {uploadedImages[account.id] ? (
+                                <div className="flex items-center gap-2 p-2 bg-green-50 rounded border border-green-100">
+                                  <Upload className="h-4 w-4 text-green-600" />
+                                  <span className="text-[10px] text-green-700 font-bold truncate flex-1">{uploadedImages[account.id].name}</span>
+                                  <button onClick={() => setUploadedImages(prev => { const next = { ...prev }; delete next[account.id]; return next; })} className="text-red-400"><X size={14} /></button>
+                                </div>
+                              ) : account.image ? (
+                                <div className="flex items-center gap-2 p-2 bg-purple-50 rounded border border-purple-100">
+                                  <img src={account.image} className="w-8 h-8 rounded object-cover" alt="preview" />
+                                  <span className="text-[10px] text-purple-700 font-bold">Uploaded</span>
+                                  <button onClick={() => window.open(account.image, "_blank")} className="ml-auto text-purple-600 text-[10px] font-bold">View</button>
+                                </div>
+                              ) : (
+                                <label className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-xl transition-all ${isSelected ? "border-purple-200 bg-purple-50 text-purple-600" : "border-gray-100 bg-gray-50 text-gray-300"}`}>
+                                  <Upload size={16} />
+                                  <span className="text-xs font-bold">{account.require_attachment?.toUpperCase() === "YES" ? "Required*" : "Upload"}</span>
+                                  <input type="file" className="hidden" accept="image/*" disabled={!isSelected} onChange={(e) => handleImageUpload(account.id, e)} />
+                                </label>
                               )}
                             </div>
-                          </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4 bg-green-50">
-                            <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {formatDateTimeForDisplay(account.planned_date)}
-                            </div>
-                          </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4 bg-blue-50">
-                            <select
-                              disabled={!isSelected}
-                              value={statusData[account.id] || ""}
-                              onChange={(e) =>
-                                handleStatusChange(
-                                  account.id,
-                                  e.target.value
-                                )
-                              }
-                              className="border border-gray-300 rounded-md px-2 py-1 w-full disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm"
-                            >
-                              <option value="">Select</option>
-                              <option value="Done">Done</option>
-                              <option value="Extend date">Extend</option>
-                            </select>
-                          </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4 bg-indigo-50">
-                            <input
-                              type="date"
-                              disabled={
-                                !isSelected ||
-                                statusData[account.id] !== "Extend date"
-                              }
-                              value={nextTargetDate[account.id] || ""}
-                              onChange={(e) => {
-                                handleNextTargetDateChange(
-                                  account.id,
-                                  e.target.value
-                                );
-                              }}
-                              className="border border-gray-300 rounded-md px-2 py-1 w-full disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm"
-                            />
-                          </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[150px] max-w-[250px] bg-purple-50">
-                            <textarea
-                              placeholder="Enter remarks"
-                              disabled={!isSelected}
-                              value={remarksData[account.id] || ""}
-                              onChange={(e) =>
-                                setRemarksData((prev) => ({
-                                  ...prev,
-                                  [account.id]: e.target.value,
-                                }))
-                              }
-                              className="border rounded-md px-2 py-1 w-full border-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm resize-none whitespace-normal"
-                              rows="2"
-                            />
-                          </td>
-                          <td className="px-2 sm:px-6 py-2 sm:py-4 bg-orange-50">
-                            {uploadedImages[account.id] ? (
-                              <div className="flex items-center">
-                                <img
-                                  src={URL.createObjectURL(
-                                    uploadedImages[account.id]
-                                  )}
-                                  alt="Receipt"
-                                  className="h-8 w-8 sm:h-10 sm:w-10 object-cover rounded-md mr-2 flex-shrink-0"
-                                />
-                                <div className="flex flex-col min-w-0">
-                                  <span className="text-xs text-gray-500 whitespace-normal break-words">
-                                    {uploadedImages[account.id].name}
-                                  </span>
-                                  <span className="text-xs text-green-600">
-                                    Ready
-                                  </span>
-                                </div>
-                              </div>
-                            ) : account.image ? (
-                              <div className="flex items-center">
-                                <img
-                                  src={account.image}
-                                  alt="Receipt"
-                                  className="h-8 w-8 sm:h-10 sm:w-10 object-cover rounded-md mr-2 flex-shrink-0"
-                                />
-                                <div className="flex flex-col min-w-0">
-                                  <span className="text-xs text-gray-500 whitespace-normal break-words">
-                                    Uploaded
-                                  </span>
-                                  <button
-                                    className="text-xs text-purple-600 hover:text-purple-800"
-                                    onClick={() =>
-                                      window.open(account.image, "_blank")
-                                    }
-                                  >
-                                    View
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <label
-                                htmlFor={`file-upload-${account.id}`}
-                                className={`flex items-center cursor-pointer ${account.require_attachment?.toUpperCase() ===
-                                  "YES"
-                                  ? "text-red-600 font-medium"
-                                  : "text-purple-600"
-                                  } hover:text-purple-800`}
-                              >
-                                <Upload className="h-4 w-4 mr-1 flex-shrink-0" />
-                                <span className="text-xs whitespace-normal break-words">
-                                  {account.require_attachment?.toUpperCase() ===
-                                    "YES"
-                                    ? "Required*"
-                                    : "Upload"}
-                                </span>
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  accept="image/*"
-                                  onChange={(e) =>
-                                    handleImageUpload(account.id, e)
-                                  }
-                                  disabled={!isSelected}
-                                  id={`file-upload-${account.id}`}
-                                />
-                              </label>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan={12}
-                        className="px-4 sm:px-6 py-4 text-center text-gray-500 text-xs sm:text-sm"
-                      >
-                        {searchTerm
-                          ? "No tasks matching your search"
-                          : "No pending tasks found"}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-200">
+                    <Search size={40} className="text-gray-100 mx-auto mb-3" />
+                    <p className="text-gray-400 text-sm">No tasks found</p>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>

@@ -304,7 +304,8 @@ function DelegationPage({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            {/* Desktop View */}
+            <table className="hidden md:table min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 sticky top-0 z-20">
                 <tr>
                   <th className="px-2 sm:px-3 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
@@ -639,35 +640,6 @@ function DelegationPage({
                           task.require_attachment || "—"
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {editingTaskId === task.id ? (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={handleSaveEdit}
-                              disabled={isSaving}
-                              className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                            >
-                              <Save size={14} />
-                              {isSaving ? 'Saving...' : 'Save'}
-                            </button>
-                            <button
-                              onClick={handleCancelEdit}
-                              className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
-                            >
-                              <X size={14} />
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleEditClick(task)}
-                            className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                          >
-                            <Edit size={14} />
-                            Edit
-                          </button>
-                        )}
-                      </td>
                     </tr>
                   ))
                 ) : (
@@ -686,6 +658,119 @@ function DelegationPage({
                 )}
               </tbody>
             </table>
+
+            {/* Mobile View - Delegation Cards */}
+            <div className="md:hidden divide-y divide-gray-100">
+              {filteredTasks.length > 0 ? (
+                filteredTasks.map((task, index) => (
+                  <div key={index} className={`p-5 bg-white space-y-4 ${selectedTasks.find(t => t.id === task.id) ? "bg-purple-50/50" : ""}`}>
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-black text-gray-300">{(index + 1).toString().padStart(2, '0')}</span>
+                        <input
+                          type="checkbox"
+                          checked={!!selectedTasks.find(t => t.id === task.id)}
+                          onChange={() => handleCheckboxChange(task)}
+                          className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                        />
+                      </div>
+                      <div className="flex-grow min-w-0">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[10px] font-black text-purple-500 uppercase tracking-wider">#{task.id || 'N/A'}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tight ${task.frequency === 'Daily' ? 'bg-blue-100 text-blue-800' :
+                              task.frequency === 'Weekly' ? 'bg-green-100 text-green-800' :
+                                'bg-purple-100 text-purple-800'
+                            }`}>
+                            {task.frequency || 'Manual'}
+                          </span>
+                        </div>
+
+                        {editingTaskId === task.id ? (
+                          <div className="space-y-4 py-2">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-black text-gray-400 uppercase">Description</label>
+                              <textarea
+                                value={editFormData.task_description}
+                                onChange={(e) => handleInputChange('task_description', e.target.value)}
+                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold"
+                                rows="3"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase">Department</label>
+                                <select
+                                  value={editFormData.department}
+                                  onChange={(e) => handleInputChange('department', e.target.value)}
+                                  className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold"
+                                >
+                                  <option value="">Select Dept</option>
+                                  {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase">Assignee</label>
+                                <select
+                                  value={editFormData.name}
+                                  onChange={(e) => handleInputChange('name', e.target.value)}
+                                  className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold"
+                                >
+                                  <option value="">Select Doer</option>
+                                  {doersList.map(u => <option key={u.user_name || u} value={u.user_name || u}>{u.user_name || u}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 pt-2">
+                              <button onClick={handleSaveEdit} className="flex-1 flex justify-center items-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-green-100">
+                                <Save size={14} /> Save
+                              </button>
+                              <button onClick={handleCancelEdit} className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-xs font-black uppercase tracking-widest">
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="text-sm font-bold text-gray-800 leading-tight mb-4">
+                              {isAudioUrl(task.task_description) ? (
+                                <AudioPlayer url={task.task_description} />
+                              ) : (
+                                task.task_description || "—"
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 border-t border-gray-50 pt-4">
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Dept</span>
+                                <div className="text-[11px] font-bold text-gray-700 truncate">{task.department || '—'}</div>
+                              </div>
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">From</span>
+                                <div className="text-[11px] font-bold text-gray-700 truncate">{task.given_by || '—'}</div>
+                              </div>
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Assignee</span>
+                                <div className="text-[11px] font-bold text-gray-700 truncate">{task.name || '—'}</div>
+                              </div>
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Start</span>
+                                <div className="text-[11px] font-bold text-gray-700">{formatDateTime(task.task_start_date)}</div>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      {!editingTaskId && (
+                        <button onClick={() => handleEditClick(task)} className="p-2 bg-blue-50 text-blue-600 rounded-xl active:scale-95 transition-all">
+                          <Edit size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-10 text-center text-gray-400 font-bold text-sm">No delegation tasks archived</div>
+              )}
+            </div>
           </div>
         </div>
       )}

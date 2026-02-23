@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Plus, User, Building, X, Save, Edit, Trash2, Settings, Search, ChevronDown, Calendar, RefreshCw } from 'lucide-react';
 import AdminLayout from '../components/layout/AdminLayout';
 import { useDispatch, useSelector } from 'react-redux';
-import { createDepartment, createUser, deleteUser, departmentOnlyDetails, givenByDetails, departmentDetails, updateDepartment, updateUser, userDetails, customDropdownDetails, createCustomDropdown, deleteCustomDropdown, createAssignFrom, deleteDepartment, deleteAssignFrom, updateCustomDropdown, updateAssignFrom, createMachineEntries } from '../redux/slice/settingSlice';
+import { createDepartment, createUser, deleteUser, departmentOnlyDetails, givenByDetails, departmentDetails, updateDepartment, updateUser, userDetails, customDropdownDetails, createCustomDropdown, deleteCustomDropdown, createAssignFrom, deleteDepartment, deleteAssignFrom, updateCustomDropdown, updateAssignFrom, createMachineEntries, uploadProfileImage } from '../redux/slice/settingSlice';
 import supabase from '../SupabaseClient';
 import CalendarComponent from '../components/CalendarComponent';
 import { createPortal } from 'react-dom';
@@ -57,9 +57,17 @@ const Setting = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDeleteData, setUserToDeleteData] = useState({ id: null, name: '' });
   const [isDeleting, setIsDeleting] = useState(false);
+  const [profileFile, setProfileFile] = useState(null);
+  const [profilePreview, setProfilePreview] = useState(null);
 
   const { userData, department, departmentsOnly, givenBy, customDropdowns, loading, error } = useSelector((state) => state.setting);
   const dispatch = useDispatch();
+
+  useEffect(() => {
+    console.log("Setting Component - userData:", userData);
+    console.log("Setting Component - loading:", loading);
+    console.log("Setting Component - error:", error);
+  }, [userData, loading, error]);
 
 
   const fetchDeviceLogsAndUpdateStatus = async () => {
@@ -467,7 +475,9 @@ const Setting = () => {
     employee_id: '',
     role: 'user',
     status: 'active',
-    department: ''
+    department: '',
+    user_access: '',
+    profile_image: ''
   });
 
   const [deptForm, setDeptForm] = useState({
@@ -507,15 +517,33 @@ const Setting = () => {
     // Auto-generate employee_id
     const generatedEmpId = `EMP-${Date.now().toString().slice(-6)}`;
 
+    let imageUrl = userForm.profile_image;
+    if (profileFile) {
+      try {
+        imageUrl = await dispatch(uploadProfileImage({ file: profileFile, userId: generatedEmpId })).unwrap();
+      } catch (uploadErr) {
+        console.error('Image upload failed:', uploadErr);
+        showToast("Image upload failed, continuing without image.", "warning");
+      }
+    }
+
     const newUser = {
       ...userForm,
       employee_id: generatedEmpId,
-      user_access: userForm.department,
+      user_access: userForm.user_access || userForm.department,
+      department: userForm.department,
+      profile_image: imageUrl
     };
 
     try {
       console.log("Creating user with payload:", newUser);
       await dispatch(createUser(newUser)).unwrap();
+
+      // If the new user has the same name as current logged in user (unlikely but safe)
+      if (newUser.user_name === localStorage.getItem("user-name")) {
+        localStorage.setItem("profile_image", imageUrl || "");
+      }
+
       resetUserForm();
       setShowUserModal(false);
       showToast("User created successfully!", "success");
@@ -526,9 +554,19 @@ const Setting = () => {
     }
   };
 
-  // Modified handleUpdateUser
   const handleUpdateUser = async (e) => {
     e.preventDefault();
+
+    let imageUrl = userForm.profile_image;
+    if (profileFile) {
+      try {
+        imageUrl = await dispatch(uploadProfileImage({ file: profileFile, userId: userForm.employee_id || currentUserId })).unwrap();
+      } catch (uploadErr) {
+        console.error('Image upload failed:', uploadErr);
+        showToast("Image upload failed, continuing with previous image.", "warning");
+      }
+    }
+
     const updatedUser = {
       user_name: userForm.username,
       password: userForm.password,
@@ -537,14 +575,26 @@ const Setting = () => {
       employee_id: userForm.employee_id, // Add this line
       role: userForm.role,
       status: userForm.status,
-      user_access: userForm.department,
+      user_access: userForm.user_access || userForm.department,
+      department: userForm.department,
+      profile_image: imageUrl,
       leave_date: userForm.leave_date || null,
       leave_end_date: userForm.leave_end_date || null,
       remark: userForm.remark || null
     };
 
     try {
+      console.log("Updating user with image:", imageUrl);
       await dispatch(updateUser({ id: currentUserId, updatedUser })).unwrap();
+
+      // Critical: Update localStorage if the edited user is the current logged-in user
+      if (updatedUser.user_name === localStorage.getItem("user-name")) {
+        console.log("Updating current user's localStorage image");
+        localStorage.setItem("profile_image", imageUrl || "");
+        // Refresh to update all layouts immediately
+        window.location.reload();
+      }
+
       resetUserForm();
       setShowUserModal(false);
       showToast("User updated successfully!", "success");
@@ -749,20 +799,27 @@ const Setting = () => {
   //   setShowUserModal(false);
   // };
   const handleEditUser = (userId) => {
+    if (!userData) return;
     const user = userData.find(u => u.id === userId);
+    if (!user) return;
+
     setUserForm({
-      username: user.user_name,
-      email: user.email_id,
+      username: user.user_name || '',
+      email: user.email_id || '',
       password: '', // Leave empty when editing to keep current password
-      phone: user.number,
+      phone: user.number || '',
       employee_id: user.employee_id || '',
-      department: user.user_access || '',
-      role: user.role,
-      status: user.status,
+      department: user.department || '',
+      user_access: user.user_access || '',
+      role: user.role || 'user',
+      status: user.status || 'active',
+      profile_image: user.profile_image || '',
       leave_date: user.leave_date ? user.leave_date.split('T')[0] : '',
       leave_end_date: user.leave_end_date ? user.leave_end_date.split('T')[0] : '',
       remark: user.remark || ''
     });
+    setProfilePreview(user.profile_image || null);
+    setProfileFile(null);
     setCurrentUserId(userId);
     setIsEditing(true);
     setShowUserModal(true);
@@ -817,13 +874,17 @@ const Setting = () => {
       phone: '',
       employee_id: '',
       department: '', // Add this line
+      user_access: '',
       givenBy: '',
       role: 'user',
       status: 'active',
+      profile_image: '',
       leave_date: '',
       leave_end_date: '',
       remark: ''
     });
+    setProfileFile(null);
+    setProfilePreview(null);
     setIsEditing(false);
     setCurrentUserId(null);
   };
@@ -1321,48 +1382,58 @@ const Setting = () => {
 
             <div className="max-h-[calc(100vh-250px)] overflow-auto scrollbar-thin">
               <div className="inline-block min-w-full align-middle">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Username
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Email
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Phone No.
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Employee ID
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Department
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Role
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {(userData || [])
-                      .filter(user =>
-                        user &&
-                        user.user_name &&
-                        user.user_name !== 'admin' &&
-                        user.user_name !== 'DSMC' && (
-                          !usernameFilter || user.user_name.toLowerCase().includes(usernameFilter.toLowerCase()))
-                      )
-                      .map((user, index) => (
+                {/* Desktop View */}
+                <div className="hidden md:block">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Username
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Email
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Phone No.
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Employee ID
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Department
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Role
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {(() => {
+                        const filtered = (userData || [])
+                          .filter(user =>
+                            user &&
+                            user.user_name && (
+                              !usernameFilter || user.user_name.toLowerCase().includes(usernameFilter.toLowerCase()))
+                          );
+                        console.log("Setting Page - Filtered Users COUNT:", filtered.length);
+                        return filtered;
+                      })().map((user, index) => (
                         <tr key={`user-${user?.id || index}`} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center overflow-hidden mr-3 border border-indigo-200">
+                                {user?.profile_image ? (
+                                  <img src={user.profile_image} alt={user.user_name} className="h-full w-full object-cover" />
+                                ) : (
+                                  <span className="text-xs font-bold text-indigo-700">{user?.user_name?.charAt(0).toUpperCase()}</span>
+                                )}
+                              </div>
                               <div className="text-sm font-medium text-gray-900">{user?.user_name}</div>
                             </div>
                           </td>
@@ -1376,10 +1447,9 @@ const Setting = () => {
                             <div className="text-sm text-gray-900">{user?.employee_id || 'N/A'}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{user?.user_access || 'N/A'}</div>
+                            <div className="text-sm text-gray-900">{user?.department || '—'}</div>
                           </td>
 
-                          {/* ADD THE STATUS CELL HERE */}
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex flex-col">
                               <div className="flex items-center">
@@ -1406,7 +1476,6 @@ const Setting = () => {
                               )}
                             </div>
                           </td>
-                          {/* END OF STATUS CELL */}
 
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleColor(user?.role)}`}>
@@ -1433,10 +1502,93 @@ const Setting = () => {
                           </td>
                         </tr>
                       ))}
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile View Cards */}
+                <div className="md:hidden space-y-4 p-4 bg-gray-50/50">
+                  {(userData || [])
+                    .filter(user =>
+                      user &&
+                      user.user_name &&
+                      user.user_name !== 'admin' &&
+                      user.user_name !== 'DSMC' && (
+                        !usernameFilter || user.user_name.toLowerCase().includes(usernameFilter.toLowerCase()))
+                    )
+                    .map((user, index) => (
+                      <div key={`user-card-${user?.id || index}`} className="bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden animate-fade-in">
+                        <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
+                          <span className="text-sm font-bold text-purple-900">{user?.user_name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 inline-flex text-[10px] leading-5 font-bold rounded-full uppercase ${getStatusColor(user?.status)}`}>
+                              {user?.status === 'on_leave' ? 'On Leave' : user?.status}
+                            </span>
+                            {user?.status === 'active' && (
+                              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-sm shadow-green-200"></span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="p-4 space-y-3">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Employee ID</p>
+                              <p className="text-xs text-gray-700 font-medium">{user?.employee_id || 'N/A'}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Role</p>
+                              <span className={`px-1.5 py-0.5 inline-flex text-[10px] leading-4 font-bold rounded-full uppercase ${getRoleColor(user?.role)}`}>
+                                {user?.role}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-gray-400 uppercase font-semibold">Email</p>
+                            <p className="text-xs text-gray-700 truncate">{user?.email_id || '—'}</p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Department</p>
+                              <p className="text-xs text-indigo-700 font-bold">{user?.department || '—'}</p>
+                            </div>
+                          </div>
+
+                          {(user?.status === 'on leave' || user?.status === 'on_leave') && user?.leave_date && (
+                            <div className="mt-2 p-2 bg-amber-50 rounded-lg border border-amber-100">
+                              <p className="text-[10px] text-amber-700 font-bold flex items-center gap-1 uppercase tracking-wider">
+                                <Calendar size={10} /> Leave Period
+                              </p>
+                              <p className="text-xs text-amber-800 mt-1">
+                                {new Date(user.leave_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                {user.leave_end_date ? ` to ${new Date(user.leave_end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
+                              </p>
+                              {user.remark && <p className="text-[10px] text-amber-600 italic mt-1 font-medium">{user.remark}</p>}
+                            </div>
+                          )}
+
+                          <div className="pt-3 border-t border-gray-100 flex justify-end gap-2">
+                            <button
+                              onClick={() => handleEditUser(user?.id)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-all"
+                            >
+                              <Edit size={14} /> Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(user?.id)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-all"
+                            >
+                              <Trash2 size={14} /> Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
               </div>
             </div>
+
           </div>
         )}
 
@@ -1598,11 +1750,10 @@ const Setting = () => {
             </div>
 
             <div className="max-h-[calc(100vh-250px)] overflow-auto scrollbar-hide">
-              <div className="p-6">
+              <div className="p-0 md:p-6">
                 {(() => {
                   // Group by Machine Name
                   const machinesByName = {};
-                  const machineIds = {};
 
                   if (customDropdowns) {
                     customDropdowns.forEach(item => {
@@ -1628,90 +1779,170 @@ const Setting = () => {
 
                   const machineNames = Object.keys(machinesByName).sort();
 
-                  return machineNames.length > 0 ? (
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine Name</th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine Area</th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parts Count</th>
-                          <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                  if (machineNames.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <Settings size={48} className="text-gray-200 mb-4" />
+                        <p className="text-gray-500 font-medium">No machines found</p>
+                        <p className="text-gray-400 text-sm mt-1">Add a new machine to get started</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      {/* Desktop View */}
+                      <div className="hidden md:block">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine Name</th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine Area</th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parts Count</th>
+                              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {machineNames.map((machineName, idx) => {
+                              const data = machinesByName[machineName];
+                              const isExpanded = activeDeptSubTab === `expanded-${idx}`;
+
+                              return (
+                                <React.Fragment key={idx}>
+                                  <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setActiveDeptSubTab(isExpanded ? '' : `expanded-${idx}`)}>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 flex items-center gap-2">
+                                      <ChevronDown size={16} className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                      {machineName}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      {[...data.areas].join(', ') || '-'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      <span className="bg-indigo-100 text-indigo-800 py-0.5 px-2.5 rounded-full text-xs font-medium">
+                                        {data.parts.length} parts
+                                      </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (window.confirm(`Delete machine "${machineName}" and all its parts?`)) {
+                                            data.ids.forEach(id => dispatch(deleteCustomDropdown(id)));
+                                          }
+                                        }}
+                                        className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"
+                                      >
+                                        <Trash2 size={18} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                  {isExpanded && (
+                                    <tr className="bg-gray-50/50">
+                                      <td colSpan="4" className="px-6 py-4">
+                                        <div className="pl-6 border-l-2 border-indigo-200">
+                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Associated Parts</p>
+                                          <div className="flex flex-wrap gap-2">
+                                            {data.parts.length > 0 ? data.parts.map(part => (
+                                              <span key={part.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-xs font-medium rounded-md border border-gray-200 shadow-sm">
+                                                {part.value}
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (window.confirm(`Delete part "${part.value}"?`)) {
+                                                      dispatch(deleteCustomDropdown(part.id));
+                                                    }
+                                                  }}
+                                                  className="text-gray-400 hover:text-red-600 transition-colors"
+                                                >
+                                                  <X size={12} />
+                                                </button>
+                                              </span>
+                                            )) : (
+                                              <span className="text-sm text-gray-400 italic">No parts added for this machine</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile View */}
+                      <div className="md:hidden space-y-4 p-4 bg-gray-50/50">
                         {machineNames.map((machineName, idx) => {
                           const data = machinesByName[machineName];
-                          const isExpanded = activeDeptSubTab === `expanded-${idx}`;
+                          const isExpanded = activeDeptSubTab === `expanded-mob-${idx}`;
 
                           return (
-                            <React.Fragment key={idx}>
-                              <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setActiveDeptSubTab(isExpanded ? '' : `expanded-${idx}`)}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 flex items-center gap-2">
-                                  <ChevronDown size={16} className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                                  {machineName}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {[...data.areas].join(', ') || '-'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  <span className="bg-indigo-100 text-indigo-800 py-0.5 px-2.5 rounded-full text-xs font-medium">
-                                    {data.parts.length} parts
+                            <div key={`machine-card-${idx}`} className="bg-white rounded-xl border border-indigo-100 shadow-sm overflow-hidden">
+                              <div
+                                className="bg-indigo-50/50 px-4 py-3 border-b border-indigo-100 flex justify-between items-center cursor-pointer"
+                                onClick={() => setActiveDeptSubTab(isExpanded ? '' : `expanded-mob-${idx}`)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <ChevronDown size={16} className={`text-indigo-600 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                  <span className="text-sm font-bold text-indigo-900">{machineName}</span>
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm(`Delete machine "${machineName}" and all its parts?`)) {
+                                      data.ids.forEach(id => dispatch(deleteCustomDropdown(id)));
+                                    }
+                                  }}
+                                  className="text-red-400 p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                              <div className="p-4 space-y-3">
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Area</p>
+                                  <p className="text-xs text-gray-700 font-medium">{[...data.areas].join(', ') || '-'}</p>
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Parts Count</p>
+                                  <span className="bg-indigo-100 text-indigo-800 py-0.5 px-2.5 rounded-full text-[10px] font-bold">
+                                    {data.parts.length} Parts
                                   </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (window.confirm(`Delete machine "${machineName}" and all its parts?`)) {
-                                        data.ids.forEach(id => dispatch(deleteCustomDropdown(id)));
-                                      }
-                                    }}
-                                    className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"
-                                  >
-                                    <Trash2 size={18} />
-                                  </button>
-                                </td>
-                              </tr>
-                              {isExpanded && (
-                                <tr className="bg-gray-50/50">
-                                  <td colSpan="4" className="px-6 py-4">
-                                    <div className="pl-6 border-l-2 border-indigo-200">
-                                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Associated Parts</p>
-                                      <div className="flex flex-wrap gap-2">
-                                        {data.parts.length > 0 ? data.parts.map(part => (
-                                          <span key={part.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-xs font-medium rounded-md border border-gray-200 shadow-sm">
-                                            {part.value}
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (window.confirm(`Delete part "${part.value}"?`)) {
-                                                  dispatch(deleteCustomDropdown(part.id));
-                                                }
-                                              }}
-                                              className="text-gray-400 hover:text-red-600 transition-colors"
-                                            >
-                                              <X size={12} />
-                                            </button>
-                                          </span>
-                                        )) : (
-                                          <span className="text-sm text-gray-400 italic">No parts added for this machine</span>
-                                        )}
-                                      </div>
+                                </div>
+
+                                {isExpanded && (
+                                  <div className="mt-3 pt-3 border-t border-gray-100">
+                                    <p className="text-[10px] text-gray-400 uppercase font-semibold mb-2">Associated Parts</p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {data.parts.length > 0 ? data.parts.map(part => (
+                                        <span key={part.id} className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-50 text-gray-700 text-[10px] font-bold rounded border border-gray-100">
+                                          {part.value}
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (window.confirm(`Delete part "${part.value}"?`)) {
+                                                dispatch(deleteCustomDropdown(part.id));
+                                              }
+                                            }}
+                                            className="text-gray-400 hover:text-red-600"
+                                          >
+                                            <X size={10} />
+                                          </button>
+                                        </span>
+                                      )) : (
+                                        <p className="text-[10px] text-gray-400 italic">No parts added</p>
+                                      )}
                                     </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           );
                         })}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-20 text-center">
-                      <Settings size={48} className="text-gray-200 mb-4" />
-                      <p className="text-gray-500 font-medium">No machines found</p>
-                      <p className="text-gray-400 text-sm mt-1">Add a new machine to get started</p>
-                    </div>
+                      </div>
+                    </>
                   );
                 })()}
               </div>
@@ -1724,25 +1955,71 @@ const Setting = () => {
         {showUserModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div
-              className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity"
+              className="absolute inset-0 bg-gray-900/40 backdrop-blur-md animate-in fade-in duration-300"
               onClick={() => setShowUserModal(false)}
             ></div>
 
-            <div className="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden transform transition-all border border-purple-100 flex flex-col max-h-[90vh]">
-              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 px-8 py-6 flex justify-between items-center border-b border-purple-100">
-                <h3 className="text-xl font-bold text-indigo-900">
-                  {isEditing ? 'Edit User Profile' : 'Create New User'}
-                </h3>
-                <button
-                  onClick={() => setShowUserModal(false)}
-                  className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-white rounded-full transition-all"
-                >
-                  <X size={20} />
-                </button>
+            <div className="relative bg-white rounded-[2.5rem] shadow-2xl max-w-2xl w-full overflow-hidden animate-in zoom-in-95 duration-300 border border-white/50 flex flex-col max-h-[95vh]">
+              {/* Premium Header */}
+              <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 px-10 py-8 relative">
+                <div className="absolute inset-0 bg-white/5 backdrop-blur-[2px]"></div>
+                <div className="relative z-10 flex justify-between items-center">
+                  <div>
+                    <h3 className="text-2xl font-black text-white tracking-tight">
+                      {isEditing ? 'Update Profile' : 'Nurture Talent'}
+                    </h3>
+                    <p className="text-white/70 text-xs font-bold uppercase tracking-[0.2em] mt-1">
+                      {isEditing ? 'Refine user information' : 'Create a new team member'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowUserModal(false)}
+                    className="p-2.5 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all hover:rotate-90"
+                  >
+                    <X size={22} />
+                  </button>
+                </div>
               </div>
 
-              <div className="p-8 overflow-y-auto custom-scrollbar">
-                <form onSubmit={isEditing ? handleUpdateUser : handleAddUser} className="space-y-6">
+              <div className="p-10 overflow-y-auto no-scrollbar">
+                <form onSubmit={isEditing ? handleUpdateUser : handleAddUser} className="space-y-8">
+                  {/* Profile Image Section */}
+                  <div className="flex flex-col items-center mb-8">
+                    <div className="relative group">
+                      <div className="h-28 w-28 rounded-full bg-white p-1.5 shadow-2xl ring-4 ring-purple-100/50">
+                        <div className="h-full w-full rounded-full bg-gradient-to-tr from-indigo-50 to-purple-50 border-2 border-dashed border-purple-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-purple-400 group-hover:bg-purple-50/50">
+                          {profilePreview || userForm.profile_image ? (
+                            <img
+                              src={profilePreview || userForm.profile_image}
+                              alt="Profile"
+                              className="h-full w-full object-cover transform transition-transform duration-500 group-hover:scale-110"
+                            />
+                          ) : (
+                            <User size={40} className="text-purple-200 group-hover:text-purple-400 transition-colors" />
+                          )}
+                        </div>
+                      </div>
+                      <label className="absolute bottom-1 right-1 bg-indigo-600 text-white p-2.5 rounded-full cursor-pointer shadow-xl hover:bg-indigo-700 transition-all active:scale-90 ring-4 ring-white">
+                        <Plus size={18} strokeWidth={3} />
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                              setProfileFile(file);
+                              const reader = new FileReader();
+                              reader.onloadend = () => setProfilePreview(reader.result);
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <span className="text-[10px] text-gray-400 mt-4 font-black uppercase tracking-widest">Profile Identity</span>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label htmlFor="username" className="block text-sm font-bold text-gray-700 ml-1">Username</label>
@@ -1907,19 +2184,19 @@ const Setting = () => {
                     )}
                   </div>
 
-                  <div className="flex justify-end gap-3 pt-6">
+                  <div className="flex justify-end gap-3 pt-6 border-t border-gray-50 mt-4">
                     <button
                       type="button"
                       onClick={() => setShowUserModal(false)}
-                      className="px-6 py-2.5 text-sm font-bold text-gray-600 hover:text-gray-800 transition-colors"
+                      className="px-8 py-3 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-all active:scale-95"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-8 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all flex items-center gap-2"
+                      className="px-10 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-black rounded-2xl hover:from-indigo-700 hover:to-purple-700 shadow-[0_10px_20px_-5px_rgba(79,70,229,0.4)] hover:shadow-indigo-200 transition-all active:scale-95 flex items-center gap-2 uppercase tracking-widest"
                     >
-                      <Save size={18} />
+                      <Save size={16} strokeWidth={3} />
                       {isEditing ? 'Save Changes' : 'Create User'}
                     </button>
                   </div>
@@ -1933,25 +2210,34 @@ const Setting = () => {
         {showDeptModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div
-              className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity"
+              className="absolute inset-0 bg-gray-900/40 backdrop-blur-md animate-in fade-in duration-300"
               onClick={() => setShowDeptModal(false)}
             ></div>
 
-            <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-purple-100 transform transition-all">
-              <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-6 flex justify-between items-center border-b border-purple-100">
-                <h3 className="text-xl font-bold text-purple-900">
-                  {activeTab === 'categories'
-                    ? (isEditing ? 'Edit Machine' : 'Add New Machine')
-                    : (activeDeptSubTab === 'givenBy'
-                      ? (isEditing ? 'Edit Assign From' : 'Create New Assign From')
-                      : (isEditing ? 'Edit Department' : 'Create New Department'))}
-                </h3>
-                <button
-                  onClick={() => setShowDeptModal(false)}
-                  className="p-2 text-gray-400 hover:text-purple-600 hover:bg-white rounded-full transition-all"
-                >
-                  <X size={20} />
-                </button>
+            <div className="relative bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 border border-white/50">
+              {/* Premium Header */}
+              <div className="bg-gradient-to-br from-purple-600 via-pink-600 to-rose-500 px-10 py-8 relative">
+                <div className="absolute inset-0 bg-white/5 backdrop-blur-[2px]"></div>
+                <div className="relative z-10 flex justify-between items-center">
+                  <div>
+                    <h3 className="text-2xl font-black text-white tracking-tight">
+                      {activeTab === 'categories'
+                        ? (isEditing ? 'Refine Asset' : 'New Infrastructure')
+                        : (activeDeptSubTab === 'givenBy'
+                          ? (isEditing ? 'Update Designation' : 'Create Designation')
+                          : (isEditing ? 'Update Department' : 'Create Department'))}
+                    </h3>
+                    <p className="text-white/70 text-xs font-bold uppercase tracking-[0.2em] mt-1">
+                      {activeTab === 'categories' ? 'Configure machine architecture' : 'Organize your workforce structure'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowDeptModal(false)}
+                    className="p-2.5 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all hover:rotate-90"
+                  >
+                    <X size={22} />
+                  </button>
+                </div>
               </div>
 
               <div className="p-4 md:p-8 overflow-y-auto">
@@ -2047,22 +2333,22 @@ const Setting = () => {
 
 
 
-                  <div className="flex justify-end gap-3 pt-4">
+                  <div className="flex justify-end gap-3 pt-6 border-t border-gray-50 mt-4">
                     <button
                       type="button"
                       onClick={() => setShowDeptModal(false)}
-                      className="px-6 py-2.5 text-sm font-bold text-gray-600 hover:text-gray-800 transition-colors"
+                      className="px-8 py-3 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-all active:scale-95"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-8 py-2.5 bg-purple-600 text-white text-sm font-bold rounded-xl hover:bg-purple-700 shadow-lg shadow-purple-100 transition-all flex items-center gap-2"
+                      className="px-10 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-black rounded-2xl hover:from-purple-700 hover:to-pink-700 shadow-[0_10px_20px_-5px_rgba(192,38,211,0.4)] hover:shadow-pink-200 transition-all active:scale-95 flex items-center gap-2 uppercase tracking-widest"
                     >
-                      <Save size={18} />
+                      <Save size={16} strokeWidth={3} />
                       {activeTab === 'categories'
-                        ? (currentDeptId ? 'Update Category' : 'Save Category')
-                        : (currentDeptId ? 'Update Department' : 'Save Department')}
+                        ? (currentDeptId ? 'Update Asset' : 'Save Asset')
+                        : (currentDeptId ? 'Update Entry' : 'Save Entry')}
                     </button>
                   </div>
                 </form>
@@ -2075,61 +2361,65 @@ const Setting = () => {
         {showDeleteConfirm && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div
-              className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+              className="absolute inset-0 bg-gray-900/40 backdrop-blur-md animate-in fade-in duration-300"
               onClick={() => !isDeleting && setShowDeleteConfirm(false)}
             ></div>
-            <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-red-50">
+            <div className="relative bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border border-white/50">
               {/* Header with Icon */}
-              <div className="bg-gradient-to-br from-red-50 to-white px-6 pt-8 pb-4 text-center">
-                <div className="mx-auto w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-4 shadow-inner">
-                  <Trash2 size={40} className="text-red-500" />
+              <div className="bg-gradient-to-br from-red-500 to-rose-600 px-6 pt-10 pb-8 text-center relative">
+                <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]"></div>
+                <div className="relative z-10">
+                  <div className="mx-auto w-20 h-20 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mb-6 shadow-xl ring-4 ring-white/30">
+                    <Trash2 size={40} className="text-white" strokeWidth={2.5} />
+                  </div>
+                  <h3 className="text-2xl font-black text-white tracking-tight mb-2">Terminate Profile?</h3>
+                  <p className="text-white/80 text-xs font-bold uppercase tracking-widest px-4">
+                    Irreversible Deletion
+                  </p>
                 </div>
-                <h3 className="text-xl font-black text-gray-900 leading-tight">Delete User?</h3>
-                <p className="text-sm text-gray-500 mt-2 px-4">
-                  Are you sure you want to delete <span className="text-red-600 font-bold">"{userToDeleteData.name}"</span>?
+              </div>
+
+              <div className="px-8 py-8 text-center">
+                <p className="text-sm text-gray-500 leading-relaxed mb-6">
+                  Are you absolutely certain about deleting <span className="text-red-600 font-extrabold">"{userToDeleteData.name}"</span>?
                 </p>
-              </div>
 
-              {/* Warning Content */}
-              <div className="px-8 py-4">
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
-                  <div className="pt-0.5">
-                    <Settings className="text-amber-600 w-5 h-5 animate-spin-slow" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-black text-amber-900">Important Reminder</h4>
-                    <p className="text-xs text-amber-800/80 leading-relaxed mt-1">
-                      Have you <strong>shifted all tasks</strong> to another employee?
-                    </p>
-                    <p className="text-[10px] text-amber-700/70 font-medium mt-2 leading-tight">
-                      * If not, all pending and future tasks for this user will be <span className="font-bold underline">deleted instantly</span> from the database.
-                    </p>
+                <div className="bg-amber-50 border border-amber-100 rounded-[1.5rem] p-5 text-left mb-8">
+                  <div className="flex gap-3">
+                    <div className="pt-1">
+                      <Settings className="text-amber-600 w-5 h-5 animate-spin-slow" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-amber-900 uppercase tracking-widest mb-1">Critical Guard</h4>
+                      <p className="text-[11px] text-amber-800/80 leading-relaxed">
+                        Un-shifted tasks will be <span className="font-bold underline text-red-600">permanently purged</span> from our systems.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Action Buttons */}
-              <div className="px-8 pb-8 pt-4 flex gap-3">
-                <button
-                  type="button"
-                  disabled={isDeleting}
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="flex-1 py-3.5 px-4 bg-gray-50 text-gray-600 font-black text-sm rounded-2xl hover:bg-gray-100 transition-all border border-gray-100 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={isDeleting}
-                  onClick={confirmDeleteUserAndTasks}
-                  className="flex-1 py-3.5 px-4 bg-red-600 hover:bg-red-700 text-white font-black text-sm rounded-2xl shadow-lg shadow-red-200 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-75"
-                >
-                  {isDeleting ? (
-                    <><RefreshCw size={18} className="animate-spin" /> Deleting...</>
-                  ) : (
-                    <>Delete Now</>
-                  )}
-                </button>
+                <div className="flex flex-col gap-3">
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={confirmDeleteUserAndTasks}
+                    className="w-full py-4 px-6 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-[0_10px_20px_-5px_rgba(220,38,38,0.4)] hover:shadow-red-200 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-75"
+                  >
+                    {isDeleting ? (
+                      <><RefreshCw size={16} className="animate-spin" /> Executing...</>
+                    ) : (
+                      <>Confirm Termination</>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="w-full py-4 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-colors disabled:opacity-50"
+                  >
+                    Keep Profile
+                  </button>
+                </div>
               </div>
             </div>
           </div>

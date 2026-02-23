@@ -263,8 +263,9 @@ export default function AdminApprovalPage() {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                    <div className="overflow-x-auto">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                                 <tr>
@@ -297,37 +298,36 @@ export default function AdminApprovalPage() {
                                     </tr>
                                 ) : (
                                     filteredTasks.map((task) => (
-                                        <tr key={task.id} className="hover:bg-gray-50">
+                                        <tr key={task.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-medium text-gray-900">{task.doer_name || task.name || task.filled_by}</div>
-                                                <div className="text-xs text-gray-500">By: {task.given_by || '-'}</div>
+                                                <div className="text-sm font-bold text-gray-900">{task.doer_name || task.name || task.filled_by}</div>
+                                                <div className="text-[10px] text-gray-500 font-medium uppercase tracking-tight">By: {task.given_by || '-'}</div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="text-sm text-gray-900 max-w-xs break-words space-y-2">
+                                                <div className="text-sm text-gray-900 max-w-xs break-words">
                                                     {(() => {
                                                         const desc = task.task_description || task.issue_description;
-                                                        if (!desc) return '-';
+                                                        if (!desc) return <span className="text-gray-400 italic">No description</span>;
 
                                                         const audioUrl = extractAudioUrl(desc);
 
                                                         return (
-                                                            <>
+                                                            <div className="space-y-2">
                                                                 {audioUrl && <AudioPlayer url={audioUrl} />}
-                                                                {/* Show text if it exists and is not just the URL itself */}
                                                                 {(!audioUrl || desc.replace(audioUrl, '').trim().replace(/Voice Note Link:?\s*/i, '').length > 0) && (
-                                                                    <div className="whitespace-pre-wrap">{desc}</div>
+                                                                    <div className="whitespace-pre-wrap leading-relaxed">{desc}</div>
                                                                 )}
-                                                            </>
+                                                            </div>
                                                         );
                                                     })()}
                                                 </div>
                                                 {(task.machine_name || task.part_name) && (
-                                                    <div className="text-xs text-gray-500 mt-1">
+                                                    <div className="text-[10px] text-indigo-600 font-bold mt-1.5 uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded inline-block">
                                                         Machine: {task.machine_name} {task.part_name ? `(${task.part_name})` : ''}
                                                     </div>
                                                 )}
                                                 {task.reason && (
-                                                    <div className="text-xs text-gray-500 mt-1 italic">
+                                                    <div className="text-xs text-amber-600 mt-1 font-medium bg-amber-50 px-2 py-0.5 rounded">
                                                         Note: {task.reason}
                                                     </div>
                                                 )}
@@ -337,28 +337,28 @@ export default function AdminApprovalPage() {
                                                     </div>
                                                 )}
                                                 {task.status && (
-                                                    <div className="text-xs font-bold text-blue-600 mt-1 uppercase bg-blue-50 px-2 py-0.5 rounded-sm inline-block">
+                                                    <div className="text-[10px] font-bold text-blue-600 mt-2 uppercase bg-blue-50 px-2 py-0.5 rounded-sm inline-block tracking-widest">
                                                         Status: {task.status}
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {task.department || '-'}
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">{task.department || '-'}</span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-medium">
                                                 {formatDate(task.created_at || task.submission_timestamp || task.submission_date)}
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <td className="px-6 py-4 whitespace-nowrap">
                                                 {task.image_url || task.uploaded_image_url || task.work_photo_url ? (
                                                     <a
                                                         href={task.image_url || task.uploaded_image_url || task.work_photo_url}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="text-blue-600 hover:underline flex items-center gap-1"
+                                                        className="text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm shadow-blue-100 inline-flex items-center gap-1.5"
                                                     >
-                                                        View Image
+                                                        View Proof
                                                     </a>
-                                                ) : '-'}
+                                                ) : <span className="text-gray-300 text-xs italic">No Proof</span>}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                 {viewMode === 'pending' ? (
@@ -366,7 +366,7 @@ export default function AdminApprovalPage() {
                                                         <button
                                                             onClick={() => handleApprove(task)}
                                                             disabled={processingId === task.id}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors shadow-sm text-xs border border-green-700"
+                                                            className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md shadow-green-100 text-xs font-bold border-none"
                                                         >
                                                             {processingId === task.id ? (
                                                                 <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
@@ -378,7 +378,7 @@ export default function AdminApprovalPage() {
                                                         <button
                                                             onClick={() => handleReject(task)}
                                                             disabled={processingId === task.id}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-md hover:bg-red-100 disabled:opacity-50 transition-colors shadow-sm text-xs"
+                                                            className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-100 disabled:opacity-50 transition-all text-xs font-bold"
                                                         >
                                                             <XCircle size={14} />
                                                             Reject
@@ -386,11 +386,11 @@ export default function AdminApprovalPage() {
                                                     </div>
                                                 ) : (
                                                     task.rejection_reason ? (
-                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" title={task.rejection_reason}>
+                                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-800" title={task.rejection_reason}>
                                                             Rejected
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-green-100 text-green-800">
                                                             Approved
                                                         </span>
                                                     )
@@ -401,6 +401,125 @@ export default function AdminApprovalPage() {
                                 )}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Mobile Card View */}
+                    <div className="md:hidden divide-y divide-gray-100">
+                        {loading ? (
+                            <div className="p-10 text-center text-gray-500">
+                                <div className="flex justify-center mb-2">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                </div>
+                                <p className="text-sm font-medium">Loading tasks...</p>
+                            </div>
+                        ) : filteredTasks.length === 0 ? (
+                            <div className="p-10 text-center text-gray-500 bg-gray-50/50">
+                                <BookCheck size={40} className="mx-auto text-gray-200 mb-3" />
+                                <p className="text-sm font-medium">No tasks found</p>
+                            </div>
+                        ) : (
+                            filteredTasks.map((task) => (
+                                <div key={`card-${task.id}`} className="p-4 space-y-4 hover:bg-blue-50/30 transition-colors">
+                                    {/* Card Header: User & Info */}
+                                    <div className="flex justify-between items-start">
+                                        <div className="space-y-1">
+                                            <p className="text-sm font-black text-gray-900">{task.doer_name || task.name || task.filled_by}</p>
+                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                                                <Clock size={10} /> {formatDate(task.created_at || task.submission_timestamp || task.submission_date)}
+                                            </p>
+                                        </div>
+                                        <span className="text-[10px] font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                                            {task.department || 'No Dept'}
+                                        </span>
+                                    </div>
+
+                                    {/* Task Content */}
+                                    <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 space-y-2">
+                                        {(() => {
+                                            const desc = task.task_description || task.issue_description;
+                                            if (!desc) return <p className="text-xs text-gray-400 italic">No description</p>;
+
+                                            const audioUrl = extractAudioUrl(desc);
+
+                                            return (
+                                                <div className="space-y-2">
+                                                    {audioUrl && <AudioPlayer url={audioUrl} />}
+                                                    {(!audioUrl || desc.replace(audioUrl, '').trim().replace(/Voice Note Link:?\s*/i, '').length > 0) && (
+                                                        <p className="text-xs text-gray-800 leading-normal font-medium">{desc}</p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {(task.machine_name || task.part_name) && (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                <span className="text-[9px] font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded uppercase">
+                                                    Machine: {task.machine_name}
+                                                </span>
+                                                {task.part_name && (
+                                                    <span className="text-[9px] font-black text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded uppercase">
+                                                        Part: {task.part_name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* proof & Metadata */}
+                                    <div className="flex items-center justify-between text-[10px] font-bold">
+                                        <div className="text-gray-400 uppercase tracking-widest">
+                                            Given By: <span className="text-gray-600">{task.given_by || '-'}</span>
+                                        </div>
+                                        {task.image_url || task.uploaded_image_url || task.work_photo_url ? (
+                                            <a
+                                                href={task.image_url || task.uploaded_image_url || task.work_photo_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-600 flex items-center gap-1 underline"
+                                            >
+                                                View Proof
+                                            </a>
+                                        ) : <span className="text-gray-300 font-normal italic">No Proof</span>}
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="pt-2">
+                                        {viewMode === 'pending' ? (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <button
+                                                    onClick={() => handleApprove(task)}
+                                                    disabled={processingId === task.id}
+                                                    className="flex items-center justify-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black shadow-lg shadow-green-100 disabled:opacity-50 active:scale-95 transition-all"
+                                                >
+                                                    {processingId === task.id ? (
+                                                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                                    ) : (
+                                                        <CheckCircle2 size={16} />
+                                                    )}
+                                                    Approve
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReject(task)}
+                                                    disabled={processingId === task.id}
+                                                    className="flex items-center justify-center gap-2 py-2.5 bg-red-100 text-red-600 rounded-xl text-xs font-black active:scale-95 transition-all"
+                                                >
+                                                    <XCircle size={16} />
+                                                    Reject
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="text-center">
+                                                {task.rejection_reason ? (
+                                                    <span className="block w-full py-1.5 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Rejected: {task.rejection_reason}</span>
+                                                ) : (
+                                                    <span className="block w-full py-1.5 bg-green-50 text-green-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Approved ✅</span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
             </div>

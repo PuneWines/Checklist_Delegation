@@ -14,19 +14,23 @@ const CATEGORY_TO_COLUMN = {
 
 export const fetchUserDetailsApi = async () => {
   try {
+    const { count, error: countError } = await supabase
+      .from("users")
+      .select('*', { count: 'exact', head: true });
+
+    console.log("📊 Total rows in users table:", count, "Error:", countError);
+
     const { data, error } = await supabase
       .from("users")
-      .select('*, user_access, leave_date, leave_end_date, remark, employee_id') // Add employee_id
-      .not("user_name", "is", null)
-      .neq("user_name", "");
+      .select('*');
 
     if (error) {
-      console.log("Error when fetching data", error);
+      console.error("❌ Error fetching user details:", error);
       return [];
     }
 
-    console.log("Fetched successfully", data);
-    return data;
+    console.log("✅ Fetched users successfully:", data?.length, "rows");
+    return data || [];
   } catch (error) {
     console.log("Error from Supabase", error);
     return [];
@@ -116,6 +120,8 @@ export const createUserApi = async (newUser) => {
           role: newUser.role,
           status: newUser.status,
           user_access: newUser.user_access,
+          department: newUser.department, // Add department
+          profile_image: newUser.profile_image || null, // Add profile_image
           leave_date: newUser.leave_date || null,
           leave_end_date: newUser.leave_end_date || null,
           remark: newUser.remark || null
@@ -145,7 +151,9 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
       employee_id: updatedUser.employee_id,
       role: updatedUser.role,
       status: updatedUser.status,
-      user_access: updatedUser.user_access
+      user_access: updatedUser.user_access,
+      department: updatedUser.department, // Add department
+      profile_image: updatedUser.profile_image // Add profile_image
     };
 
     // Only update password if a new one is provided
@@ -434,6 +442,40 @@ export const createCustomDropdownApi = async (item) => {
     };
   } catch (error) {
     console.log("error creating custom dropdown", error);
+    throw error;
+  }
+};
+
+export const uploadProfileImageApi = async (file, userId) => {
+  try {
+    // Sanitize userId to remove any special characters or spaces
+    const cleanUserId = userId.toString().replace(/[^a-zA-Z0-9]/g, '_');
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${cleanUserId}_${Date.now()}.${fileExt}`;
+    const filePath = `${fileName}`; // Upload directly to bucket root for simplicity
+
+    console.log("🚀 Uploading to Supabase Storage:", filePath);
+
+    const { error: uploadError } = await supabase.storage
+      .from('profiles')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.error("❌ Supabase Storage Upload Error:", uploadError);
+      throw uploadError;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('profiles')
+      .getPublicUrl(filePath);
+
+    console.log("✅ Profile Image Public URL:", publicUrl);
+    return publicUrl;
+  } catch (error) {
+    console.error("❌ Error uploading profile image:", error);
     throw error;
   }
 };

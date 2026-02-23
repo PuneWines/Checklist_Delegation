@@ -17,7 +17,8 @@ import {
   deleteAssignFromApi,
   updateCustomDropdownApi,
   updateAssignFromApi,
-  createMachineEntriesApi
+  createMachineEntriesApi,
+  uploadProfileImageApi
 } from '../api/settingApi';
 
 
@@ -156,6 +157,14 @@ export const createMachineEntries = createAsyncThunk(
   async (entries) => {
     const data = await createMachineEntriesApi(entries);
     return data;
+  }
+);
+
+export const uploadProfileImage = createAsyncThunk(
+  'upload/profile-image',
+  async ({ file, userId }) => {
+    const publicUrl = await uploadProfileImageApi(file, userId);
+    return publicUrl;
   }
 );
 

@@ -3,6 +3,8 @@ import aceLogo from "../assets/Ace_Logoo.jpg";
 
 import { useState, useEffect } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
+import supabase from "../../SupabaseClient";
+import { Home, ClipboardList, CheckSquare, User as UserIcon, LogOut, Menu, X } from "lucide-react"
 
 const UserLayout = ({ children }) => {
   const navigate = useNavigate()
@@ -10,26 +12,58 @@ const UserLayout = ({ children }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [username, setUsername] = useState("")
   const [isAdmin, setIsAdmin] = useState(false)
+  const [profileImage, setProfileImage] = useState("")
+  const [userEmail, setUserEmail] = useState("")
 
   // Check authentication on component mount
   useEffect(() => {
     const storedUsername = localStorage.getItem('user-name')
 
     if (!storedUsername) {
-      // Redirect to login if no username found
       navigate('/login')
       return
     }
 
     setUsername(storedUsername)
     setIsAdmin(storedUsername.toLowerCase() === 'admin')
-  }, [navigate])
+
+    // Initial load from localStorage
+    const cachedImage = localStorage.getItem('profile_image');
+    setProfileImage(cachedImage || "")
+    setUserEmail(localStorage.getItem('email_id') || "")
+
+    // Sync with database to get the latest image
+    const syncProfileImage = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("users")
+          .select("profile_image")
+          .eq("user_name", storedUsername)
+          .single();
+
+        if (data && data.profile_image) {
+          setProfileImage(data.profile_image);
+          localStorage.setItem("profile_image", data.profile_image);
+          console.log("✅ User profile image synced from DB:", data.profile_image);
+        }
+      } catch (err) {
+        console.error("❌ Error syncing user profile image:", err);
+      }
+    };
+
+    if (storedUsername) {
+      syncProfileImage();
+    }
+
+    console.log("UserLayout - Profile Image URL (Cached):", cachedImage);
+  }, [navigate, username]) // Added username to dependency to ensure it runs when set
 
   // Logout handler
   const handleLogout = () => {
     localStorage.removeItem("user-name");
-
     localStorage.removeItem('role')
+    localStorage.removeItem('email_id')
+    localStorage.removeItem('profile_image')
     navigate('/login')
   }
 
@@ -49,17 +83,15 @@ const UserLayout = ({ children }) => {
   const getIcon = (iconName) => {
     switch (iconName) {
       case "home":
-        return <i className="fas fa-home w-4 h-4"></i>
+        return <Home className="w-4 h-4" />
       case "clipboard-list":
-        return <i className="fas fa-clipboard-list w-4 h-4"></i>
+        return <ClipboardList className="w-4 h-4" />
       case "check-square":
-        return <i className="fas fa-check-square w-4 h-4"></i>
+        return <CheckSquare className="w-4 h-4" />
       case "user":
-        return <i className="fas fa-user w-4 h-4"></i>
-      case "cog":
-        return <i className="fas fa-cog w-4 h-4"></i>
+        return <UserIcon className="w-4 h-4" />
       default:
-        return <i className="fas fa-circle w-4 h-4"></i>
+        return <Home className="w-4 h-4" />
     }
   }
 
@@ -97,10 +129,22 @@ const UserLayout = ({ children }) => {
         <div className="border-t border-green-200 dark:border-teal-800 p-4 bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-950 dark:to-teal-950">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-green-500 to-teal-500 flex items-center justify-center">
-                <span className="text-sm font-medium text-white">
-                  {username ? username.charAt(0).toUpperCase() : 'U'}
-                </span>
+              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-green-500 to-teal-500 flex items-center justify-center overflow-hidden border border-green-100">
+                {profileImage ? (
+                  <img
+                    src={profileImage}
+                    alt={username}
+                    className="h-full w-full object-cover"
+                    onError={(e) => {
+                      console.error("❌ UserLayout Image Failed:", profileImage);
+                      setProfileImage("");
+                    }}
+                  />
+                ) : (
+                  <span className="text-sm font-medium text-white">
+                    {username ? username.charAt(0).toUpperCase() : 'U'}
+                  </span>
+                )}
               </div>
               <div>
                 <p className="text-sm font-medium text-green-700 dark:text-green-300">
@@ -113,9 +157,9 @@ const UserLayout = ({ children }) => {
             </div>
             <button
               onClick={handleLogout}
-              className="text-green-700 hover:text-green-900 dark:text-green-300 dark:hover:text-green-100"
+              className="text-green-700 hover:text-green-900 dark:text-green-300 dark:hover:text-green-100 p-1 rounded-md hover:bg-green-100 dark:hover:bg-green-800 transition-colors"
             >
-              <i className="fas fa-sign-out-alt h-4 w-4"></i>
+              <LogOut className="h-4 w-4" />
               <span className="sr-only">Log out</span>
             </button>
           </div>
@@ -164,10 +208,14 @@ const UserLayout = ({ children }) => {
         <div className="border-t border-green-200 dark:border-teal-800 p-4 bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-950 dark:to-teal-950">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-green-500 to-teal-500 flex items-center justify-center">
-                <span className="text-sm font-medium text-white">
-                  {username ? username.charAt(0).toUpperCase() : 'U'}
-                </span>
+              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-green-500 to-teal-500 flex items-center justify-center overflow-hidden border border-green-100">
+                {profileImage ? (
+                  <img src={profileImage} alt={username} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-sm font-medium text-white">
+                    {username ? username.charAt(0).toUpperCase() : 'U'}
+                  </span>
+                )}
               </div>
               <div>
                 <p className="text-sm font-medium text-green-700 dark:text-green-300">
@@ -180,9 +228,9 @@ const UserLayout = ({ children }) => {
             </div>
             <button
               onClick={handleLogout}
-              className="text-green-700 hover:text-green-900 dark:text-green-300 dark:hover:text-green-100"
+              className="text-green-700 hover:text-green-900 dark:text-green-300 dark:hover:text-green-100 p-1 rounded-md hover:bg-green-100 dark:hover:bg-green-800 transition-colors"
             >
-              <i className="fas fa-sign-out-alt h-4 w-4"></i>
+              <LogOut className="h-4 w-4" />
               <span className="sr-only">Log out</span>
             </button>
           </div>
@@ -193,10 +241,10 @@ const UserLayout = ({ children }) => {
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex h-14 items-center justify-between border-b border-green-200 dark:border-teal-800 bg-white dark:bg-gray-950 px-4 md:px-6">
           <button
-            className="md:hidden text-green-700 dark:text-green-300"
+            className="md:hidden text-green-700 dark:text-green-300 p-1 rounded-md hover:bg-green-100 dark:hover:bg-green-800"
             onClick={() => setIsMobileMenuOpen(true)}
           >
-            <i className="fas fa-bars h-5 w-5"></i>
+            <Menu className="h-5 w-5" />
             <span className="sr-only">Toggle menu</span>
           </button>
           <h1 className="text-lg font-semibold text-green-700 dark:text-green-300">

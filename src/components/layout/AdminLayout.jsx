@@ -3,6 +3,7 @@ import aceLogo from "../../assets/Ace_Logoo.jpg";
 
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import supabase from "../../SupabaseClient";
 import {
   CheckSquare,
   ClipboardList,
@@ -32,6 +33,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
   const [userRole, setUserRole] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [profileImage, setProfileImage] = useState("");
 
   const [isUserPopupOpen, setIsUserPopupOpen] = useState(false);
 
@@ -51,6 +53,35 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     setUserRole(storedRole || "user");
     setUserEmail(storedEmail);
 
+    // Initial load from localStorage
+    const cachedImage = localStorage.getItem("profile_image");
+    setProfileImage(cachedImage || "");
+
+    // Sync with database to get the latest image
+    const syncProfileImage = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("users")
+          .select("profile_image")
+          .eq("user_name", storedUsername)
+          .single();
+
+        if (data && data.profile_image) {
+          setProfileImage(data.profile_image);
+          localStorage.setItem("profile_image", data.profile_image);
+          console.log("✅ Profile image synced from DB:", data.profile_image);
+        }
+      } catch (err) {
+        console.error("❌ Error syncing profile image:", err);
+      }
+    };
+
+    if (storedUsername) {
+      syncProfileImage();
+    }
+
+    console.log("AdminLayout - Profile Image URL (Cached):", cachedImage);
+
     // Check if this is the super admin (username = 'admin')
     setIsSuperAdmin(storedUsername === "admin");
   }, [navigate]);
@@ -68,6 +99,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     localStorage.removeItem("role");
     localStorage.removeItem("email_id");
     localStorage.removeItem("token");
+    localStorage.removeItem("profile_image");
     window.location.href = "/login";
   };
 
@@ -279,10 +311,14 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
             {/* User info section */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center">
-                  <span className="text-sm font-medium text-black">
-                    {username ? username.charAt(0).toUpperCase() : "U"}
-                  </span>
+                <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-100">
+                  {profileImage ? (
+                    <img src={profileImage} alt={username} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-sm font-medium text-black">
+                      {username ? username.charAt(0).toUpperCase() : "U"}
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-blue-700 truncate">
@@ -451,10 +487,14 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
             <div className="border-t border-blue-200 p-4 bg-gradient-to-r from-blue-50 to-purple-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center">
-                    <span className="text-sm font-medium text-black">
-                      {username ? username.charAt(0).toUpperCase() : "U"}
-                    </span>
+                  <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-100">
+                    {profileImage ? (
+                      <img src={profileImage} alt={username} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-sm font-medium text-black">
+                        {username ? username.charAt(0).toUpperCase() : "U"}
+                      </span>
+                    )}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-blue-700">
@@ -546,8 +586,20 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Welcome</span>
               <span className="text-sm font-black text-purple-700 -mt-1">Hello, {username || 'User'}</span>
             </div>
-            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center shadow-lg border-2 border-white ring-2 ring-purple-100/50">
-              <span className="text-white text-sm font-black uppercase">{username ? username.charAt(0) : 'U'}</span>
+            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center shadow-lg border-2 border-white ring-2 ring-purple-100/50 overflow-hidden">
+              {profileImage ? (
+                <img
+                  src={profileImage}
+                  alt={username}
+                  className="h-full w-full object-cover"
+                  onError={(e) => {
+                    console.error("❌ AdminLayout Image Failed to Load:", profileImage);
+                    setProfileImage(""); // Fallback to initials
+                  }}
+                />
+              ) : (
+                <span className="text-white text-sm font-black uppercase">{username ? username.charAt(0) : 'U'}</span>
+              )}
             </div>
           </div>
         </header>
@@ -624,48 +676,66 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
 
         {/* User Popup */}
         {isUserPopupOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white rounded-lg p-6 w-80 shadow-xl">
-              {/* <div onClick={() => setIsUserPopupOpen(false)}  className="flex justify-end"><X size={25}/></div> */}
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-md p-4 transition-all duration-300">
+            <div className="bg-white rounded-[2rem] w-full max-w-[340px] shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden animate-in fade-in zoom-in-95 duration-300 border border-white/50">
+              {/* Header Gradient */}
+              <div className="h-32 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 relative">
+                <div className="absolute inset-0 bg-white/10 backdrop-blur-[2px]"></div>
+                <button
+                  onClick={() => setIsUserPopupOpen(false)}
+                  className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/40 rounded-full text-white transition-all hover:rotate-90 z-10"
+                >
+                  <X size={20} />
+                </button>
+              </div>
 
-              <div className="flex flex-col items-center justify-between">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-20 w-20 rounded-full gradient-bg flex items-center justify-center">
-                    <span className="text-3xl font-medium text-white">
-                      {username ? username.charAt(0).toUpperCase() : "U"}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-blue-700">
-                      {username || "User"}{" "}
-                      {userRole === "admin"
-                        ? isSuperAdmin
-                          ? "(Super Admin)"
-                          : "(Admin)"
-                        : ""}
-                    </p>
-                    <p className="text-xs text-blue-600">
-                      {userEmail || "user@example.com"}
-                    </p>
+              {/* Profile Info */}
+              <div className="px-8 pb-8 text-center bg-white">
+                <div className="relative -mt-16 mb-6 flex justify-center">
+                  <div className="h-28 w-28 rounded-full bg-white p-1.5 shadow-2xl ring-4 ring-white/30">
+                    <div className="h-full w-full rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden border-2 border-white shadow-inner">
+                      {profileImage ? (
+                        <img src={profileImage} alt={username} className="h-full w-full object-cover transform hover:scale-110 transition-transform duration-500" />
+                      ) : (
+                        <span className="text-4xl font-black text-white uppercase tracking-tighter">
+                          {username ? username.charAt(0) : "U"}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center  justify-around w-full gap-2 mt-4">
+
+                <div className="space-y-4 mb-8">
+                  <div>
+                    <h3 className="text-2xl font-black text-gray-900 tracking-tight mb-1">
+                      {username || "User"}
+                    </h3>
+                    <div className="flex justify-center flex-wrap gap-2">
+                      <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] px-3 py-1 bg-indigo-50 rounded-full border border-indigo-100/50">
+                        {userRole === "admin" ? (isSuperAdmin ? "Super Admin" : "Administrator") : "Staff"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="py-3 px-4 bg-gray-50 rounded-2xl flex items-center justify-center gap-2 border border-gray-100">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <span className="text-xs font-bold text-gray-500 truncate">{userEmail || "user@example.com"}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => setIsUserPopupOpen(false)}
-                    className="outline p-1 rounded-md px-2"
+                    className="flex justify-center items-center py-3.5 px-4 rounded-2xl text-xs font-black text-gray-400 border-2 border-gray-50 hover:bg-gray-50 hover:text-gray-600 transition-all active:scale-95 uppercase tracking-widest"
                   >
-                    <span className="flex justify-center items-center">
-                      Cancel
-                    </span>
+                    Cancel
                   </button>
 
                   <button
                     onClick={handleLogout}
-                    className="bg-blue-700 text-white hover:bg-blue-900 p-1 rounded-md px-2"
+                    className="flex justify-center items-center gap-2 py-3.5 px-4 rounded-2xl text-xs font-black text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-[0_10px_20px_-5px_rgba(79,70,229,0.4)] hover:shadow-indigo-200 transition-all active:scale-95 uppercase tracking-widest"
                   >
-                    <span className="flex justify-center items-center">
-                      Log out <LogOut className="h-4 w-4" />
-                    </span>
+                    Logout <LogOut size={14} strokeWidth={3} />
                   </button>
                 </div>
               </div>
