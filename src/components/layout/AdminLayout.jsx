@@ -606,73 +606,75 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-gradient-to-br from-blue-50/50 to-purple-50/50 pb-24 md:pb-6">
           {children}
-
-          {/* Premium Bottom Navigation for Mobile */}
-          <div className="md:hidden fixed bottom-6 left-4 right-4 h-16 bg-white/80 backdrop-blur-xl border border-white/20 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] z-50 flex items-center justify-around px-2">
-            <Link
-              to="/dashboard/admin"
-              className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 ${location.pathname === "/dashboard/admin"
-                ? "text-purple-600 bg-purple-50"
-                : "text-gray-400 hover:text-purple-400"
-                }`}
-            >
-              <Home size={22} strokeWidth={location.pathname === "/dashboard/admin" ? 2.5 : 2} />
-              <span className="text-[10px] mt-1 font-bold">Home</span>
-            </Link>
-
-            <Link
-              to="/dashboard/calendar"
-              className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 ${location.pathname === "/dashboard/calendar"
-                ? "text-purple-600 bg-purple-50"
-                : "text-gray-400 hover:text-purple-400"
-                }`}
-            >
-              <CalendarIcon size={22} strokeWidth={location.pathname === "/dashboard/calendar" ? 2.5 : 2} />
-              <span className="text-[10px] mt-1 font-bold">Calendar</span>
-            </Link>
-
-            <Link
-              to="/dashboard/task"
-              className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 ${location.pathname === "/dashboard/task"
-                ? "text-purple-600 bg-purple-50"
-                : "text-gray-400 hover:text-purple-400"
-                }`}
-            >
-              <CalendarCheck size={22} strokeWidth={location.pathname === "/dashboard/task" ? 2.5 : 2} />
-              <span className="text-[10px] mt-1 font-bold">Tasks</span>
-            </Link>
-
-            {userRole === "admin" && (
-              <div className="relative -mt-12">
-                <Link
-                  to="/dashboard/assign-task"
-                  className="flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-blue-600 to-purple-600 rounded-2xl shadow-lg shadow-purple-200 text-white transform active:scale-90 transition-all duration-300 border-4 border-blue-50"
-                >
-                  <CirclePlus size={28} strokeWidth={2.5} />
-                </Link>
-              </div>
-            )}
-
-            <Link
-              to="/dashboard/delegation"
-              className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 ${location.pathname === "/dashboard/delegation"
-                ? "text-purple-600 bg-purple-50"
-                : "text-gray-400 hover:text-purple-400"
-                }`}
-            >
-              <BookmarkCheck size={22} strokeWidth={location.pathname === "/dashboard/delegation" ? 2.5 : 2} />
-              <span className="text-[10px] mt-1 font-bold">Status</span>
-            </Link>
-
-            <button
-              onClick={() => setIsUserPopupOpen(true)}
-              className="flex flex-col items-center justify-center w-12 h-12 rounded-xl text-gray-400 hover:text-purple-400 transition-all"
-            >
-              <UserRound size={22} strokeWidth={2} />
-              <span className="text-[10px] mt-1 font-bold">Profile</span>
-            </button>
-          </div>
         </main>
+
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 h-5 flex items-center justify-center px-4 shadow-md z-40">
+          <a
+            href="https://www.botivate.in"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[9px] text-white/90 font-medium tracking-[0.2em] uppercase hover:underline hover:text-white transition-colors"
+          >
+            Powered by <span className="font-bold">Botivate</span>
+          </a>
+        </div>
+
+        {/* Premium Bottom Navigation for Mobile */}
+        <div className="md:hidden fixed bottom-6 left-4 right-4 h-16 bg-white/80 backdrop-blur-xl border border-white/20 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] z-50 flex items-center justify-around px-2">
+          <Link
+            to="/dashboard/admin"
+            className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 ${location.pathname === "/dashboard/admin"
+              ? "text-purple-600 bg-purple-50"
+              : "text-gray-400 hover:text-purple-400"
+              }`}
+          >
+            <Home size={22} strokeWidth={location.pathname === "/dashboard/admin" ? 2.5 : 2} />
+            <span className="text-[10px] mt-1 font-bold">Home</span>
+          </Link>
+
+
+
+          <Link
+            to="/dashboard/task"
+            className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 ${location.pathname === "/dashboard/task"
+              ? "text-purple-600 bg-purple-50"
+              : "text-gray-400 hover:text-purple-400"
+              }`}
+          >
+            <CalendarCheck size={22} strokeWidth={location.pathname === "/dashboard/task" ? 2.5 : 2} />
+            <span className="text-[10px] mt-1 font-bold">Tasks</span>
+          </Link>
+
+          {userRole === "admin" && (
+            <div className="relative -mt-12">
+              <Link
+                to="/dashboard/assign-task"
+                className="flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-blue-600 to-purple-600 rounded-2xl shadow-lg shadow-purple-200 text-white transform active:scale-90 transition-all duration-300 border-4 border-blue-50"
+              >
+                <CirclePlus size={28} strokeWidth={2.5} />
+              </Link>
+            </div>
+          )}
+
+          <Link
+            to="/dashboard/delegation"
+            className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 ${location.pathname === "/dashboard/delegation"
+              ? "text-purple-600 bg-purple-50"
+              : "text-gray-400 hover:text-purple-400"
+              }`}
+          >
+            <BookmarkCheck size={22} strokeWidth={location.pathname === "/dashboard/delegation" ? 2.5 : 2} />
+            <span className="text-[10px] mt-1 font-bold">Status</span>
+          </Link>
+
+          <button
+            onClick={() => setIsUserPopupOpen(true)}
+            className="flex flex-col items-center justify-center w-12 h-12 rounded-xl text-gray-400 hover:text-purple-400 transition-all"
+          >
+            <UserRound size={22} strokeWidth={2} />
+            <span className="text-[10px] mt-1 font-bold">Profile</span>
+          </button>
+        </div>
 
         {/* User Popup */}
         {isUserPopupOpen && (

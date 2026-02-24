@@ -251,7 +251,20 @@ const UserLayout = ({ children }) => {
             {isAdmin ? 'Admin Dashboard' : 'Staff Dashboard'}
           </h1>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          {children}
+        </main>
+
+        <div className="bg-gradient-to-r from-green-600 to-teal-600 h-5 flex items-center justify-center px-4 shadow-md z-40">
+          <a
+            href="https://www.botivate.in"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[9px] text-white/90 font-medium tracking-[0.2em] uppercase hover:underline hover:text-white transition-colors"
+          >
+            Powered by <span className="font-bold">Botivate</span>
+          </a>
+        </div>
       </div>
     </div>
   )

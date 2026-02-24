@@ -412,23 +412,21 @@ const AllTasks = () => {
           query = query.is("submission_date", null).order(dateColumn, { ascending: false });
         } else if (activeTab === "ea") {
           query = query.in("status", ["pending", "extend", "extended"]).order("task_start_date", { ascending: true });
-        } else if (activeTab === "checklist" || activeTab === "delegation") {
+        } else if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance") {
           // Fetch ALL pending tasks (no DB date restriction).
           // Smart dedup in filteredPendingTasks handles upcoming dedup:
           //   Overdue/Today → show all occurrences per day
-          //   Upcoming      → show only NEXT occurrence per task series (avoids 300+ future rows)
+          //   Upcoming      → show only NEXT occurrence per task series
           // Sorted ascending: oldest overdue first → today → next upcoming
           query = query
             .is(completionField, null)
             .order('planned_date', { ascending: true });
-        } else {
-          query = query.is(completionField, null).order(dateColumn, { ascending: false });
         }
       }
+      // END of pending tasks block (else for if showHistory)
 
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
-
 
       if (data) {
         // Map task_id to id for consistency if id doesn't exist
@@ -493,20 +491,22 @@ const AllTasks = () => {
         }
       }
 
-      // Smart deduplication for checklist and delegation tabs
-      if (activeTab === "checklist" || activeTab === "delegation") {
+      // Smart deduplication for checklist, delegation, and maintenance tabs
+      if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance") {
         if (status === "Upcoming") {
           // UPCOMING: only show the NEXT (earliest) occurrence per task series
           // Key without date — ensures only 1 upcoming row per recurring task
-          // (prevents 300+ future "ALL FINALIZING" rows from all appearing)
-          const key = `upcoming::${task.task_description}::${task.name}`;
+          const descKey = task.task_description || task.issue_description || "";
+          const nameKey = task.name || task.assigned_person || "";
+          const key = `upcoming::${descKey}::${nameKey}`;
           if (seen.has(key)) return false;
           seen.add(key);
         } else {
           // OVERDUE & TODAY: show each day individually
-          // (admin must see every missed day and today's task)
           const taskDate = taskDateValue ? new Date(taskDateValue).toDateString() : "";
-          const key = `${task.task_description}::${task.name}::${taskDate}`;
+          const descKey = task.task_description || task.issue_description || "";
+          const nameKey = task.name || task.assigned_person || "";
+          const key = `${descKey}::${nameKey}::${taskDate}`;
           if (seen.has(key)) return false;
           seen.add(key);
         }
@@ -957,7 +957,7 @@ const AllTasks = () => {
             setShowHistory(false);
             setSelectedItems(new Set());
             setSearchTerm("");
-            setDateFilter("today");
+            setDateFilter("all"); // Changed from "today" to "all" so user sees Overdue/Today/Upcoming by default
           }} />
         </div>
 

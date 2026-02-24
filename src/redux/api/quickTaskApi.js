@@ -24,105 +24,43 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
     today.setHours(0, 0, 0, 0);
     const todayEnd = new Date(today);
     todayEnd.setHours(23, 59, 59, 999);
-    const todayStr = today.toISOString().split('T')[0];
 
-    // Step 1: Get unique task_descriptions with conditions applied at database level
-    let uniqueQuery = supabase
+    let query = supabase
       .from('checklist')
-      .select('task_description')
+      .select('*', { count: 'exact' })
       .is('submission_date', null)
-      .not('task_description', 'is', null);
+      .order('planned_date', { ascending: true })
+      .range(start, end);
 
     if (nameFilter) {
-      uniqueQuery = uniqueQuery.eq('name', nameFilter);
+      query = query.eq('name', nameFilter);
     }
 
     if (dateFilter === 'today') {
-      uniqueQuery = uniqueQuery.gte('planned_date', today.toISOString()).lte('planned_date', todayEnd.toISOString());
+      query = query.gte('planned_date', today.toISOString()).lte('planned_date', todayEnd.toISOString());
     } else if (dateFilter === 'overdue') {
-      uniqueQuery = uniqueQuery.lt('planned_date', today.toISOString());
+      query = query.lt('planned_date', today.toISOString());
     } else if (dateFilter === 'upcoming') {
-      uniqueQuery = uniqueQuery.gt('planned_date', todayEnd.toISOString());
+      query = query.gt('planned_date', todayEnd.toISOString());
     }
 
-    const { data: allUniqueDescriptions, error: uniqueError } = await uniqueQuery;
-
-    if (uniqueError) {
-      console.log("Error when fetching unique descriptions", uniqueError);
-      return { data: [], total: 0 };
-    }
-
-    // Get truly unique descriptions (client-side dedupe for descriptions only)
-    const seenDescriptions = new Set();
-    const uniqueDescriptions = (allUniqueDescriptions || [])
-      .map(row => row.task_description)
-      .filter(desc => {
-        if (!desc || seenDescriptions.has(desc)) return false;
-        seenDescriptions.add(desc);
-        return true;
-      });
-
-    console.log("Total unique descriptions found:", uniqueDescriptions.length);
-
-    if (uniqueDescriptions.length === 0) {
-      return { data: [], total: 0 };
-    }
-
-    // Step 2: Get paginated slice of unique descriptions for current page
-    const paginatedDescriptions = uniqueDescriptions.slice(start, end + 1);
-
-    if (paginatedDescriptions.length === 0) {
-      return { data: [], total: uniqueDescriptions.length };
-    }
-
-    // Step 3: Fetch actual data only for the paginated unique descriptions
-    let dataQuery = supabase
-      .from('checklist')
-      .select('*')
-      .in('task_description', paginatedDescriptions)
-      .is('submission_date', null)
-      .order('task_start_date', { ascending: true });
-
-    if (nameFilter) {
-      dataQuery = dataQuery.eq('name', nameFilter);
-    }
-
-    if (dateFilter === 'today') {
-      dataQuery = dataQuery.gte('planned_date', today.toISOString()).lte('planned_date', todayEnd.toISOString());
-    } else if (dateFilter === 'overdue') {
-      dataQuery = dataQuery.lt('planned_date', today.toISOString());
-    } else if (dateFilter === 'upcoming') {
-      dataQuery = dataQuery.gt('planned_date', todayEnd.toISOString());
-    }
-
-    const { data, error } = await dataQuery;
+    const { data, count, error } = await query;
 
     if (error) {
       console.log("Error when fetching data", error);
       return { data: [], total: 0 };
     }
 
-    // Final client-side deduplication (should be minimal now)
-    const finalSeen = new Set();
     const finalData = (data || []).map(row => ({
       ...row,
       id: row.task_id,
       given_by: parseJsonIfNeeded(row.given_by),
       name: parseJsonIfNeeded(row.name)
-    })).filter(row => {
-      if (finalSeen.has(row.task_description)) {
-        console.log("Final duplicate found:", row.task_description);
-        return false;
-      }
-      finalSeen.add(row.task_description);
-      return true;
-    });
-
-    console.log("Page", page, "-> Fetched:", finalData.length, "Unique total:", uniqueDescriptions.length);
+    }));
 
     return {
       data: finalData,
-      total: uniqueDescriptions.length
+      total: count || 0
     };
 
   } catch (error) {
@@ -143,103 +81,42 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
     const todayEnd = new Date(today);
     todayEnd.setHours(23, 59, 59, 999);
 
-    // Step 1: Get unique task_descriptions with conditions applied at database level
-    let uniqueQuery = supabase
+    let query = supabase
       .from('delegation')
-      .select('task_description')
+      .select('*', { count: 'exact' })
       .is('submission_date', null)
-      .not('task_description', 'is', null);
+      .order('planned_date', { ascending: true })
+      .range(start, end);
 
     if (nameFilter) {
-      uniqueQuery = uniqueQuery.eq('name', nameFilter);
+      query = query.eq('name', nameFilter);
     }
 
     if (dateFilter === 'today') {
-      uniqueQuery = uniqueQuery.gte('planned_date', today.toISOString()).lte('planned_date', todayEnd.toISOString());
+      query = query.gte('planned_date', today.toISOString()).lte('planned_date', todayEnd.toISOString());
     } else if (dateFilter === 'overdue') {
-      uniqueQuery = uniqueQuery.lt('planned_date', today.toISOString());
+      query = query.lt('planned_date', today.toISOString());
     } else if (dateFilter === 'upcoming') {
-      uniqueQuery = uniqueQuery.gt('planned_date', todayEnd.toISOString());
+      query = query.gt('planned_date', todayEnd.toISOString());
     }
 
-    const { data: allUniqueDescriptions, error: uniqueError } = await uniqueQuery;
-
-    if (uniqueError) {
-      console.log("Error when fetching unique descriptions", uniqueError);
-      return { data: [], total: 0 };
-    }
-
-    // Get truly unique descriptions
-    const seenDescriptions = new Set();
-    const uniqueDescriptions = (allUniqueDescriptions || [])
-      .map(row => row.task_description)
-      .filter(desc => {
-        if (!desc || seenDescriptions.has(desc)) return false;
-        seenDescriptions.add(desc);
-        return true;
-      });
-
-    console.log("Total unique delegation descriptions found:", uniqueDescriptions.length);
-
-    if (uniqueDescriptions.length === 0) {
-      return { data: [], total: 0 };
-    }
-
-    // Step 2: Get paginated slice of unique descriptions for current page
-    const paginatedDescriptions = uniqueDescriptions.slice(start, end + 1);
-
-    if (paginatedDescriptions.length === 0) {
-      return { data: [], total: uniqueDescriptions.length };
-    }
-
-    // Step 3: Fetch actual data only for the paginated unique descriptions
-    let dataQuery = supabase
-      .from('delegation')
-      .select('*')
-      .in('task_description', paginatedDescriptions)
-      .is('submission_date', null)
-      .order('task_id', { ascending: true });
-
-    if (nameFilter) {
-      dataQuery = dataQuery.eq('name', nameFilter);
-    }
-
-    if (dateFilter === 'today') {
-      dataQuery = dataQuery.gte('planned_date', today.toISOString()).lte('planned_date', todayEnd.toISOString());
-    } else if (dateFilter === 'overdue') {
-      dataQuery = dataQuery.lt('planned_date', today.toISOString());
-    } else if (dateFilter === 'upcoming') {
-      dataQuery = dataQuery.gt('planned_date', todayEnd.toISOString());
-    }
-
-    const { data, error } = await dataQuery;
+    const { data, count, error } = await query;
 
     if (error) {
-      console.log("Error when fetching delegation data", error);
+      console.log("Error when fetching data", error);
       return { data: [], total: 0 };
     }
 
-    // Final client-side deduplication
-    const finalSeen = new Set();
     const finalData = (data || []).map(row => ({
       ...row,
       id: row.task_id,
       given_by: parseJsonIfNeeded(row.given_by),
       name: parseJsonIfNeeded(row.name)
-    })).filter(row => {
-      if (finalSeen.has(row.task_description)) {
-        console.log("Final delegation duplicate found:", row.task_description);
-        return false;
-      }
-      finalSeen.add(row.task_description);
-      return true;
-    });
-
-    console.log("Delegation Page", page, "-> Fetched:", finalData.length, "Unique total:", uniqueDescriptions.length);
+    }));
 
     return {
       data: finalData,
-      total: uniqueDescriptions.length
+      total: count || 0
     };
 
   } catch (error) {

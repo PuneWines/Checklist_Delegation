@@ -350,18 +350,22 @@ export default function TaskNavigationTabs({
           if (!matchesSearch) return false;
         }
 
-        // 2. Smart deduplication for checklist/delegation
-        if (dashboardType === 'checklist' || dashboardType === 'delegation') {
+        // 2. Smart deduplication for checklist/delegation/maintenance
+        if (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') {
           if (task.status === "upcoming") {
             // UPCOMING: only show the NEXT (earliest) occurrence per task series
-            const key = `upcoming::${task.task_description}::${task.name}`;
+            const descKey = task.task_description || task.title || "";
+            const nameKey = task.name || task.assignedTo || "";
+            const key = `upcoming::${descKey}::${nameKey}`;
             if (seen.has(key)) return false;
             seen.add(key);
           } else {
             // OVERDUE & TODAY: show each day individually
             const taskDate = task.plannedDate ? new Date(task.plannedDate).toDateString() :
               (task.originalTaskStartDate ? new Date(task.originalTaskStartDate).toDateString() : "");
-            const key = `${task.task_description}::${task.name}::${taskDate}`;
+            const descKey = task.task_description || task.title || "";
+            const nameKey = task.name || task.assignedTo || "";
+            const key = `${descKey}::${nameKey}::${taskDate}`;
             if (seen.has(key)) return false;
             seen.add(key);
           }

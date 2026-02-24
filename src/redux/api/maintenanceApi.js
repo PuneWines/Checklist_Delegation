@@ -27,7 +27,9 @@ export const fetchMaintenanceDataSortByDate = async (page = 1, limit = 50, searc
         let query = supabase
             .from('maintenance_tasks')
             .select('*', { count: 'exact' })
-            .is("submission_date", null);
+            .is("submission_date", null)
+            .order('planned_date', { ascending: true })
+            .range(from, to);
 
         if (frequency) {
             query = query.eq('freq', frequency);

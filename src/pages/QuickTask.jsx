@@ -23,6 +23,29 @@ const isAudioUrl = (url) => {
   );
 };
 
+const getTimeStatus = (dateString, taskStatus) => {
+  if (!dateString) return "—";
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return "—";
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const taskDate = new Date(date);
+  taskDate.setHours(0, 0, 0, 0);
+
+  const isExtended = taskStatus?.toLowerCase() === "extended" || taskStatus?.toLowerCase() === "extend";
+
+  if (isExtended) {
+    if (taskDate < today) return "Overdue";
+    return "Today";
+  }
+
+  if (taskDate < today) return "Overdue";
+  if (taskDate.getTime() === today.getTime()) return "Today";
+  return "Upcoming";
+};
+
 const RenderDescription = ({ text }) => {
   if (!text) return "—";
 
@@ -452,36 +475,45 @@ export default function QuickTask() {
     }
   };
 
-  const filteredDelegationTasks = delegationTasks.filter(task => {
-    const freqFilterPass = !freqFilter || (task.frequency?.toLowerCase() === freqFilter.toLowerCase());
-    const searchTermPass = !searchTerm || (
-      task.task_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.given_by?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+  const filteredDelegationTasks = useMemo(() => {
+    const seen = new Set();
+    const filtered = delegationTasks.filter(task => {
+      const freqFilterPass = !freqFilter || (task.frequency?.toLowerCase() === freqFilter.toLowerCase());
+      const searchTermPass = !searchTerm || (
+        task.task_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        task.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        task.given_by?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
 
-    // Date Filtering Logic
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
+      if (!freqFilterPass || !searchTermPass) return false;
 
-    const taskDateStr = task.task_start_date || task.planned_date;
-    const taskDate = taskDateStr ? new Date(taskDateStr) : null;
+      const taskDateValue = task.planned_date || task.task_start_date;
+      const status = getTimeStatus(taskDateValue, task.status);
 
-    let matchesDate = true;
-    if (taskDate) {
-      if (dateFilter === "today") {
-        matchesDate = (taskDate >= today && taskDate <= todayEnd);
-      } else if (dateFilter === "overdue") {
-        matchesDate = (taskDate < today);
-      } else if (dateFilter === "upcoming") {
-        matchesDate = (taskDate > todayEnd);
+      if (dateFilter !== "all" && dateFilter !== status.toLowerCase()) return false;
+
+      // Smart deduplication
+      if (status === "Upcoming") {
+        const key = `upcoming::${task.task_description}::${task.name}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+      } else {
+        const taskDate = taskDateValue ? new Date(taskDateValue).toDateString() : "";
+        const key = `${task.task_description}::${task.name}::${taskDate}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
       }
-    }
 
-    return freqFilterPass && searchTermPass && matchesDate;
-  });
+      return true;
+    });
+
+    // Default sort by planned_date ascending
+    return [...filtered].sort((a, b) => {
+      const dateA = new Date(a.planned_date || a.task_start_date || 0);
+      const dateB = new Date(b.planned_date || b.task_start_date || 0);
+      return dateA - dateB;
+    });
+  }, [delegationTasks, freqFilter, searchTerm, dateFilter]);
 
   // Keep allFrequencies as is (or modify if you want to fetch frequencies from elsewhere)
   const allFrequencies = useMemo(() => {
@@ -498,76 +530,94 @@ export default function QuickTask() {
   }, [quickTask, delegationTasks, maintenance]);
 
 
-  const filteredChecklistTasks = quickTask.filter(task => {
-    const freqFilterPass = !freqFilter || (task.frequency?.toLowerCase() === freqFilter.toLowerCase());
-    const searchTermPass = !searchTerm || task.task_description
-      ?.toLowerCase()
-      .includes(searchTerm.toLowerCase());
+  const filteredChecklistTasks = useMemo(() => {
+    const seen = new Set();
+    const filtered = quickTask.filter(task => {
+      const freqFilterPass = !freqFilter || (task.frequency?.toLowerCase() === freqFilter.toLowerCase());
+      const searchTermPass = !searchTerm || task.task_description?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    // Date Filtering Logic
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
+      if (!freqFilterPass || !searchTermPass) return false;
 
-    const taskDateStr = task.task_start_date || task.planned_date;
-    const taskDate = taskDateStr ? new Date(taskDateStr) : null;
+      const taskDateValue = task.planned_date || task.task_start_date;
+      const status = getTimeStatus(taskDateValue, task.status);
 
-    let matchesDate = true;
-    if (taskDate) {
-      if (dateFilter === "today") {
-        matchesDate = (taskDate >= today && taskDate <= todayEnd);
-      } else if (dateFilter === "overdue") {
-        matchesDate = (taskDate < today);
-      } else if (dateFilter === "upcoming") {
-        matchesDate = (taskDate > todayEnd);
+      if (dateFilter !== "all" && dateFilter !== status.toLowerCase()) return false;
+
+      // Smart deduplication
+      if (status === "Upcoming") {
+        const key = `upcoming::${task.task_description}::${task.name}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+      } else {
+        const taskDate = taskDateValue ? new Date(taskDateValue).toDateString() : "";
+        const key = `${task.task_description}::${task.name}::${taskDate}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
       }
-    }
 
-    return freqFilterPass && searchTermPass && matchesDate;
-  }).sort((a, b) => {
-    if (!sortConfig.key) return 0;
-    if (a[sortConfig.key] < b[sortConfig.key]) {
-      return sortConfig.direction === 'asc' ? -1 : 1;
-    }
-    if (a[sortConfig.key] > b[sortConfig.key]) {
-      return sortConfig.direction === 'asc' ? 1 : -1;
-    }
-    return 0;
-  });
+      return true;
+    });
 
-  const filteredMaintenance = maintenance.filter(task => {
-    // Frequency Filter
-    const freqFilterPass = !freqFilter || (task.freq?.toLowerCase() === freqFilter.toLowerCase());
-
-    // Search Term Filter
-    const searchTermPass = !searchTerm ||
-      task.task_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.name?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    // Date Filtering Logic
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
-
-    const taskDateStr = task.planned_date || task.task_start_date;
-    const taskDate = taskDateStr ? new Date(taskDateStr) : null;
-
-    let matchesDate = true;
-    if (taskDate) {
-      if (dateFilter === "today") {
-        matchesDate = (taskDate >= today && taskDate <= todayEnd);
-      } else if (dateFilter === "overdue") {
-        matchesDate = (taskDate < today);
-      } else if (dateFilter === "upcoming") {
-        matchesDate = (taskDate > todayEnd);
+    // Sort: either use sortConfig OR default to planned_date ascending
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortConfig.key) {
+        const valA = a[sortConfig.key];
+        const valB = b[sortConfig.key];
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      } else {
+        const dateA = new Date(a.planned_date || a.task_start_date || 0);
+        const dateB = new Date(b.planned_date || b.task_start_date || 0);
+        return dateA - dateB;
       }
-    }
+    });
 
-    return freqFilterPass && searchTermPass && matchesDate;
-  });
+    return sorted;
+  }, [quickTask, freqFilter, searchTerm, dateFilter, sortConfig]);
+
+  const filteredMaintenance = useMemo(() => {
+    const seen = new Set();
+    const filtered = maintenance.filter(task => {
+      const freqFilterPass = !freqFilter || (task.freq?.toLowerCase() === freqFilter.toLowerCase());
+      const searchTermPass = !searchTerm ||
+        task.task_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        task.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        task.name?.toLowerCase().includes(searchTerm.toLowerCase());
+
+      if (!freqFilterPass || !searchTermPass) return false;
+
+      const taskDateValue = task.planned_date || task.task_start_date;
+      const status = getTimeStatus(taskDateValue, task.status);
+
+      if (dateFilter !== "all" && dateFilter !== status.toLowerCase()) return false;
+
+      // Smart deduplication
+      if (status === "Upcoming") {
+        const descKey = task.task_description || "";
+        const nameKey = task.name || "";
+        const key = `upcoming::${descKey}::${nameKey}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+      } else {
+        const taskDate = taskDateValue ? new Date(taskDateValue).toDateString() : "";
+        const descKey = task.task_description || "";
+        const nameKey = task.name || "";
+        const key = `${descKey}::${nameKey}::${taskDate}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+      }
+
+      return true;
+    });
+
+    // Default sort by planned_date ascending
+    return [...filtered].sort((a, b) => {
+      const dateA = new Date(a.planned_date || a.task_start_date || 0);
+      const dateB = new Date(b.planned_date || b.task_start_date || 0);
+      return dateA - dateB;
+    });
+  }, [maintenance, freqFilter, searchTerm, dateFilter]);
 
   function formatTimestampToDDMMYYYY(timestamp) {
     if (!timestamp || timestamp === "" || timestamp === null) {
@@ -1151,8 +1201,8 @@ export default function QuickTask() {
                             <div className="flex justify-between items-center mb-1">
                               <span className="text-[10px] font-black text-purple-500 uppercase tracking-wider">#{task.id}</span>
                               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tight ${task.frequency?.toLowerCase() === 'daily' ? 'bg-blue-100 text-blue-800' :
-                                  task.frequency?.toLowerCase() === 'weekly' ? 'bg-green-100 text-green-800' :
-                                    'bg-purple-100 text-purple-800'
+                                task.frequency?.toLowerCase() === 'weekly' ? 'bg-green-100 text-green-800' :
+                                  'bg-purple-100 text-purple-800'
                                 }`}>
                                 {task.frequency || 'Manual'}
                               </span>
@@ -1580,7 +1630,7 @@ export default function QuickTask() {
                             <div className="flex justify-between items-center mb-1">
                               <span className="text-[10px] font-black text-purple-500 uppercase tracking-wider">#{task.id}</span>
                               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tight ${task.status === 'Done' ? 'bg-green-100 text-green-800' :
-                                  task.status === 'Issue' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                                task.status === 'Issue' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
                                 }`}>
                                 {task.status || 'Pending'}
                               </span>

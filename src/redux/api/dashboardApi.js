@@ -22,9 +22,9 @@ export const fetchDashboardDataApi = async (
     const username = localStorage.getItem('user-name');
     const today = new Date().toISOString().split('T')[0];
 
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation') ? 'planned_date' : 'task_start_date';
-    // Use ascending order for checklist/delegation to show oldest/most overdue first
-    const isAscending = (dashboardType === 'checklist' || dashboardType === 'delegation');
+    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
+    // Use ascending order for checklist/delegation/maintenance to show oldest/most overdue first
+    const isAscending = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance');
 
     let query = supabase
       .from(dashboardType)
@@ -55,7 +55,7 @@ export const fetchDashboardDataApi = async (
         // Today's tasks only
         query = query.gte(dateColumn, `${today}T00:00:00`)
           .lte(dateColumn, `${today}T23:59:59`);
-        if (dashboardType === 'checklist') {
+        if (dashboardType === 'checklist' || dashboardType === 'maintenance' || dashboardType === 'delegation') {
           // Exclude completed tasks for recent view
           query = query.is('submission_date', null);
         }
@@ -141,14 +141,14 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
       query = query.eq('department', departmentFilter);
     }
 
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation') ? 'planned_date' : 'task_start_date';
+    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
 
     // Apply task view filtering
     switch (taskView) {
       case 'recent':
         query = query.gte(dateColumn, `${today}T00:00:00`)
           .lte(dateColumn, `${today}T23:59:59`);
-        if (dashboardType === 'checklist') {
+        if (dashboardType === 'checklist' || dashboardType === 'maintenance' || dashboardType === 'delegation') {
           query = query.is('submission_date', null);
         }
         break;
