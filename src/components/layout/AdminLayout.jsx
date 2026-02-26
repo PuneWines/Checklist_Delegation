@@ -396,7 +396,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       {/* Mobile menu button and sidebar - similar structure as desktop but with mobile classes */}
       <button
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="md:hidden absolute left-4 top-3 z-50 text-blue-700 p-2 rounded-md hover:bg-blue-100"
+        className="md:hidden absolute left-4 top-3 z-[110] text-blue-700 p-2 rounded-md hover:bg-blue-100"
       >
         <Menu className="h-5 w-5" />
         <span className="sr-only">Toggle menu</span>
@@ -404,7 +404,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
 
       {/* Mobile sidebar */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className="fixed inset-0 z-[100] md:hidden">
           <div
             className="fixed inset-0 bg-black/20"
             onClick={() => setIsMobileMenuOpen(false)}
@@ -604,7 +604,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-4 pb-4 md:px-6 md:pb-6 bg-gradient-to-br from-blue-50/50 to-purple-50/50 pb-24 md:pb-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4 md:px-6 md:pb-6 bg-gradient-to-br from-blue-50/50 to-purple-50/50 pb-24 md:pb-6">
           {children}
         </main>
 
@@ -678,7 +678,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
 
         {/* User Popup */}
         {isUserPopupOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-md p-4 transition-all duration-300">
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 backdrop-blur-md p-4 transition-all duration-300">
             <div className="bg-white rounded-[2rem] w-full max-w-[340px] shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden animate-in fade-in zoom-in-95 duration-300 border border-white/50">
               {/* Header Gradient */}
               <div className="h-32 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 relative">

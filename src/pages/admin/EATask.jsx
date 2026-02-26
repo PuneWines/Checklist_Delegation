@@ -21,9 +21,11 @@ const formatDateISO = (date) => {
     return `${year}-${month}-${day}`;
 };
 
+const DEFAULT_DOER_NAME = "Sonali Dutta";
+
 const defaultTask = () => ({
     id: Date.now() + Math.random(),
-    doer_name: "",
+    doer_name: DEFAULT_DOER_NAME,
     phone_number: "",
     planned_date: "",
     planned_time: "09:00",
@@ -311,7 +313,18 @@ export default function EATask() {
             });
         }
         combined.sort((a, b) => a.name.localeCompare(b.name));
-        if (combined.length !== allDoers.length || allDoers.length === 0) setAllDoers(combined);
+        if (combined.length !== allDoers.length || allDoers.length === 0) {
+            setAllDoers(combined);
+            // Auto-fill phone for tasks that have the default doer but no phone yet
+            const defaultDoer = combined.find(d => d.name === DEFAULT_DOER_NAME);
+            if (defaultDoer) {
+                setTasks(prev => prev.map(t =>
+                    t.doer_name === DEFAULT_DOER_NAME && !t.phone_number
+                        ? { ...t, phone_number: defaultDoer.phone }
+                        : t
+                ));
+            }
+        }
     }, [historicalDoers, userData]);
 
     const fetchUniqueDoers = async () => {

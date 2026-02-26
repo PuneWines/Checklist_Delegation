@@ -1,33 +1,22 @@
 "use client"
 import React from 'react'
 import { ClipboardCheck, Hammer, Wrench, Activity, Users } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export default function TaskManagementTabs({ activeTab, setActiveTab }) {
     const tabs = [
-        { id: 'checklist', label: 'Checklist', icon: ClipboardCheck, color: 'text-purple-600' },
-        { id: 'maintenance', label: 'Maintenance', icon: Hammer, color: 'text-blue-600' },
-        { id: 'repair', label: 'Repair', icon: Wrench, color: 'text-orange-600' },
-        { id: 'ea', label: 'EA Tasks', icon: Users, color: 'text-green-600' },
+        { id: 'checklist', label: 'Checklist', icon: ClipboardCheck, color: 'text-purple-600', activeColor: 'bg-purple-600' },
+        { id: 'maintenance', label: 'Maintenance', icon: Hammer, color: 'text-blue-600', activeColor: 'bg-blue-600' },
+        { id: 'repair', label: 'Repair', icon: Wrench, color: 'text-orange-600', activeColor: 'bg-orange-600' },
+        { id: 'ea', label: 'EA', icon: Users, color: 'text-green-600', activeColor: 'bg-green-600' },
     ]
 
     return (
-        <div className="sticky top-0 z-30 bg-gray-50/95 backdrop-blur-md border-b border-gray-200 px-2 py-2 md:py-2 md:bg-white/90 md:sticky md:px-0 transition-all duration-300">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-start gap-3 md:gap-8">
-
-                {/* Title / Brand Section */}
-                <div className="flex items-center gap-3">
-                    <div className="bg-white p-2 md:p-2.5 rounded-xl shadow-sm border border-purple-100">
-                        <Activity className="text-purple-600 w-5 h-5" />
-                    </div>
-                    <div>
-                        <h2 className="text-lg font-bold text-gray-800 leading-tight">Task Control</h2>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Management Console</p>
-                    </div>
-                </div>
-
-                {/* Navigation Tabs - Force Mobile-style scrollbar on all screens */}
+        <div className="bg-white/40 backdrop-blur-md rounded-2xl p-1.5 border border-gray-100/80 shadow-sm">
+            <div className="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center justify-start">
+                {/* Navigation Tabs */}
                 <div className="w-full lg:w-auto overflow-hidden">
-                    <div className="flex border border-purple-200 rounded-xl overflow-x-auto no-scrollbar bg-white shadow-sm p-1">
+                    <div className="flex bg-gray-100/50 p-1 rounded-xl relative overflow-x-auto no-scrollbar max-w-max">
                         {tabs.map((tab) => {
                             const normalizedActive = activeTab.toLowerCase();
                             const normalizedId = tab.id.toLowerCase();
@@ -39,15 +28,19 @@ export default function TaskManagementTabs({ activeTab, setActiveTab }) {
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`
-                                        flex-1 md:flex-none flex items-center justify-center gap-2 py-2 px-4 md:px-6 rounded-lg text-xs md:text-sm font-bold transition-all duration-300 whitespace-nowrap min-w-[100px] md:min-w-[130px]
-                                        ${isActive
-                                            ? 'bg-purple-600 text-white shadow-md transform scale-[1.02]'
-                                            : 'bg-transparent text-purple-600 hover:bg-purple-50'
-                                        }
+                                        relative flex items-center justify-center gap-2.5 py-2 px-6 rounded-lg text-xs font-bold transition-all duration-500 whitespace-nowrap min-w-[100px] md:min-w-[120px] z-10
+                                        ${isActive ? 'text-white' : 'text-gray-500 hover:text-purple-600'}
                                     `}
                                 >
-                                    <Icon size={isActive ? 18 : 16} className="transition-all duration-300" />
-                                    <span>{tab.label}</span>
+                                    {isActive && (
+                                        <motion.div
+                                            layoutId="activeTabPillGlobal"
+                                            className={`absolute inset-0 rounded-lg shadow-md z-[-1] ${tab.id === 'checklist' ? 'bg-purple-600' : tab.id === 'maintenance' ? 'bg-blue-600' : tab.id === 'repair' ? 'bg-orange-600' : 'bg-green-600'}`}
+                                            transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                                        />
+                                    )}
+                                    <Icon size={isActive ? 17 : 16} className={`${isActive ? 'text-white' : tab.color} transition-colors duration-300`} />
+                                    <span className="relative">{tab.label}</span>
                                 </button>
                             )
                         })}

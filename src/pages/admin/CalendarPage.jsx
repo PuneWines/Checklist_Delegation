@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle2, AlertCircle, X, Edit, Save, Loader2, Play, Pause } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle2, AlertCircle, X, Edit, Save, Loader2, Play, Pause, Search, Mic, Users, Filter, Check, ChevronDown } from 'lucide-react';
 import supabase from '../../SupabaseClient';
 
 const extractAudioUrl = (text) => {
@@ -134,12 +134,90 @@ const CalendarPage = () => {
     const [editForm, setEditForm] = useState({ status: '', remark: '' });
     const [isUpdating, setIsUpdating] = useState(false);
 
+    // Filter State
+    const [allUsers, setAllUsers] = useState([]);
+    const [selectedPersons, setSelectedPersons] = useState([]);
+    const [isListening, setIsListening] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [showPersonFilter, setShowPersonFilter] = useState(false);
+    const filterRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (filterRef.current && !filterRef.current.contains(event.target)) {
+                setShowPersonFilter(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredTasks = useMemo(() => {
+        if (selectedPersons.length === 0) return tasks;
+        return tasks.filter(t => selectedPersons.includes(t.name));
+    }, [tasks, selectedPersons]);
+
+    const handleVoiceSearch = () => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert("Voice recognition is not supported in this browser.");
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.start();
+        setIsListening(true);
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            setSearchTerm(transcript);
+            setIsListening(false);
+        };
+
+        recognition.onerror = () => {
+            setIsListening(false);
+        };
+
+        recognition.onend = () => {
+            setIsListening(false);
+        };
+    };
+
+    const togglePerson = (name) => {
+        setSelectedPersons(prev =>
+            prev.includes(name)
+                ? prev.filter(p => p !== name)
+                : [...prev, name]
+        );
+    };
+
+    const clearFilters = () => {
+        setSelectedPersons([]);
+        setSearchTerm("");
+    };
+
     const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
     const firstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
 
     useEffect(() => {
         fetchTasks();
+        fetchUsers();
     }, [currentDate]);
+
+    const fetchUsers = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('user_name')
+                .eq('status', 'active')
+                .order('user_name', { ascending: true });
+            if (error) throw error;
+            if (data) setAllUsers(data.map(u => u.user_name));
+        } catch (err) {
+            console.error('Error fetching users:', err);
+        }
+    };
 
     const fetchTasks = async () => {
         try {
@@ -272,7 +350,7 @@ const CalendarPage = () => {
 
     const handleCellClick = (day, holiday, isOffDay) => {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const dayTasks = tasks.filter(t => t.date === dateStr);
+        const dayTasks = filteredTasks.filter(t => t.date === dateStr);
 
         setSelectedDate(dateStr);
         setSelectedTasks(dayTasks);
@@ -350,7 +428,7 @@ const CalendarPage = () => {
         const dayDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
         const holiday = holidays.find(h => normalizeDate(h.holiday_date) === dayDate);
         const workingDay = workingDays.find(w => normalizeDate(w.working_date) === dayDate);
-        const dayTasks = tasks.filter(t => t.date === dayDate);
+        const dayTasks = filteredTasks.filter(t => t.date === dayDate);
         const isToday = new Date().toISOString().split('T')[0] === dayDate;
         const isHoliday = !!holiday;
         const isOffDay = !isHoliday && !workingDay;
@@ -426,16 +504,89 @@ const CalendarPage = () => {
                         </div>
                     </div>
 
-                    <div className="flex items-center border border-gray-200 rounded-lg shadow-sm overflow-hidden bg-white shrink-0">
-                        <button onClick={prevMonth} className="p-3 bg-gray-50 hover:bg-blue-50 hover:text-blue-600 transition-all border-r border-gray-200 text-gray-700">
-                            <ChevronLeft size={18} strokeWidth={3} />
-                        </button>
-                        <div className="px-8 py-2.5 font-black text-gray-900 text-sm min-w-[200px] text-center uppercase tracking-[0.2em]">
-                            {monthName} {year}
+                    <div className="flex items-center gap-4">
+                        {/* Person Filter Button */}
+                        <div className="relative" ref={filterRef}>
+                            <button
+                                onClick={() => setShowPersonFilter(!showPersonFilter)}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all duration-300 font-bold uppercase text-[10px] tracking-widest ${selectedPersons.length > 0
+                                    ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm'
+                                    : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                                    }`}
+                            >
+                                <Users size={14} />
+                                {selectedPersons.length > 0 ? `${selectedPersons.length} Selected` : 'Filter Person'}
+                                <ChevronDown size={14} className={`transition-transform duration-300 ${showPersonFilter ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {showPersonFilter && (
+                                <div className="absolute top-full right-0 mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-2xl z-[50] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                                        <div className="relative flex items-center mb-3">
+                                            <Search className="absolute left-3 text-gray-400" size={14} />
+                                            <input
+                                                type="text"
+                                                placeholder="Search person..."
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                className="w-full pl-9 pr-10 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                                            />
+                                            <button
+                                                onClick={handleVoiceSearch}
+                                                className={`absolute right-3 p-1 rounded-full transition-colors ${isListening ? 'text-red-500 bg-red-50 animate-pulse' : 'text-gray-400 hover:text-blue-500 hover:bg-blue-50'}`}
+                                            >
+                                                <Mic size={14} />
+                                            </button>
+                                        </div>
+                                        <div className="flex justify-between items-center px-1">
+                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">
+                                                {selectedPersons.length} Persons Selected
+                                            </span>
+                                            <button
+                                                onClick={clearFilters}
+                                                className="text-[10px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-tighter"
+                                            >
+                                                Clear All
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="max-h-60 overflow-y-auto p-2">
+                                        {allUsers
+                                            .filter(u => u.toLowerCase().includes(searchTerm.toLowerCase()))
+                                            .map(user => (
+                                                <button
+                                                    key={user}
+                                                    onClick={() => togglePerson(user)}
+                                                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-all duration-200 ${selectedPersons.includes(user)
+                                                        ? 'bg-blue-50 text-blue-700'
+                                                        : 'hover:bg-gray-50 text-gray-700'
+                                                        }`}
+                                                >
+                                                    <span className="text-xs font-bold uppercase tracking-tight">{user}</span>
+                                                    {selectedPersons.includes(user) && <Check size={14} className="text-blue-600" />}
+                                                </button>
+                                            ))}
+                                        {allUsers.filter(u => u.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
+                                            <div className="p-4 text-center">
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No Persons Found</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                        <button onClick={nextMonth} className="p-3 bg-gray-50 hover:bg-blue-50 hover:text-blue-600 transition-all border-l border-gray-200 text-gray-700">
-                            <ChevronRight size={18} strokeWidth={3} />
-                        </button>
+
+                        <div className="flex items-center border border-gray-200 rounded-lg shadow-sm overflow-hidden bg-white shrink-0">
+                            <button onClick={prevMonth} className="p-3 bg-gray-50 hover:bg-blue-50 hover:text-blue-600 transition-all border-r border-gray-200 text-gray-700">
+                                <ChevronLeft size={18} strokeWidth={3} />
+                            </button>
+                            <div className="px-8 py-2.5 font-black text-gray-900 text-sm min-w-[200px] text-center uppercase tracking-[0.2em]">
+                                {monthName} {year}
+                            </div>
+                            <button onClick={nextMonth} className="p-3 bg-gray-50 hover:bg-blue-50 hover:text-blue-600 transition-all border-l border-gray-200 text-gray-700">
+                                <ChevronRight size={18} strokeWidth={3} />
+                            </button>
+                        </div>
                     </div>
 
                     <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 max-w-sm lg:max-w-none">

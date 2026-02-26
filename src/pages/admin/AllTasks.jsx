@@ -86,6 +86,7 @@ const AllTasks = () => {
   const [error, setError] = useState(null);
   const [dateFilter, setDateFilter] = useState("all"); // all, today, overdue, upcoming
   const [dropdownOpen, setDropdownOpen] = useState({ dateFilter: false });
+  const [lightboxImage, setLightboxImage] = useState(null); // { url, name }
 
   // Repair Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -288,36 +289,34 @@ const AllTasks = () => {
           completionField = "submission_date";
           if (showHistory) {
             headers = [
-              { id: "time_status", label: "Time Status" },
-              { id: "id", label: "Task ID" },
-              { id: "task_description", label: "Task Description" },
-              { id: "department", label: "Department" },
-              { id: "machine_name", label: "Machine Name" },
-              { id: "part_name", label: "Part Name" },
-              { id: "part_area", label: "Part Area" },
-              { id: "task_start_date", label: "Start Date" },
-              { id: "planned_date", label: "Planned Date" },
+              { id: "time_status", label: "Time" },
+              { id: "id", label: "ID" },
+              { id: "task_description", label: "Description" },
+              { id: "department", label: "Dept" },
+              { id: "machine_name", label: "Machine" },
+              { id: "part_name", label: "Part" },
+              { id: "part_area", label: "Area" },
+              { id: "planned_date", label: "Planned" },
               { id: "freq", label: "Freq" },
-              { id: "require_attachment", label: "Require Attachment" },
-              { id: "submission_date", label: "Actual Date & Time" },
+              { id: "require_attachment", label: "Attach" },
+              { id: "submission_date", label: "Actual" },
               { id: "status", label: "Status" },
             ];
           } else {
             headers = [
-              { id: "time_status", label: "Time Status" },
-              { id: "id", label: "Task ID" },
-              { id: "task_description", label: "Task Description" },
-              { id: "department", label: "Department" },
-              { id: "machine_name", label: "Machine Name" },
-              { id: "part_name", label: "Part Name" },
-              { id: "part_area", label: "Part Area" },
+              { id: "time_status", label: "Time" },
+              { id: "id", label: "ID" },
+              { id: "task_description", label: "Description" },
+              { id: "department", label: "Dept" },
+              { id: "machine_name", label: "Machine" },
+              { id: "part_name", label: "Part" },
+              { id: "part_area", label: "Area" },
               { id: "given_by", label: "Given By" },
               { id: "name", label: "Name" },
-              { id: "task_start_date", label: "Start Date" },
-              { id: "planned_date", label: "Planned Date" },
+              { id: "planned_date", label: "Planned" },
               { id: "freq", label: "Freq" },
-              { id: "enable_reminders", label: "Enable Reminders" },
-              { id: "require_attachment", label: "Require Attachment" },
+              { id: "enable_reminders", label: "Remind" },
+              { id: "require_attachment", label: "Attach" },
               { id: "status", label: "Status" },
             ];
           }
@@ -343,15 +342,15 @@ const AllTasks = () => {
           } else {
             headers = [
               { id: "action", label: "Action" },
-              { id: "time_status", label: "Time Status" },
-              { id: "id", label: "Task ID" },
-              { id: "issue_description", label: "Issue Detail" },
-              { id: "filled_by", label: "Form Filled By" },
-              { id: "assigned_person", label: "Assigned To" },
-              { id: "machine_name", label: "Machine Name" },
+              { id: "time_status", label: "Time" },
+              { id: "id", label: "ID" },
+              { id: "issue_description", label: "Detail" },
+              { id: "filled_by", label: "Filled By" },
+              { id: "assigned_person", label: "Assigned" },
+              { id: "machine_name", label: "Machine" },
               { id: "status", label: "Status" },
-              { id: "part_replaced", label: "Part Replaced" },
-              { id: "bill_amount", label: "Bill Amount" },
+              { id: "part_replaced", label: "Part" },
+              { id: "bill_amount", label: "Amount" },
             ];
           }
           break;
@@ -361,18 +360,17 @@ const AllTasks = () => {
           completionField = "status";
           nameField = "doer_name";
           headers = [
-            { id: "time_status", label: "Time Status" },
-            { id: "task_id", label: "Task ID" },
-            { id: "task_description", label: "Task Description" },
-            { id: "department", label: "Department" },
-            { id: "doer_name", label: "Doer Name" },
-            { id: "phone_number", label: "Phone Number" },
-            { id: "task_start_date", label: "Task Start Date" },
-            { id: "planned_date", label: "Planned Date" },
+            { id: "time_status", label: "Time" },
+            { id: "task_id", label: "ID" },
+            { id: "task_description", label: "Description" },
+            { id: "department", label: "Dept" },
+            { id: "doer_name", label: "Name" },
+            { id: "phone_number", label: "Phone" },
+            { id: "planned_date", label: "Planned" },
             { id: "status", label: "Status" },
           ];
           if (showHistory) {
-            headers.push({ id: "updated_at", label: "Submission Date and Time" });
+            headers.push({ id: "updated_at", label: "Submitted" });
           }
           break;
         case "checklist":
@@ -381,17 +379,16 @@ const AllTasks = () => {
           dateColumn = "task_start_date"; // task_start_date = original admin start date; used for lte filter in query
           completionField = "submission_date";
           headers = [
-            { id: "time_status", label: "Time Status" },
-            { id: "id", label: "Task ID" },
-            { id: "task_description", label: "Task Description" },
-            { id: "department", label: "Department" },
+            { id: "time_status", label: "Time" },
+            { id: "id", label: "ID" },
+            { id: "task_description", label: "Description" },
+            { id: "department", label: "Dept" },
             { id: "given_by", label: "Given By" },
             { id: "name", label: "Name" },
-            { id: "task_start_date", label: "Start Date" },
-            { id: "planned_date", label: "Planned Date" },
+            { id: "planned_date", label: "Planned" },
             { id: "frequency", label: "Freq" },
-            { id: "enable_reminder", label: "Enable Reminders" },
-            { id: "require_attachment", label: "Require Attachment" },
+            { id: "enable_reminder", label: "Remind" },
+            { id: "require_attachment", label: "Attach" },
             { id: "status", label: "Status" },
           ];
           break;
@@ -1042,38 +1039,34 @@ const AllTasks = () => {
     <AdminLayout>
       <div className="space-y-4 sm:space-y-6">
         {/* Sticky Header Section */}
-        <div className="sticky top-0 z-40 bg-gray-50/95 backdrop-blur-md pt-2 pb-4 space-y-4 -mx-2 px-2 sm:mx-0 sm:px-0">
-          {/* Tab System */}
-          <div className="bg-white rounded-xl shadow-md border border-purple-100 px-4 md:px-6 py-2">
-            <TaskManagementTabs activeTab={activeTab} setActiveTab={(newTab) => {
-              setActiveTab(newTab);
-              setShowHistory(false);
-              setSelectedItems(new Set());
-              setSearchTerm("");
-              setDateFilter("all");
-            }} />
-          </div>
+        {/* Sticky Header Section */}
+        <div className="sticky top-0 z-30 bg-white/60 backdrop-blur-xl py-2 border-b border-gray-100/50 shadow-sm transition-all duration-300">
+          <div className="max-w-7xl mx-auto space-y-2">
+            {/* Tab System & Primary Actions */}
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+              <div className="flex-shrink-0">
+                <TaskManagementTabs activeTab={activeTab} setActiveTab={(newTab) => {
+                  setActiveTab(newTab);
+                  setShowHistory(false);
+                  setSelectedItems(new Set());
+                  setSearchTerm("");
+                  setDateFilter("all");
+                }} />
+              </div>
 
-          {/* Action Header & Filters */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-purple-50 shadow-sm space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-purple-700">
-                {showHistory ? `${activeTab.toUpperCase()} Task History` : `${activeTab.toUpperCase()} Tasks`}
-              </h1>
-
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 flex-1 lg:justify-end">
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+              <div className="flex flex-wrap items-center gap-2 flex-grow justify-end">
+                <div className="relative flex-grow max-w-sm">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                   <input
                     type="text"
-                    placeholder={showHistory ? "Search history..." : "Search tasks..."}
+                    placeholder={showHistory ? "Search history..." : "Search..."}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-purple-200 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    className="w-full pl-9 pr-4 py-1.5 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400 text-xs bg-white/80"
                   />
                 </div>
 
-                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
                       setShowHistory(!showHistory);
@@ -1081,18 +1074,12 @@ const AllTasks = () => {
                       setStartDate("");
                       setEndDate("");
                     }}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-white border border-purple-200 rounded-md hover:bg-purple-50 transition-colors shadow-sm h-10"
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200/80 rounded-xl hover:bg-gray-50 hover:text-purple-600 transition-all shadow-sm"
                   >
                     {showHistory ? (
-                      <>
-                        <ArrowLeft className="h-4 w-4 mr-1" />
-                        <span>Back</span>
-                      </>
+                      <><ArrowLeft className="h-4 w-4" /><span>Live</span></>
                     ) : (
-                      <>
-                        <History className="h-4 w-4 mr-1" />
-                        <span>History</span>
-                      </>
+                      <><History className="h-4 w-4" /><span>History</span></>
                     )}
                   </button>
 
@@ -1101,14 +1088,14 @@ const AllTasks = () => {
                       <div className="relative">
                         <button
                           onClick={() => setDropdownOpen(prev => ({ ...prev, dateFilter: !prev.dateFilter }))}
-                          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-white border border-purple-200 rounded-md hover:bg-purple-50 transition-colors shadow-sm h-10"
+                          className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-sm ${dateFilter !== 'all' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200'}`}
                         >
-                          <Filter className="h-4 w-4" />
+                          <Filter className="h-3 w-3" />
                           <span className="capitalize">{dateFilter}</span>
-                          <ChevronDown size={16} className={`transition-transform ${dropdownOpen?.dateFilter ? 'rotate-180' : ''}`} />
+                          <ChevronDown size={14} className={`transition-transform ${dropdownOpen?.dateFilter ? 'rotate-180' : ''}`} />
                         </button>
                         {dropdownOpen?.dateFilter && (
-                          <div className="absolute z-50 mt-1 w-40 right-0 rounded-md bg-white shadow-lg border border-gray-200 py-1">
+                          <div className="absolute z-50 mt-2 w-40 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                             {[
                               { id: 'all', label: 'All Tasks' },
                               { id: 'overdue', label: 'Overdue' },
@@ -1122,7 +1109,7 @@ const AllTasks = () => {
                                   setSelectedItems(new Set());
                                   setDropdownOpen(prev => ({ ...prev, dateFilter: false }));
                                 }}
-                                className={`block w-full text-left px-4 py-2 text-sm ${dateFilter === filter.id ? 'bg-purple-50 text-purple-700 font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
+                                className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${dateFilter === filter.id ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
                               >
                                 {filter.label}
                               </button>
@@ -1134,18 +1121,17 @@ const AllTasks = () => {
                       <button
                         onClick={handleSendUrgentWhatsApp}
                         disabled={selectedItems.size === 0 || isSubmitting}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all h-10"
+                        className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-40 shadow-md shadow-green-600/10 transition-all"
                       >
                         <BellRing className="h-4 w-4" />
-                        <span className="hidden sm:inline">Urgent WhatsApp</span>
-                        <span className="sm:hidden">Urgent</span>
+                        <span className="hidden md:inline">Urgent</span>
                       </button>
 
                       {activeTab !== "repair" && (
                         <button
                           onClick={handleSubmit}
                           disabled={selectedItems.size === 0 || isSubmitting}
-                          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all h-10"
+                          className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 rounded-xl hover:bg-purple-700 disabled:opacity-40 shadow-md shadow-purple-600/10 transition-all"
                         >
                           {isSubmitting ? "..." : `Submit (${selectedItems.size})`}
                         </button>
@@ -1176,18 +1162,7 @@ const AllTasks = () => {
 
 
         {/* Table Container */}
-        <div className="rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-3 sm:p-4">
-            <h2 className="text-purple-700 font-semibold text-sm sm:text-base flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-purple-500 inline-block animate-pulse"></span>
-              {showHistory ? `Completed ${activeTab} Tasks` : `Pending ${activeTab} Tasks`}
-            </h2>
-            <p className="text-purple-600 text-xs sm:text-sm mt-1">
-              {showHistory
-                ? "Read-only view of completed tasks with submission history."
-                : `Showing pending tasks for ${userRole === "admin" ? "all users" : "you"}.`}
-            </p>
-          </div>
+        <div className="rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden">
 
           {showHistory && (
             <div className="p-3 sm:p-4 border-b border-purple-100 bg-gray-50 flex flex-col sm:flex-row gap-3 items-center">
@@ -1247,7 +1222,7 @@ const AllTasks = () => {
                           </th>
                         )}
                         {tableHeaders.map((header) => (
-                          <th key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap ${header.id === 'task_start_date' ? 'bg-yellow-50' : ''}`}>
+                          <th key={header.id} className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                             {header.label}
                           </th>
                         ))}
@@ -1362,7 +1337,7 @@ const AllTasks = () => {
                             ) : (
                               <>
                                 {tableHeaders.map((header) => (
-                                  <td key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 ${header.id === 'task_description' || header.id === 'issue_description' ? 'min-w-[200px] whitespace-normal' : 'whitespace-nowrap'} ${header.id === 'task_start_date' ? 'bg-yellow-50' : ''}`}>
+                                  <td key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 ${header.id === 'task_description' || header.id === 'issue_description' ? 'min-w-[200px] whitespace-normal' : 'whitespace-nowrap'}`}>
                                     {header.id === "time_status"
                                       ? (
                                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task[statusDateColumn], task.status) === 'Overdue' ? 'bg-red-100 text-red-800' :
@@ -1442,7 +1417,16 @@ const AllTasks = () => {
                                                         <div className="flex gap-1 flex-wrap">
                                                           {task.part_name && task.part_name.split(',').map(p => p.trim()).map((part, idx) => {
                                                             const match = customDropdowns.find(d => d.category === "Part Name" && d.value === part && d.image_url);
-                                                            return match ? <img key={idx} src={match.image_url} alt={part} className="w-10 h-10 object-cover rounded shadow-sm border border-gray-200 bg-gray-50 flex-shrink-0" title={part} /> : null;
+                                                            return match ? (
+                                                              <img
+                                                                key={idx}
+                                                                src={match.image_url}
+                                                                alt={part}
+                                                                className="w-10 h-10 object-cover rounded shadow-sm border border-gray-200 bg-gray-50 flex-shrink-0 cursor-zoom-in hover:ring-2 hover:ring-purple-400 hover:scale-105 transition-all"
+                                                                title={`Click to enlarge: ${part}`}
+                                                                onClick={() => setLightboxImage({ url: match.image_url, name: part })}
+                                                              />
+                                                            ) : null;
                                                           })}
                                                         </div>
                                                       </div>
@@ -1835,6 +1819,39 @@ const AllTasks = () => {
           </div>
         )}
       </div>
+
+      {/* Image Lightbox */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div
+            className="relative max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 bg-gray-50 border-b border-gray-100">
+              <span className="text-sm font-bold text-gray-800 truncate">{lightboxImage.name}</span>
+              <button
+                onClick={() => setLightboxImage(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="bg-gray-900 flex items-center justify-center" style={{ minHeight: '320px' }}>
+              <img
+                src={lightboxImage.url}
+                alt={lightboxImage.name}
+                className="max-w-full max-h-[70vh] object-contain"
+              />
+            </div>
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 text-center">
+              <p className="text-xs text-gray-400">Click outside or <span className="font-bold text-gray-600">✕</span> to close</p>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 };

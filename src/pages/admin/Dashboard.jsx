@@ -1053,28 +1053,32 @@ export default function AdminDashboard() {
   return (
     <AdminLayout>
       <div className="space-y-4">
-        {/* Main Dashboard Tabs */}
-        {/* Main Dashboard Tabs - Premium UI */}
-        <TaskManagementTabs
-          activeTab={mainTab === 'default' ? 'checklist' : mainTab}
-          setActiveTab={(tabId) => {
-            if (tabId === 'checklist') {
-              setMainTab("default")
-              setDepartmentFilter("all")
-              setDashboardType("checklist")
-            } else if (tabId === 'maintenance') {
-              setMainTab("maintenance")
-              setDepartmentFilter("Maintenance")
-            } else if (tabId === 'repair') {
-              setMainTab("repair")
-              setDepartmentFilter("Repair")
-            } else if (tabId === 'ea') {
-              setMainTab("ea")
-              setDepartmentFilter("all")
-            }
-          }}
-        />
+        {/* Sticky Only Task Management Tabs */}
+        <div className="sticky top-0 z-30 bg-white/60 backdrop-blur-xl py-2 border-b border-gray-100/50 shadow-sm transition-all duration-300">
+          <div className="max-w-7xl mx-auto">
+            <TaskManagementTabs
+              activeTab={mainTab === 'default' ? 'checklist' : mainTab}
+              setActiveTab={(tabId) => {
+                if (tabId === 'checklist') {
+                  setMainTab("default")
+                  setDepartmentFilter("all")
+                  setDashboardType("checklist")
+                } else if (tabId === 'maintenance') {
+                  setMainTab("maintenance")
+                  setDepartmentFilter("Maintenance")
+                } else if (tabId === 'repair') {
+                  setMainTab("repair")
+                  setDepartmentFilter("Repair")
+                } else if (tabId === 'ea') {
+                  setMainTab("ea")
+                  setDepartmentFilter("all")
+                }
+              }}
+            />
+          </div>
+        </div>
 
+        {/* Dashboard Header stays in flow (scrolls away) */}
         <DashboardHeader
           mainTab={mainTab}
           dashboardType={dashboardType}

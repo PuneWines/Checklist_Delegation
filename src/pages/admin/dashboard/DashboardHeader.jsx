@@ -221,7 +221,7 @@ export default function DashboardHeader({
                     </div>
 
                     {/* Desktop View - Original layout */}
-                    <div className="hidden md:flex items-center gap-2">
+                    <div className="hidden md:flex flex-wrap items-center gap-2">
                         {/* Date Range Filter */}
                         {isAdmin && (
                             <div className="relative">

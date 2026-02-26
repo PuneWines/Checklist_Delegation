@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
 import { useDispatch } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { fetchPendingApprovals, updateDelegationDoneStatus, rejectDelegationTask, fetchDelegationHistory } from "../../redux/api/delegationApi";
@@ -164,69 +165,65 @@ export default function AdminApprovalPage() {
         <AdminLayout>
             <div className="space-y-4 sm:space-y-6">
                 {/* Sticky Header and Controls */}
-                <div className="sticky top-0 z-40 bg-gray-50/95 backdrop-blur-md pt-2 pb-4 space-y-4 -mx-2 px-2 sm:mx-0 sm:px-0">
-                    <div className="flex flex-col gap-1">
-                        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                            <AlertCircle className="text-amber-500" />
-                            Admin Approval
-                        </h1>
-                        <p className="text-xs text-gray-500 font-medium">Review pending task completions submitted by users.</p>
-                    </div>
+                <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl -mx-4 px-4 sm:mx-0 sm:px-0 py-6 mb-6 border-b border-gray-100/50 shadow-sm transition-all duration-300">
+                    <div className="max-w-7xl mx-auto space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 px-2 sm:px-0">
+                            <div className="space-y-1">
+                                <motion.div
+                                    initial={{ y: 10, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    className="flex items-center gap-4"
+                                >
+                                    <div className="w-1.5 h-8 bg-purple-600 rounded-full hidden sm:block" />
+                                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                                        Admin <span className="text-purple-600">Approval</span>
+                                    </h1>
+                                </motion.div>
+                                <p className="text-sm font-medium text-gray-400 ml-0 sm:ml-5 flex items-center gap-2">
+                                    <Clock size={14} className="text-gray-300" />
+                                    Review and manage user task submissions
+                                </p>
+                            </div>
 
-                    <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-purple-50 shadow-sm space-y-4">
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            <div className="flex items-center gap-4">
+                                <div className="px-4 py-2 bg-purple-50 rounded-xl border border-purple-100 flex items-center gap-2.5">
+                                    <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                                    <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
+                                        {pendingTasks.length} Pending
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white/40 backdrop-blur-md rounded-2xl p-2 sm:p-3 border border-gray-100/80 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                             {/* Tabs */}
-                            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                                <button
-                                    onClick={() => setActiveTab("checklist")}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap min-w-[120px] justify-center ${activeTab === "checklist"
-                                        ? "bg-indigo-600 text-white shadow-md transform scale-[1.02]"
-                                        : "bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50"
-                                        }`}
-                                >
-                                    <BookCheck size={16} />
-                                    Checklist
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab("delegation")}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap min-w-[120px] justify-center ${activeTab === "delegation"
-                                        ? "bg-purple-600 text-white shadow-md transform scale-[1.02]"
-                                        : "bg-white text-purple-600 border border-purple-100 hover:bg-purple-50"
-                                        }`}
-                                >
-                                    <BookCheck size={16} />
-                                    Delegation
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab("maintenance")}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap min-w-[120px] justify-center ${activeTab === "maintenance"
-                                        ? "bg-blue-600 text-white shadow-md transform scale-[1.02]"
-                                        : "bg-white text-blue-600 border border-blue-100 hover:bg-blue-50"
-                                        }`}
-                                >
-                                    <Wrench size={16} />
-                                    Maintenance
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab("repair")}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap min-w-[120px] justify-center ${activeTab === "repair"
-                                        ? "bg-amber-600 text-white shadow-md transform scale-[1.02]"
-                                        : "bg-white text-amber-600 border border-amber-100 hover:bg-amber-50"
-                                        }`}
-                                >
-                                    <Hammer size={16} />
-                                    Repair
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab("ea")}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap min-w-[120px] justify-center ${activeTab === "ea"
-                                        ? "bg-emerald-600 text-white shadow-md transform scale-[1.02]"
-                                        : "bg-white text-emerald-600 border border-emerald-100 hover:bg-emerald-50"
-                                        }`}
-                                >
-                                    <Briefcase size={16} />
-                                    EA Tasks
-                                </button>
+                            <div className="flex bg-gray-100/80 p-1 rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-max">
+                                {[
+                                    { id: 'checklist', label: 'Checklist', icon: BookCheck, color: 'bg-purple-600' },
+                                    { id: 'delegation', label: 'Delegation', icon: BookCheck, color: 'bg-indigo-600' },
+                                    { id: 'maintenance', label: 'Maintenance', icon: Wrench, color: 'bg-blue-600' },
+                                    { id: 'repair', label: 'Repair', icon: Hammer, color: 'bg-amber-600' },
+                                    { id: 'ea', label: 'EA Tasks', icon: Briefcase, color: 'bg-emerald-600' },
+                                ].map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`
+                                            relative flex items-center justify-center gap-2 py-2 px-6 rounded-lg text-xs font-bold transition-all duration-500 whitespace-nowrap min-w-[110px] z-10
+                                            ${activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-purple-600'}
+                                        `}
+                                    >
+                                        {activeTab === tab.id && (
+                                            <motion.div
+                                                layoutId="approvalTabPillMinimal"
+                                                className={`absolute inset-0 rounded-lg shadow-md z-[-1] ${tab.color}`}
+                                                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                                            />
+                                        )}
+                                        <tab.icon size={15} />
+                                        <span>{tab.label}</span>
+                                    </button>
+                                ))}
                             </div>
 
                             {/* View Mode & Search */}

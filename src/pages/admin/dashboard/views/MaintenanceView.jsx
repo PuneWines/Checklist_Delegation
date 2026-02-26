@@ -91,6 +91,7 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
 export default function MaintenanceView({ stats: originalStats, chartData, tasks = [] }) {
     const [maintFilter, setMaintFilter] = useState('all');
     const [isSaving, setIsSaving] = useState(false);
+    const [lightboxImage, setLightboxImage] = useState(null); // { url, name }
 
     // Dropdown lists
     const [givenByList, setGivenByList] = useState([]);
@@ -292,324 +293,370 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
     const frequencyData = processedData.freqData;
 
     return (
-        <div className="space-y-4 pb-8 overflow-x-hidden w-full max-w-full">
-            {/* Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                <StatCard icon={Settings} label="Total Machines" value={processedData?.totalMachines || 0} color="bg-blue-500" />
-                <StatCard icon={Calendar} label="Total Tasks" value={processedData?.totalTasksCount || 0} color="bg-indigo-500" />
-                <StatCard icon={CheckCircle} label="Tasks Complete" value={processedData?.completedCount || 0} color="bg-green-500" />
-                <StatCard icon={Clock} label="Tasks Pending" value={processedData?.pendingCount || 0} color="bg-amber-500" />
-                <StatCard icon={AlertTriangle} label="Tasks Overdue" value={processedData?.overdueCount || 0} color="bg-red-500" />
-                <StatCard icon={IndianRupee} label="Total Cost" value={`₹${processedData?.totalCost || 0}`} color="bg-purple-500" />
-            </div>
+        <>
+            <div className="space-y-4 pb-8 overflow-x-hidden w-full max-w-full">
+                {/* Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                    <StatCard icon={Settings} label="Total Machines" value={processedData?.totalMachines || 0} color="bg-blue-500" />
+                    <StatCard icon={Calendar} label="Total Tasks" value={processedData?.totalTasksCount || 0} color="bg-indigo-500" />
+                    <StatCard icon={CheckCircle} label="Tasks Complete" value={processedData?.completedCount || 0} color="bg-green-500" />
+                    <StatCard icon={Clock} label="Tasks Pending" value={processedData?.pendingCount || 0} color="bg-amber-500" />
+                    <StatCard icon={AlertTriangle} label="Tasks Overdue" value={processedData?.overdueCount || 0} color="bg-red-500" />
+                    <StatCard icon={IndianRupee} label="Total Cost" value={`₹${processedData?.totalCost || 0}`} color="bg-purple-500" />
+                </div>
 
-            {/* Charts Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-base font-bold text-gray-800">Maintenance Cost</h3>
-                        <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">Monthly View</span>
+                {/* Charts Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base font-bold text-gray-800">Maintenance Cost</h3>
+                            <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">Monthly View</span>
+                        </div>
+                        <div className="h-56">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={costData}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} tickFormatter={(v) => `₹${v}`} />
+                                    <Tooltip
+                                        cursor={{ fill: '#f9fafb' }}
+                                        contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                    />
+                                    <Bar dataKey="cost" fill="#6366F1" radius={[6, 6, 0, 0]} barSize={30} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
-                    <div className="h-56">
+
+                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base font-bold text-gray-800">Department Cost Analysis</h3>
+                            <span className="text-[10px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-md">By Department</span>
+                        </div>
+                        <div className="h-56">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={deptCostData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={50}
+                                        outerRadius={70}
+                                        paddingAngle={8}
+                                        dataKey="value"
+                                    >
+                                        {deptCostData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Frequent Maintenance Graph */}
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Settings className="h-4 w-4 text-gray-400" />
+                        <h3 className="text-base font-semibold text-gray-800">Frequent Maintenance</h3>
+                    </div>
+                    <div className="h-64 w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={costData}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} tickFormatter={(v) => `₹${v}`} />
-                                <Tooltip
-                                    cursor={{ fill: '#f9fafb' }}
-                                    contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                            <BarChart
+                                data={frequencyData}
+                                margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                <XAxis
+                                    dataKey="name"
+                                    axisLine={{ stroke: '#e5e7eb' }}
+                                    tickLine={false}
+                                    tick={{ fill: '#6b7280', fontSize: 10 }}
+                                    dy={5}
                                 />
-                                <Bar dataKey="cost" fill="#6366F1" radius={[6, 6, 0, 0]} barSize={30} />
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#6b7280', fontSize: 10 }}
+                                    domain={[0, 'auto']}
+                                    allowDecimals={false}
+                                />
+                                <Tooltip
+                                    cursor={{ fill: '#f3f4f6', opacity: 0.4 }}
+                                    contentStyle={{
+                                        backgroundColor: '#fff',
+                                        borderRadius: '8px',
+                                        border: '1px solid #e5e7eb',
+                                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                                    }}
+                                    itemStyle={{ color: '#ef4444', fontWeight: '600', fontSize: '12px' }}
+                                />
+                                <Bar
+                                    dataKey="count"
+                                    name="Number of Tasks"
+                                    fill="#ef4444"
+                                    radius={[2, 2, 0, 0]}
+                                    barSize={40}
+                                />
                             </BarChart>
                         </ResponsiveContainer>
+                        {/* Custom Legend for Number of Repairs */}
+                        <div className="flex justify-center items-center gap-2 mt-4 pb-2">
+                            <div className="w-3 h-3 bg-[#ef4444] rounded-sm"></div>
+                            <span className="text-xs text-gray-600 font-bold uppercase tracking-wider">Number of Tasks</span>
+                        </div>
                     </div>
                 </div>
 
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-base font-bold text-gray-800">Department Cost Analysis</h3>
-                        <span className="text-[10px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-md">By Department</span>
-                    </div>
-                    <div className="h-56">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={deptCostData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={50}
-                                    outerRadius={70}
-                                    paddingAngle={8}
-                                    dataKey="value"
+                {/* Maintenance Tasks Table */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-gray-400" />
+                            <h3 className="text-base font-bold text-gray-800">Maintenance Tasks</h3>
+                            <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100 uppercase tracking-wider">
+                                {maintFilter}
+                            </span>
+                        </div>
+
+                        <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 shadow-inner w-full sm:w-auto">
+                            {['today', 'week', 'month', 'all'].map((f) => (
+                                <button
+                                    key={f}
+                                    onClick={() => setMaintFilter(f)}
+                                    className={`flex-1 sm:flex-none px-3 sm:px-4 py-1.5 text-[10px] font-extrabold rounded-md transition-all uppercase tracking-tight text-center ${maintFilter === f
+                                        ? 'bg-white text-purple-700 shadow-sm border border-gray-100'
+                                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                                        }`}
                                 >
-                                    {deptCostData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                                    ))}
-                                </Pie>
-                                <Tooltip />
-                            </PieChart>
-                        </ResponsiveContainer>
+                                    {f}
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                </div>
-            </div>
-
-            {/* Frequent Maintenance Graph */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <div className="flex items-center gap-2 mb-4">
-                    <Settings className="h-4 w-4 text-gray-400" />
-                    <h3 className="text-base font-semibold text-gray-800">Frequent Maintenance</h3>
-                </div>
-                <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                            data={frequencyData}
-                            margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
-                        >
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                            <XAxis
-                                dataKey="name"
-                                axisLine={{ stroke: '#e5e7eb' }}
-                                tickLine={false}
-                                tick={{ fill: '#6b7280', fontSize: 10 }}
-                                dy={5}
-                            />
-                            <YAxis
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{ fill: '#6b7280', fontSize: 10 }}
-                                domain={[0, 'auto']}
-                                allowDecimals={false}
-                            />
-                            <Tooltip
-                                cursor={{ fill: '#f3f4f6', opacity: 0.4 }}
-                                contentStyle={{
-                                    backgroundColor: '#fff',
-                                    borderRadius: '8px',
-                                    border: '1px solid #e5e7eb',
-                                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                                }}
-                                itemStyle={{ color: '#ef4444', fontWeight: '600', fontSize: '12px' }}
-                            />
-                            <Bar
-                                dataKey="count"
-                                name="Number of Tasks"
-                                fill="#ef4444"
-                                radius={[2, 2, 0, 0]}
-                                barSize={40}
-                            />
-                        </BarChart>
-                    </ResponsiveContainer>
-                    {/* Custom Legend for Number of Repairs */}
-                    <div className="flex justify-center items-center gap-2 mt-4 pb-2">
-                        <div className="w-3 h-3 bg-[#ef4444] rounded-sm"></div>
-                        <span className="text-xs text-gray-600 font-bold uppercase tracking-wider">Number of Tasks</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Maintenance Tasks Table */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-gray-400" />
-                        <h3 className="text-base font-bold text-gray-800">Maintenance Tasks</h3>
-                        <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100 uppercase tracking-wider">
-                            {maintFilter}
-                        </span>
-                    </div>
-
-                    <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 shadow-inner">
-                        {['today', 'week', 'month', 'all'].map((f) => (
-                            <button
-                                key={f}
-                                onClick={() => setMaintFilter(f)}
-                                className={`px-4 py-1.5 text-[10px] font-extrabold rounded-md transition-all uppercase tracking-tight ${maintFilter === f
-                                    ? 'bg-white text-purple-700 shadow-sm border border-gray-100'
-                                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                                    }`}
-                            >
-                                {f}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50 sticky top-0 z-20 shadow-sm backdrop-blur-sm">
-                            <tr>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Task ID</th>
-
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Machine Name</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Part Name</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Part Area</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Assign From</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Name</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[200px]">Task Description</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Task Start Date & Time</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Freq</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Enable Reminders</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Require Attachment</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Status</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[150px]">Remarks</th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Upload Image</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-100">
-                            {filteredTasks.length > 0 ? (
-                                filteredTasks.map((task, index) => {
-                                    const hasSubmission = task.submission_date !== null && task.submission_date !== undefined;
-                                    const taskDate = task.originalTaskStartDate ? new Date(task.originalTaskStartDate) : null;
-                                    const today = new Date();
-                                    today.setHours(0, 0, 0, 0);
-                                    const isOverdue = taskDate && taskDate < today && !hasSubmission;
-
-                                    return (
-                                        <tr
-                                            key={task.id || index}
-                                            className="hover:bg-gray-50 transition-colors cursor-pointer"
-                                            onDoubleClick={() => handleEditClick(task)}
-                                        >
-                                            <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.id}</td>
-
-                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                                {editingTaskId === task.id ? (
-                                                    <input type="text" value={editFormData.machine_name} onChange={e => handleInputChange('machine_name', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
-                                                ) : task.machine_name}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                                {editingTaskId === task.id ? (
-                                                    <input type="text" value={editFormData.part_name} onChange={e => handleInputChange('part_name', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
-                                                ) : task.part_name}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                                {editingTaskId === task.id ? (
-                                                    <input type="text" value={editFormData.part_area} onChange={e => handleInputChange('part_area', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
-                                                ) : task.part_area}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                                {editingTaskId === task.id ? (
-                                                    <select
-                                                        value={editFormData.given_by}
-                                                        onChange={e => handleInputChange('given_by', e.target.value)}
-                                                        className="w-full px-2 py-1 border rounded text-xs"
-                                                    >
-                                                        <option value="">Select AssignBy</option>
-                                                        {givenByList.map(name => (
-                                                            <option key={name} value={name}>{name}</option>
-                                                        ))}
-                                                    </select>
-                                                ) : task.given_by}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                                {editingTaskId === task.id ? (
-                                                    <select
-                                                        value={editFormData.name}
-                                                        onChange={e => handleInputChange('name', e.target.value)}
-                                                        className="w-full px-2 py-1 border rounded text-xs"
-                                                    >
-                                                        <option value="">Select Name</option>
-                                                        {doersList.map(name => (
-                                                            <option key={name} value={name}>{name}</option>
-                                                        ))}
-                                                    </select>
-                                                ) : task.assignedTo}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600">
-                                                {editingTaskId === task.id ? (
-                                                    <textarea value={editFormData.task_description} onChange={e => handleInputChange('task_description', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" rows="2" />
-                                                ) : (
-                                                    isAudioUrl(task.task_description || task.title) ? (
-                                                        <AudioPlayer url={task.task_description || task.title} />
-                                                    ) : (
-                                                        <div className="line-clamp-2" title={task.task_description || task.title}>
-                                                            {task.task_description || task.title}
-                                                        </div>
-                                                    )
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                                {editingTaskId === task.id ? (
-                                                    <input
-                                                        type="datetime-local"
-                                                        value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
-                                                        onChange={e => handleInputChange('task_start_date', e.target.value)}
-                                                        className="w-full px-2 py-1 border rounded text-xs bg-gray-100 italic"
-                                                        disabled
-                                                    />
-                                                ) : (
-                                                    task.originalTaskStartDate ? new Date(task.originalTaskStartDate).toLocaleString('en-IN', {
-                                                        day: '2-digit', month: '2-digit', year: 'numeric',
-                                                        hour: '2-digit', minute: '2-digit', hour12: true
-                                                    }) : '-'
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap capitalize">
-                                                {editingTaskId === task.id ? (
-                                                    <select
-                                                        value={editFormData.freq}
-                                                        onChange={e => handleInputChange('freq', e.target.value)}
-                                                        className="w-full px-2 py-1 border rounded text-xs bg-gray-100 italic"
-                                                        disabled
-                                                    >
-                                                        <option value="daily">Daily</option>
-                                                        <option value="weekly">Weekly</option>
-                                                        <option value="monthly">Monthly</option>
-                                                    </select>
-                                                ) : task.frequency}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
-                                                {task.enable_reminders ? 'Yes' : 'No'}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
-                                                {task.require_attachment ? 'Yes' : 'No'}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm whitespace-nowrap">
-                                                <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase border ${hasSubmission && task.admin_done ? 'bg-green-50 text-green-700 border-green-200' :
-                                                    hasSubmission && !task.admin_done ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                                                        isOverdue ? 'bg-red-50 text-red-700 border-red-200' :
-                                                            'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                                    }`}>
-                                                    {hasSubmission && task.admin_done ? 'Approved' :
-                                                        hasSubmission && !task.admin_done ? 'Pending Approval' :
-                                                            isOverdue ? 'Overdue' : 'Pending'}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600">
-                                                {isAudioUrl(task.remarks) ? <AudioPlayer url={task.remarks} /> : task.remarks}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
-                                                {editingTaskId === task.id ? (
-                                                    <div className="flex gap-2 justify-center">
-                                                        <button onClick={handleSaveEdit} disabled={isSaving} className="p-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
-                                                            <Save size={14} />
-                                                        </button>
-                                                        <button onClick={handleCancelEdit} className="p-1 bg-gray-600 text-white rounded hover:bg-gray-700">
-                                                            <X size={14} />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    task.uploaded_image_url ? (
-                                                        <a href={task.uploaded_image_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center justify-center gap-1">
-                                                            <CheckCircle className="h-3 w-3" /> View
-                                                        </a>
-                                                    ) : '-'
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            ) : (
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50 sticky top-0 z-20 shadow-sm backdrop-blur-sm">
                                 <tr>
-                                    <td colSpan="14" className="px-4 py-8 text-center text-gray-500 text-sm">
-                                        No maintenance tasks found.
-                                    </td>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Task ID</th>
+
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Machine Name</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Part Name</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Part Area</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Assign From</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Name</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[200px]">Task Description</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Task Start Date & Time</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Freq</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Enable Reminders</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Require Attachment</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Status</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[150px]">Remarks</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">Upload Image</th>
                                 </tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-100">
+                                {filteredTasks.length > 0 ? (
+                                    filteredTasks.map((task, index) => {
+                                        const hasSubmission = task.submission_date !== null && task.submission_date !== undefined;
+                                        const taskDate = task.originalTaskStartDate ? new Date(task.originalTaskStartDate) : null;
+                                        const today = new Date();
+                                        today.setHours(0, 0, 0, 0);
+                                        const isOverdue = taskDate && taskDate < today && !hasSubmission;
+
+                                        return (
+                                            <tr
+                                                key={task.id || index}
+                                                className="hover:bg-gray-50 transition-colors cursor-pointer"
+                                                onDoubleClick={() => handleEditClick(task)}
+                                            >
+                                                <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.id}</td>
+
+                                                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                    {editingTaskId === task.id ? (
+                                                        <input type="text" value={editFormData.machine_name} onChange={e => handleInputChange('machine_name', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
+                                                    ) : task.machine_name}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                    {editingTaskId === task.id ? (
+                                                        <input type="text" value={editFormData.part_name} onChange={e => handleInputChange('part_name', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
+                                                    ) : task.part_name}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                    {editingTaskId === task.id ? (
+                                                        <input type="text" value={editFormData.part_area} onChange={e => handleInputChange('part_area', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" />
+                                                    ) : task.part_area}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                    {editingTaskId === task.id ? (
+                                                        <select
+                                                            value={editFormData.given_by}
+                                                            onChange={e => handleInputChange('given_by', e.target.value)}
+                                                            className="w-full px-2 py-1 border rounded text-xs"
+                                                        >
+                                                            <option value="">Select AssignBy</option>
+                                                            {givenByList.map(name => (
+                                                                <option key={name} value={name}>{name}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : task.given_by}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                    {editingTaskId === task.id ? (
+                                                        <select
+                                                            value={editFormData.name}
+                                                            onChange={e => handleInputChange('name', e.target.value)}
+                                                            className="w-full px-2 py-1 border rounded text-xs"
+                                                        >
+                                                            <option value="">Select Name</option>
+                                                            {doersList.map(name => (
+                                                                <option key={name} value={name}>{name}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : task.assignedTo}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600">
+                                                    {editingTaskId === task.id ? (
+                                                        <textarea value={editFormData.task_description} onChange={e => handleInputChange('task_description', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" rows="2" />
+                                                    ) : (
+                                                        isAudioUrl(task.task_description || task.title) ? (
+                                                            <AudioPlayer url={task.task_description || task.title} />
+                                                        ) : (
+                                                            <div className="line-clamp-2" title={task.task_description || task.title}>
+                                                                {task.task_description || task.title}
+                                                            </div>
+                                                        )
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                                                    {editingTaskId === task.id ? (
+                                                        <input
+                                                            type="datetime-local"
+                                                            value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
+                                                            onChange={e => handleInputChange('task_start_date', e.target.value)}
+                                                            className="w-full px-2 py-1 border rounded text-xs bg-gray-100 italic"
+                                                            disabled
+                                                        />
+                                                    ) : (
+                                                        task.originalTaskStartDate ? new Date(task.originalTaskStartDate).toLocaleString('en-IN', {
+                                                            day: '2-digit', month: '2-digit', year: 'numeric',
+                                                            hour: '2-digit', minute: '2-digit', hour12: true
+                                                        }) : '-'
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap capitalize">
+                                                    {editingTaskId === task.id ? (
+                                                        <select
+                                                            value={editFormData.freq}
+                                                            onChange={e => handleInputChange('freq', e.target.value)}
+                                                            className="w-full px-2 py-1 border rounded text-xs bg-gray-100 italic"
+                                                            disabled
+                                                        >
+                                                            <option value="daily">Daily</option>
+                                                            <option value="weekly">Weekly</option>
+                                                            <option value="monthly">Monthly</option>
+                                                        </select>
+                                                    ) : task.frequency}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
+                                                    {task.enable_reminders ? 'Yes' : 'No'}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
+                                                    {task.require_attachment ? 'Yes' : 'No'}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm whitespace-nowrap">
+                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase border ${hasSubmission && task.admin_done ? 'bg-green-50 text-green-700 border-green-200' :
+                                                        hasSubmission && !task.admin_done ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                                            isOverdue ? 'bg-red-50 text-red-700 border-red-200' :
+                                                                'bg-yellow-50 text-yellow-700 border-yellow-200'
+                                                        }`}>
+                                                        {hasSubmission && task.admin_done ? 'Approved' :
+                                                            hasSubmission && !task.admin_done ? 'Pending Approval' :
+                                                                isOverdue ? 'Overdue' : 'Pending'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600">
+                                                    {isAudioUrl(task.remarks) ? <AudioPlayer url={task.remarks} /> : task.remarks}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap text-center">
+                                                    {editingTaskId === task.id ? (
+                                                        <div className="flex gap-2 justify-center">
+                                                            <button onClick={handleSaveEdit} disabled={isSaving} className="p-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+                                                                <Save size={14} />
+                                                            </button>
+                                                            <button onClick={handleCancelEdit} className="p-1 bg-gray-600 text-white rounded hover:bg-gray-700">
+                                                                <X size={14} />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        task.uploaded_image_url ? (
+                                                            <button
+                                                                onClick={() => setLightboxImage({ url: task.uploaded_image_url, name: `Task #${task.id} Proof` })}
+                                                                className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium text-xs hover:underline transition-colors"
+                                                            >
+                                                                <CheckCircle className="h-3 w-3" /> View
+                                                            </button>
+                                                        ) : '-'
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                ) : (
+                                    <tr>
+                                        <td colSpan="14" className="px-4 py-8 text-center text-gray-500 text-sm">
+                                            No maintenance tasks found.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
-    )
+
+            {/* Image Lightbox */}
+            {lightboxImage && (
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+                    onClick={() => setLightboxImage(null)}
+                >
+                    <div
+                        className="relative max-w-3xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-5 py-3.5 bg-gray-50 border-b border-gray-100">
+                            <span className="text-sm font-bold text-gray-800 truncate">{lightboxImage.name}</span>
+                            <button
+                                onClick={() => setLightboxImage(null)}
+                                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-all"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="bg-gray-900 flex items-center justify-center" style={{ minHeight: '360px' }}>
+                            <img
+                                src={lightboxImage.url}
+                                alt={lightboxImage.name}
+                                className="max-w-full max-h-[75vh] object-contain"
+                            />
+                        </div>
+                        <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                            <p className="text-xs text-gray-400">Click outside or ✕ to close</p>
+                            <a
+                                href={lightboxImage.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs font-bold text-purple-600 hover:text-purple-800 transition-colors"
+                            >
+                                Open full size ↗
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
 }

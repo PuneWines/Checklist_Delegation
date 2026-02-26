@@ -57,13 +57,18 @@ export default function AssignTask() {
       <div className="p-6 max-w-7xl mx-auto">
 
         {/* System Header */}
-        <div className="flex items-center gap-3 mb-8 border-b border-gray-200 pb-5">
-          <div className="p-2 bg-gray-100 rounded-lg">
-            <LayoutGrid className="w-5 h-5 text-gray-600" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-800 uppercase tracking-tight">Task Assignment Console</h1>
-            <p className="text-[11px] text-gray-500 font-mono mt-0.5">SELECT_MODULE // SYSTEM_V1.0</p>
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 pb-6 border-b border-gray-100/80">
+          <div className="flex items-center gap-4">
+            <div className="w-1.5 h-8 bg-purple-600 rounded-full hidden sm:block" />
+            <div>
+              <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                Task <span className="text-purple-600">Assignment</span>
+              </h1>
+              <p className="text-sm font-medium text-gray-400 mt-1 flex items-center gap-2">
+                <LayoutGrid size={14} className="text-gray-300" />
+                Select a module to create new tasks
+              </p>
+            </div>
           </div>
         </div>
 

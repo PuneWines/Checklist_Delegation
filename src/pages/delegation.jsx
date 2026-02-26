@@ -1280,9 +1280,6 @@ function DelegationDataPage() {
                       <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         Name
                       </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-yellow-50">
-                        Start Date
-                      </th>
                       <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-green-50">
                         Planned Date
                       </th>
@@ -1358,13 +1355,6 @@ function DelegationDataPage() {
                             <td className="px-2 sm:px-6 py-2 sm:py-4">
                               <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
                                 {account.name || "—"}
-                              </div>
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4 bg-yellow-50">
-                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                                {formatDateTimeForDisplay(
-                                  account.task_start_date
-                                )}
                               </div>
                             </td>
                             <td className="px-2 sm:px-6 py-2 sm:py-4 bg-green-50">
@@ -1496,7 +1486,7 @@ function DelegationDataPage() {
                     ) : (
                       <tr>
                         <td
-                          colSpan={12}
+                          colSpan={11}
                           className="px-4 sm:px-6 py-4 text-center text-gray-500 text-xs sm:text-sm"
                         >
                           {searchTerm
@@ -1554,11 +1544,7 @@ function DelegationDataPage() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50">
-                            <div className="space-y-1">
-                              <p className="text-[10px] text-amber-500 uppercase font-semibold">Start Date</p>
-                              <p className="text-xs font-medium text-gray-600">{formatDateTimeForDisplay(account.task_start_date)}</p>
-                            </div>
+                          <div className="pt-2 border-t border-gray-50">
                             <div className="space-y-1">
                               <p className="text-[10px] text-green-500 uppercase font-semibold">Planned Date</p>
                               <p className="text-xs font-black text-gray-900">{formatDateTimeForDisplay(account.planned_date)}</p>

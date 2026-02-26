@@ -151,11 +151,11 @@ export default function StaffTasksTable({
 
   return (
     <div className="space-y-6">
-      {/* Month Selection and Filters - Premium Card Style */}
-      <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+      {/* Month Selection and Filters - Minimal Premium Style */}
+      <div className="bg-white/50 backdrop-blur-sm p-4 rounded-xl border border-gray-100/80 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         {/* Month Selection */}
         <div className="flex flex-col gap-2">
-          <label htmlFor="month-select" className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+          <label htmlFor="month-select" className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">
             Performance Month
           </label>
           <div className="relative group">
@@ -163,7 +163,7 @@ export default function StaffTasksTable({
               id="month-select"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="appearance-none pl-4 pr-10 py-2.5 bg-blue-50/50 border border-blue-100 hover:border-blue-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 text-sm font-semibold text-blue-900 transition-all cursor-pointer min-w-[200px]"
+              className="appearance-none pl-4 pr-10 py-2 bg-gray-50/80 border border-gray-200/50 hover:border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400 text-sm font-bold text-gray-700 transition-all cursor-pointer min-w-[200px]"
             >
               {availableMonths.map((month) => (
                 <option key={month.value} value={month.value}>
@@ -171,7 +171,7 @@ export default function StaffTasksTable({
                 </option>
               ))}
             </select>
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-blue-500 group-hover:text-blue-700 transition-colors">
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-purple-600 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
             </div>
           </div>
@@ -180,10 +180,10 @@ export default function StaffTasksTable({
         {/* Status Info and Active Filters */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 w-full lg:w-auto">
           {totalStaffCount > 0 && (
-            <div className="flex flex-col gap-1">
-              <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">Audit Log</div>
-              <div className="text-sm font-medium text-gray-700 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">
-                <span className="text-blue-600 font-bold">{staffMembers.length}</span> staff active out of <span className="text-gray-900 font-bold">{totalUsersCount}</span>
+            <div className="flex flex-col gap-1 items-start sm:items-end">
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Audit Log</div>
+              <div className="text-xs font-bold text-gray-600 bg-gray-50/80 px-3 py-1.5 rounded-md border border-gray-100/50">
+                <span className="text-purple-600">{staffMembers.length}</span> / {totalUsersCount} active
               </div>
             </div>
           )}
@@ -191,14 +191,14 @@ export default function StaffTasksTable({
           {/* Active Filter Badges */}
           <div className="flex flex-wrap gap-2 pt-2 sm:pt-0">
             {dashboardStaffFilter !== "all" && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold border border-indigo-100 shadow-sm animate-in fade-in slide-in-from-right-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></div>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200/50 rounded-md text-[11px] font-bold text-gray-600 tracking-wide">
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></div>
                 Staff: {dashboardStaffFilter}
               </div>
             )}
             {departmentFilter !== "all" && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold border border-emerald-100 shadow-sm animate-in fade-in slide-in-from-right-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200/50 rounded-md text-[11px] font-bold text-gray-600 tracking-wide">
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
                 Dept: {departmentFilter}
               </div>
             )}

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
+import { motion } from "framer-motion"
 import { Filter, ChevronDown, ChevronUp, Play, Pause, Edit, Save, X, Mic, Square, Trash2, Loader2 } from "lucide-react"
 import { ReactMediaRecorder } from "react-media-recorder"
 import supabase from "../../../SupabaseClient"
@@ -517,23 +518,32 @@ export default function TaskNavigationTabs({
 
   return (
     <div className="w-full overflow-hidden rounded-lg border border-gray-200 bg-white">
-      <div className="bg-gray-50/50 p-2 border-b border-gray-100">
-        <div className="flex bg-white rounded-xl border border-purple-100 p-1 shadow-sm overflow-x-auto no-scrollbar">
+      <div className="bg-white/50 p-4 border-b border-gray-100/80">
+        <div className="flex bg-gray-100/60 p-1 rounded-xl border border-gray-200/20 relative overflow-x-auto no-scrollbar max-w-max mx-auto md:mx-0">
           {["recent", "upcoming", "overdue"].map((view) => (
             <button
               key={view}
               onClick={() => setTaskView(view)}
-              className={`flex-1 min-w-[100px] py-2 rounded-lg text-xs font-bold transition-all duration-300 uppercase tracking-wider ${taskView === view
-                ? "bg-purple-600 text-white shadow-md transform scale-[1.01]"
-                : "text-purple-600 hover:bg-purple-50"
-                }`}
+              className={`
+                relative flex items-center justify-center gap-2 py-2 px-6 rounded-lg text-xs font-bold transition-all duration-500 whitespace-nowrap min-w-[110px] z-10
+                ${taskView === view ? "text-white" : "text-gray-500 hover:text-purple-600"}
+              `}
             >
-              {view === "overdue" ? "Overdue" :
-                (dashboardType === "delegation"
-                  ? (view === "recent" ? "Today Task" : "Future Task")
-                  : (view === "recent" ? "Recent" : "Upcoming")
-                )
-              }
+              {taskView === view && (
+                <motion.div
+                  layoutId="dashboardInnerTabMinimal"
+                  className="absolute inset-0 bg-purple-600 rounded-lg shadow-md"
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                />
+              )}
+              <span className="relative">
+                {view === "overdue" ? "Overdue" :
+                  (dashboardType === "delegation"
+                    ? (view === "recent" ? "Today Task" : "Future Task")
+                    : (view === "recent" ? "Recent" : "Upcoming")
+                  )
+                }
+              </span>
             </button>
           ))}
         </div>

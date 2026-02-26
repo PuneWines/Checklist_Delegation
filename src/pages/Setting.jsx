@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { Plus, User, Building, X, Save, Edit, Trash2, Settings, Search, ChevronDown, Calendar, RefreshCw, Image } from 'lucide-react';
 import AdminLayout from '../components/layout/AdminLayout';
 import { useDispatch, useSelector } from 'react-redux';
@@ -983,42 +984,33 @@ const Setting = () => {
           <h1 className="text-2xl font-bold text-purple-600">User Management System</h1>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex border border-purple-200 rounded-lg overflow-x-auto scrollbar-hide bg-white shadow-sm">
-              <button
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all ${activeTab === 'users' ? 'bg-purple-600 text-white shadow-inner' : 'text-purple-600 hover:bg-purple-50'}`}
-                onClick={() => {
-                  handleTabChange('users');
-                  dispatch(userDetails());
-                }}
-              >
-                <User size={16} />
-                <span>Users</span>
-              </button>
-              <button
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-l border-purple-100 transition-all ${activeTab === 'departments' ? 'bg-purple-600 text-white shadow-inner' : 'text-purple-600 hover:bg-purple-50'}`}
-                onClick={() => {
-                  handleTabChange('departments');
-                  dispatch(departmentDetails());
-                  dispatch(givenByDetails());
-                }}
-              >
-                <Building size={16} />
-                <span>Departments</span>
-              </button>
-              <button
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-l border-purple-100 transition-all ${activeTab === 'leave' ? 'bg-purple-600 text-white shadow-inner' : 'text-purple-600 hover:bg-purple-50'}`}
-                onClick={() => handleTabChange('leave')}
-              >
-                <Calendar size={16} />
-                <span>Leave</span>
-              </button>
-              <button
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-l border-purple-100 transition-all ${activeTab === 'categories' ? 'bg-purple-600 text-white shadow-inner' : 'text-purple-600 hover:bg-purple-50'}`}
-                onClick={() => handleTabChange('categories')}
-              >
-                <Settings size={16} />
-                <span>Machines</span>
-              </button>
+            <div className="flex bg-gray-100/80 p-1 rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-max xscrol">
+              {[
+                { id: 'users', label: 'Users', icon: User },
+                { id: 'departments', label: 'Departments', icon: Building, action: () => { dispatch(departmentDetails()); dispatch(givenByDetails()); } },
+                { id: 'leave', label: 'Leave', icon: Calendar },
+                { id: 'categories', label: 'Machines', icon: Settings },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  className={`relative flex items-center justify-center gap-2 py-2 px-6 rounded-lg text-xs font-bold transition-all duration-500 whitespace-nowrap min-w-[110px] z-10 ${activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-purple-600'}`}
+                  onClick={() => {
+                    handleTabChange(tab.id);
+                    if (tab.id === 'users') dispatch(userDetails());
+                    if (tab.action) tab.action();
+                  }}
+                >
+                  {activeTab === tab.id && (
+                    <motion.div
+                      layoutId="settingsTabPillMinimal"
+                      className="absolute inset-0 bg-purple-600 rounded-lg shadow-md"
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <tab.icon size={15} className="relative z-10" />
+                  <span className="relative z-10">{tab.label}</span>
+                </button>
+              ))}
             </div>
 
             <div className="flex items-center gap-2 ml-auto">
