@@ -489,231 +489,300 @@ const CalendarPage = () => {
 
     return (
         <AdminLayout>
-            <div className="max-w-7xl mx-auto space-y-4">
-                {/* Header Section */}
-                <div className="bg-white border-b border-gray-200 pb-5 flex flex-col lg:flex-row justify-between items-center gap-6">
+            <div className="max-w-7xl mx-auto space-y-4 px-4 pb-10">
+                {/* Header Section - Professional & Clean */}
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4 py-8 border-b border-gray-200">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-700 rounded text-white font-bold shadow-sm">
-                            <CalendarIcon size={20} />
+                        <div className="p-2 bg-blue-600 rounded text-white shadow-sm">
+                            <CalendarIcon size={24} />
                         </div>
                         <div>
-                            <h1 className="text-xl font-black text-gray-900 leading-tight tracking-tight uppercase">Operational Calendar</h1>
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-                                Task Scheduling & Resource Planning
-                            </p>
+                            <h1 className="text-2xl font-bold text-gray-900 uppercase tracking-tight">Operational Calendar</h1>
+                            <p className="text-sm text-gray-500 font-medium uppercase tracking-wider">Scheduled Tasks & Operations Overview</p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        {/* Person Filter Button */}
-                        <div className="relative" ref={filterRef}>
+                    <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+                        {/* Person Filter - Professional Style */}
+                        <div className="relative w-full sm:w-auto" ref={filterRef}>
                             <button
                                 onClick={() => setShowPersonFilter(!showPersonFilter)}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all duration-300 font-bold uppercase text-[10px] tracking-widest ${selectedPersons.length > 0
-                                    ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm'
-                                    : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                                    }`}
+                                className={`w-full sm:w-auto flex items-center justify-between gap-3 px-4 py-2 rounded-lg border transition-all text-sm font-bold uppercase tracking-wide ${selectedPersons.length > 0 ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-gray-300 text-gray-700 hover:border-blue-500'}`}
                             >
-                                <Users size={14} />
-                                {selectedPersons.length > 0 ? `${selectedPersons.length} Selected` : 'Filter Person'}
-                                <ChevronDown size={14} className={`transition-transform duration-300 ${showPersonFilter ? 'rotate-180' : ''}`} />
+                                <div className="flex items-center gap-2">
+                                    <Users size={16} />
+                                    <span>{selectedPersons.length > 0 ? `${selectedPersons.length} Selected` : 'Filter Person'}</span>
+                                </div>
+                                <ChevronDown size={14} className={`transition-transform duration-200 ${showPersonFilter ? 'rotate-180' : ''}`} />
                             </button>
 
                             {showPersonFilter && (
-                                <div className="absolute top-full right-0 mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-2xl z-[50] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-                                        <div className="relative flex items-center mb-3">
+                                <div className="absolute top-full right-0 mt-2 w-full sm:w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                    <div className="p-3 border-b border-gray-100 bg-gray-50">
+                                        <div className="relative flex items-center mb-2">
                                             <Search className="absolute left-3 text-gray-400" size={14} />
                                             <input
                                                 type="text"
-                                                placeholder="Search person..."
+                                                placeholder="Search team member..."
                                                 value={searchTerm}
                                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                                className="w-full pl-9 pr-10 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                                                className="w-full pl-9 pr-8 py-1.5 border border-gray-300 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                                             />
                                             <button
                                                 onClick={handleVoiceSearch}
-                                                className={`absolute right-3 p-1 rounded-full transition-colors ${isListening ? 'text-red-500 bg-red-50 animate-pulse' : 'text-gray-400 hover:text-blue-500 hover:bg-blue-50'}`}
+                                                className={`absolute right-2 p-1 rounded transition-colors ${isListening ? 'text-red-500 animate-pulse' : 'text-gray-400 hover:text-blue-500'}`}
                                             >
                                                 <Mic size={14} />
                                             </button>
                                         </div>
                                         <div className="flex justify-between items-center px-1">
-                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">
-                                                {selectedPersons.length} Persons Selected
-                                            </span>
-                                            <button
-                                                onClick={clearFilters}
-                                                className="text-[10px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-tighter"
-                                            >
-                                                Clear All
-                                            </button>
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase">{selectedPersons.length} Selected</span>
+                                            <button onClick={clearFilters} className="text-[10px] font-bold text-blue-600 hover:underline uppercase">Clear</button>
                                         </div>
                                     </div>
-                                    <div className="max-h-60 overflow-y-auto p-2">
-                                        {allUsers
-                                            .filter(u => u.toLowerCase().includes(searchTerm.toLowerCase()))
-                                            .map(user => (
-                                                <button
-                                                    key={user}
-                                                    onClick={() => togglePerson(user)}
-                                                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-all duration-200 ${selectedPersons.includes(user)
-                                                        ? 'bg-blue-50 text-blue-700'
-                                                        : 'hover:bg-gray-50 text-gray-700'
-                                                        }`}
-                                                >
-                                                    <span className="text-xs font-bold uppercase tracking-tight">{user}</span>
-                                                    {selectedPersons.includes(user) && <Check size={14} className="text-blue-600" />}
-                                                </button>
-                                            ))}
-                                        {allUsers.filter(u => u.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
-                                            <div className="p-4 text-center">
-                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No Persons Found</p>
-                                            </div>
-                                        )}
+                                    <div className="max-h-60 overflow-y-auto p-1">
+                                        {allUsers.filter(u => u.toLowerCase().includes(searchTerm.toLowerCase())).map(user => (
+                                            <button
+                                                key={user}
+                                                onClick={() => togglePerson(user)}
+                                                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-colors mb-0.5 text-xs font-semibold ${selectedPersons.includes(user) ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-gray-100 text-gray-700'}`}
+                                            >
+                                                <span>{user}</span>
+                                                {selectedPersons.includes(user) && <Check size={14} className="text-blue-600" />}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        <div className="flex items-center border border-gray-200 rounded-lg shadow-sm overflow-hidden bg-white shrink-0">
-                            <button onClick={prevMonth} className="p-3 bg-gray-50 hover:bg-blue-50 hover:text-blue-600 transition-all border-r border-gray-200 text-gray-700">
+                        <div className="flex items-center border border-gray-300 rounded-lg shadow-sm overflow-hidden text-sm bg-white w-full sm:w-auto">
+                            <button onClick={prevMonth} className="p-2.5 bg-gray-50 hover:bg-gray-100 transition-colors border-r border-gray-300 text-gray-700">
                                 <ChevronLeft size={18} strokeWidth={3} />
                             </button>
-                            <div className="px-8 py-2.5 font-black text-gray-900 text-sm min-w-[200px] text-center uppercase tracking-[0.2em]">
+                            <div className="px-6 py-2.5 font-bold text-gray-900 min-w-[170px] text-center uppercase tracking-widest">
                                 {monthName} {year}
                             </div>
-                            <button onClick={nextMonth} className="p-3 bg-gray-50 hover:bg-blue-50 hover:text-blue-600 transition-all border-l border-gray-200 text-gray-700">
+                            <button onClick={nextMonth} className="p-2.5 bg-gray-50 hover:bg-gray-100 transition-colors border-l border-gray-300 text-gray-700">
                                 <ChevronRight size={18} strokeWidth={3} />
                             </button>
                         </div>
                     </div>
-
-                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 max-w-sm lg:max-w-none">
-                        {[
-                            { label: 'Checklist', color: 'bg-blue-600' },
-                            { label: 'Maintenance', color: 'bg-orange-600' },
-                            { label: 'Repair', color: 'bg-red-600' },
-                            { label: 'Delegation', color: 'bg-purple-600' },
-                            { label: 'EA', color: 'bg-indigo-600' },
-                            { label: 'Off Day', color: 'bg-gray-300' }
-                        ].map(item => (
-                            <div key={item.label} className="flex items-center gap-1.5 px-2 py-1 rounded bg-gray-50 border border-gray-100">
-                                <div className={`w-2.5 h-2.5 ${item.color} rounded-sm shadow-inner`}></div>
-                                <span className="text-[9px] font-black text-gray-500 uppercase tracking-tight">{item.label}</span>
-                            </div>
-                        ))}
-                    </div>
                 </div>
 
-                {/* Calendar View */}
-                <div className="bg-white border border-gray-200 rounded shadow-sm overflow-hidden">
-                    <div className="grid grid-cols-7 bg-gray-100 border-b border-gray-200">
+                {/* Legend - Responsive & Simple */}
+                <div className="flex flex-wrap items-center justify-center gap-4 py-4 md:justify-start">
+                    {[
+                        { label: 'Checklist', color: 'bg-blue-600' },
+                        { label: 'Maintenance', color: 'bg-orange-600' },
+                        { label: 'Repair', color: 'bg-red-600' },
+                        { label: 'Delegation', color: 'bg-purple-600' },
+                        { label: 'EA', color: 'bg-indigo-600' },
+                        { label: 'Holiday', color: 'bg-red-400' }
+                    ].map(item => (
+                        <div key={item.label} className="flex items-center gap-1.5 grayscale-[0.2] hover:grayscale-0 transition-all">
+                            <div className={`w-3 h-3 ${item.color} rounded-sm shadow-sm`}></div>
+                            <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">{item.label}</span>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Calendar Desktop Grid - Professional & Normal */}
+                <div className="hidden lg:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
                         {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
-                            <div key={day} className="py-2 text-center text-[9px] font-bold text-gray-500 uppercase tracking-widest border-r border-gray-200 last:border-0 leading-tight">
-                                <span className="text-gray-400 block mb-0.5">{getHindiDay(day)}</span>
+                            <div key={day} className="py-3 text-center text-[10px] font-bold text-gray-500 uppercase tracking-widest border-r border-gray-200 last:border-0">
+                                <span className="block text-[8px] opacity-60 mb-0.5">{getHindiDay(day)}</span>
                                 {day}
                             </div>
                         ))}
                     </div>
 
-                    <div className="grid grid-cols-7 relative border-l border-t border-gray-200">
+                    <div className="grid grid-cols-7 relative">
                         {loading && (
-                            <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center font-bold text-blue-700 uppercase tracking-[0.3em]">
-                                Loading Data...
+                            <div className="absolute inset-0 bg-white/60 z-20 flex items-center justify-center backdrop-blur-sm">
+                                <Loader2 className="animate-spin text-blue-600" size={32} />
                             </div>
                         )}
                         {days}
                     </div>
                 </div>
+
+                {/* Mobile View - Normal Card List */}
+                <div className="lg:hidden space-y-3">
+                    {loading ? (
+                        <div className="flex justify-center py-20">
+                            <Loader2 className="animate-spin text-blue-600" size={32} />
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => {
+                                const dayDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                const holiday = holidays.find(h => normalizeDate(h.holiday_date) === dayDate);
+                                const workingDay = workingDays.find(w => normalizeDate(w.working_date) === dayDate);
+                                const dayTasksTotal = filteredTasks.filter(t => t.date === dayDate);
+                                const isToday = new Date().toISOString().split('T')[0] === dayDate;
+                                const isHoliday = !!holiday;
+                                const isOffDay = !isHoliday && !workingDay;
+
+                                if (dayTasksTotal.length === 0 && isOffDay && !isHoliday && !isToday) return null;
+
+                                return (
+                                    <div
+                                        key={day}
+                                        onClick={() => handleCellClick(day, holiday, isOffDay)}
+                                        className={`bg-white rounded-lg border transition-all active:scale-[0.98] shadow-sm flex overflow-hidden ${isToday ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-200'}`}
+                                    >
+                                        <div className={`w-14 flex-shrink-0 flex flex-col items-center justify-center ${isHoliday ? 'bg-red-50 text-red-600' : isToday ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-500'} border-r`}>
+                                            <span className="text-[9px] font-bold uppercase">{new Date(dayDate).toLocaleString('default', { weekday: 'short' })}</span>
+                                            <span className="text-lg font-bold">{day}</span>
+                                        </div>
+                                        <div className="p-3 flex-1 min-w-0">
+                                            {isHoliday && (
+                                                <p className="text-[10px] font-bold text-red-600 uppercase mb-1">Holiday: {holiday.holiday_name}</p>
+                                            )}
+                                            {dayTasksTotal.length > 0 ? (
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {dayTasksTotal.slice(0, 3).map((task, idx) => (
+                                                        <div key={idx} className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-1 rounded border border-gray-100 max-w-full">
+                                                            <div className={`w-2 h-2 rounded-sm flex-shrink-0 ${task.cat === 'CK' ? 'bg-blue-600' : task.cat === 'MT' ? 'bg-orange-600' : task.cat === 'RP' ? 'bg-red-600' : 'bg-purple-600'}`}></div>
+                                                            <span className="text-[10px] font-bold text-gray-600 truncate max-w-[120px] uppercase">{task.title}</span>
+                                                        </div>
+                                                    ))}
+                                                    {dayTasksTotal.length > 3 && (
+                                                        <span className="text-[10px] font-bold text-blue-600 self-center">+ {dayTasksTotal.length - 3} More</span>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="text-[10px] font-medium text-gray-400 uppercase italic">No tasks assigned</span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center pr-3">
+                                            <ChevronRight size={16} className="text-gray-300" />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* Modal Overlay */}
+            {/* Professional Modal Design */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50">
-                    <div className="bg-white w-full max-w-2xl rounded shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-                        <div className="px-6 py-4 bg-blue-700 text-white flex justify-between items-center">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
+                        {/* Modal Header */}
+                        <div className="px-6 py-4 bg-gray-900 text-white flex justify-between items-center shrink-0">
                             <div>
-                                <h2 className="text-lg font-bold uppercase tracking-widest flex items-center gap-3">
-                                    <Clock className="w-4 h-4" /> {isHolidayDate ? 'Public Holiday' : selectedTasks.length === 0 && !workingDays.find(w => w.working_date === selectedDate) ? 'Off Day' : 'Task Records'}
+                                <h2 className="text-lg font-bold uppercase tracking-widest flex items-center gap-2">
+                                    <Clock size={20} /> {isHolidayDate ? 'Public Holiday' : 'Daily Task Log'}
                                 </h2>
-                                <p className="text-[10px] font-medium uppercase opacity-75 mt-0.5">
+                                <p className="text-[10px] font-medium uppercase opacity-70 mt-0.5 tracking-wider">
                                     {new Date(selectedDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                                 </p>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-white/20 rounded-full transition-colors text-white">
-                                <X size={20} />
+                            <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white">
+                                <X size={24} />
                             </button>
                         </div>
 
-                        <div className="p-6 overflow-y-auto space-y-4">
+                        {/* Modal Body */}
+                        <div className="p-6 overflow-y-auto space-y-4 bg-gray-50/50">
                             {isHolidayDate ? (
-                                <div className="p-10 text-center space-y-3 bg-red-50 border border-red-100 rounded">
-                                    <h3 className="text-xl font-bold text-red-800 uppercase tracking-tight">{holidayName}</h3>
-                                    <p className="text-xs font-bold text-red-600 uppercase tracking-widest">Company Holiday - No Operations</p>
+                                <div className="py-12 px-6 text-center space-y-2 bg-white border border-red-100 rounded-xl">
+                                    <ShieldAlert size={48} className="text-red-500 mx-auto mb-2" />
+                                    <h3 className="text-2xl font-bold text-red-700 uppercase">{holidayName}</h3>
+                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">General Holiday - Operations Suspended</p>
                                 </div>
                             ) : selectedTasks.length === 0 ? (
-                                <div className="p-10 text-center bg-gray-50 border border-gray-100 rounded">
-                                    <p className="text-sm font-bold text-gray-400 uppercase tracking-[0.2em]">Zero Tasks For This Day</p>
+                                <div className="py-20 text-center bg-white border border-gray-200 rounded-xl">
+                                    <CalendarIcon size={40} className="text-gray-100 mx-auto mb-3" />
+                                    <p className="text-sm font-bold text-gray-300 uppercase tracking-widest">No scheduled tasks found for this date</p>
                                 </div>
                             ) : (
-                                <div className="space-y-3">
+                                <div className="space-y-4">
                                     {selectedTasks.map((task) => (
-                                        <div key={task.id} className="border border-gray-200 rounded p-4 flex flex-col relative overflow-hidden">
-                                            <div className={`absolute top-0 left-0 w-2 h-full ${task.cat === 'CK' ? 'bg-blue-600' :
+                                        <div key={task.id} className="bg-white border border-gray-200 rounded-lg p-5 flex flex-col shadow-sm relative overflow-hidden group">
+                                            <div className={`absolute top-0 left-0 w-1.5 h-full opacity-100 ${task.cat === 'CK' ? 'bg-blue-600' :
                                                 task.cat === 'MT' ? 'bg-orange-600' :
                                                     task.cat === 'RP' ? 'bg-red-600' :
-                                                        task.cat === 'DL' ? 'bg-purple-600' :
-                                                            'bg-indigo-600'
+                                                        'bg-purple-600'
                                                 }`}></div>
-                                            <div className="pl-4">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <span className="text-[10px] font-bold text-gray-400 uppercase">ID: #{task.id}</span>
-                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-sm uppercase ${['completed', 'yes', 'Done'].includes(task.status) ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+
+                                            <div className="pl-3">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase px-2 py-0.5 bg-gray-50 rounded border border-gray-100">ID: {task.id}</span>
+                                                        <span className={`text-[10px] font-bold px-3 py-1 bg-white border rounded-full uppercase tracking-wider ${task.type === 'checklist' ? 'text-blue-600 border-blue-100' : 'text-purple-600 border-purple-100'}`}>
+                                                            {task.type}
+                                                        </span>
+                                                    </div>
+                                                    <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border ${['completed', 'yes', 'Done', 'Approved'].includes(task.status) ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
                                                         {task.status || 'Pending'}
                                                     </span>
                                                 </div>
-                                                {(() => {
-                                                    const audioUrl = extractAudioUrl(task.title);
-                                                    return (
-                                                        <div className="mb-3">
-                                                            {audioUrl && (
-                                                                <div className="mb-2">
-                                                                    <h4 className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mb-1">Description Recording:</h4>
-                                                                    <AudioPlayer url={audioUrl} />
-                                                                </div>
-                                                            )}
-                                                            {(!audioUrl || task.title.replace(audioUrl, '').trim().length > 0) && (
-                                                                <h4 className="text-sm font-bold text-gray-900 uppercase mb-1 leading-tight">
-                                                                    {task.title.replace(/Voice Note Link:?\s*/i, '').replace(audioUrl || '', '').trim() || (audioUrl ? '' : '—')}
-                                                                </h4>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })()}
 
-                                                <div className="grid grid-cols-2 gap-4 text-[10px] font-medium text-gray-500 uppercase mb-4">
-                                                    <div>Assigned: <span className="text-gray-900 font-bold">{task.name || '-'}</span></div>
-                                                    <div>Type: <span className="text-gray-900 font-bold">{task.type}</span></div>
+                                                <div className="mb-4">
+                                                    {(() => {
+                                                        const audioUrl = extractAudioUrl(task.title);
+                                                        const cleanedTitle = task.title.replace(/Voice Note Link:?\s*/i, '').replace(audioUrl || '', '').trim();
+                                                        return (
+                                                            <>
+                                                                {audioUrl && (
+                                                                    <div className="mb-3">
+                                                                        <h4 className="text-[10px] font-bold text-blue-600 uppercase mb-2 flex items-center gap-2">
+                                                                            <Play size={12} className="fill-blue-600" /> Audio Instruction
+                                                                        </h4>
+                                                                        <AudioPlayer url={audioUrl} />
+                                                                    </div>
+                                                                )}
+                                                                {cleanedTitle && (
+                                                                    <h4 className="text-lg font-bold text-gray-900 uppercase leading-snug tracking-tight">
+                                                                        {cleanedTitle}
+                                                                    </h4>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-6 py-4 border-t border-gray-100">
+                                                    <div>
+                                                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Assigned Person</p>
+                                                        <div className="flex items-center gap-2 text-sm font-bold text-gray-800">
+                                                            <div className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center text-[10px] text-gray-600 font-bold border border-gray-200">
+                                                                {task.name ? task.name.charAt(0) : 'U'}
+                                                            </div>
+                                                            {task.name || 'Unassigned'}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Component Type</p>
+                                                        <div className="flex items-center gap-2 text-sm font-bold text-gray-800 uppercase">
+                                                            <div className={`w-3 h-3 rounded-full ${task.cat === 'CK' ? 'bg-blue-600' : 'bg-orange-600'}`}></div>
+                                                            {task.type} Level
+                                                        </div>
+                                                    </div>
                                                 </div>
 
                                                 {(task.remark || task.remarks) && (
-                                                    <div className="mt-2 pt-2 border-t border-gray-100 mb-4">
-                                                        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Remarks:</h4>
-                                                        {(() => {
-                                                            const remarkText = task.remark || task.remarks;
-                                                            const audioUrl = extractAudioUrl(remarkText);
-                                                            return (
-                                                                <>
-                                                                    {audioUrl && <AudioPlayer url={audioUrl} />}
-                                                                    {(!audioUrl || remarkText.replace(audioUrl, '').trim().length > 0) && (
-                                                                        <p className="text-xs font-medium text-gray-600 italic">
-                                                                            {remarkText.replace(/Voice Note Link:?\s*/i, '').replace(audioUrl || '', '').trim()}
+                                                    <div className="mt-4 pt-4 border-t border-gray-100">
+                                                        <h4 className="text-[10px] font-bold text-blue-500 uppercase mb-2">Performance Remarks</h4>
+                                                        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 italic text-gray-700 text-sm font-medium leading-relaxed">
+                                                            {(() => {
+                                                                const remarkText = task.remark || task.remarks;
+                                                                const audioUrl = extractAudioUrl(remarkText);
+                                                                return (
+                                                                    <>
+                                                                        {audioUrl && <AudioPlayer url={audioUrl} />}
+                                                                        <p className="mt-2 text-gray-600">
+                                                                            "{remarkText.replace(/Voice Note Link:?\s*/i, '').replace(audioUrl || '', '').trim()}"
                                                                         </p>
-                                                                    )}
-                                                                </>
-                                                            );
-                                                        })()}
+                                                                    </>
+                                                                );
+                                                            })()}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>

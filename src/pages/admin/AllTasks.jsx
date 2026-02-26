@@ -1607,10 +1607,19 @@ const AllTasks = () => {
                               <p className="text-[10px] text-gray-400 uppercase font-semibold">Part</p>
                               <div className="flex flex-col gap-1">
                                 <span className="text-sm text-gray-800">{task.part_name}</span>
-                                <div className="flex gap-2 flex-wrap">
+                                <div className="flex gap-3 flex-wrap mt-2">
                                   {task.part_name.split(',').map(p => p.trim()).map((part, idx) => {
                                     const match = customDropdowns?.find(d => d.category === "Part Name" && d.value === part && d.image_url);
-                                    return match ? <img key={idx} src={match.image_url} alt={part} className="w-12 h-12 object-cover rounded shadow-sm border border-gray-200 bg-gray-50 flex-shrink-0" title={part} /> : null;
+                                    return match ? (
+                                      <img
+                                        key={idx}
+                                        src={match.image_url}
+                                        alt={part}
+                                        className="w-24 h-24 object-cover rounded-lg shadow-md border-2 border-purple-100 bg-gray-50 flex-shrink-0 cursor-zoom-in transition-all active:scale-95"
+                                        title={`Click to enlarge: ${part}`}
+                                        onClick={() => setLightboxImage({ url: match.image_url, name: part })}
+                                      />
+                                    ) : null;
                                   })}
                                 </div>
                               </div>
@@ -1669,12 +1678,28 @@ const AllTasks = () => {
                           {showHistory && (task.work_photo_url || task.bill_copy_url || task.image_url || task.uploaded_image_url) && (
                             <div className="pt-2 border-t border-gray-50">
                               <p className="text-[10px] text-gray-400 uppercase font-semibold mb-2">Attachments</p>
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex flex-wrap gap-3">
                                 {(task.work_photo_url || task.image_url || task.uploaded_image_url) && (
-                                  <a href={task.work_photo_url || task.image_url || task.uploaded_image_url} target="_blank" rel="noopener noreferrer" className="px-3 py-1 bg-purple-50 text-purple-600 rounded text-[10px] font-medium border border-purple-100">View Image</a>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] text-gray-500 font-medium">Work Photo</span>
+                                    <img
+                                      src={task.work_photo_url || task.image_url || task.uploaded_image_url}
+                                      alt="Work"
+                                      className="w-24 h-24 object-cover rounded-lg border-2 border-purple-100 shadow-sm cursor-zoom-in"
+                                      onClick={() => setLightboxImage({ url: task.work_photo_url || task.image_url || task.uploaded_image_url, name: "Work Photo" })}
+                                    />
+                                  </div>
                                 )}
                                 {task.bill_copy_url && (
-                                  <a href={task.bill_copy_url} target="_blank" rel="noopener noreferrer" className="px-3 py-1 bg-blue-50 text-blue-600 rounded text-[10px] font-medium border border-blue-100">View Bill</a>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] text-gray-500 font-medium">Bill Copy</span>
+                                    <img
+                                      src={task.bill_copy_url}
+                                      alt="Bill"
+                                      className="w-24 h-24 object-cover rounded-lg border-2 border-blue-100 shadow-sm cursor-zoom-in"
+                                      onClick={() => setLightboxImage({ url: task.bill_copy_url, name: "Bill Copy" })}
+                                    />
+                                  </div>
                                 )}
                               </div>
                             </div>
