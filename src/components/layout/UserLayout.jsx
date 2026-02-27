@@ -13,7 +13,6 @@ const UserLayout = ({ children }) => {
   const [username, setUsername] = useState("")
   const [isAdmin, setIsAdmin] = useState(false)
   const [profileImage, setProfileImage] = useState("")
-  const [userEmail, setUserEmail] = useState("")
 
   // Check authentication on component mount
   useEffect(() => {
@@ -30,12 +29,11 @@ const UserLayout = ({ children }) => {
     // Initial load from localStorage
     const cachedImage = localStorage.getItem('profile_image');
     setProfileImage(cachedImage || "")
-    setUserEmail(localStorage.getItem('email_id') || "")
 
     // Sync with database to get the latest image
     const syncProfileImage = async () => {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("users")
           .select("profile_image")
           .eq("user_name", storedUsername)
@@ -135,7 +133,7 @@ const UserLayout = ({ children }) => {
                     src={profileImage}
                     alt={username}
                     className="h-full w-full object-cover"
-                    onError={(e) => {
+                    onError={() => {
                       console.error("❌ UserLayout Image Failed:", profileImage);
                       setProfileImage("");
                     }}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useDispatch } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
@@ -30,7 +30,7 @@ export default function AdminApprovalPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const dispatch = useDispatch();
 
-    const loadTasks = async () => {
+    const loadTasks = useCallback(async () => {
         setLoading(true);
         setPendingTasks([]);
         let data = [];
@@ -54,11 +54,11 @@ export default function AdminApprovalPage() {
         }
         setPendingTasks(data || []);
         setLoading(false);
-    };
+    }, [activeTab, viewMode]);
 
     useEffect(() => {
         loadTasks();
-    }, [activeTab, viewMode]);
+    }, [loadTasks]);
 
     const handleApprove = async (task) => {
         setProcessingId(task.id);
@@ -309,15 +309,20 @@ export default function AdminApprovalPage() {
                                                 <div className="text-sm text-gray-900 max-w-xs break-words">
                                                     {(() => {
                                                         const desc = task.task_description || task.issue_description;
-                                                        if (!desc) return <span className="text-gray-400 italic">No description</span>;
+                                                        const audioUrl = task.audio_url || extractAudioUrl(desc);
 
-                                                        const audioUrl = extractAudioUrl(desc);
+                                                        let cleanText = desc || '';
+                                                        if (audioUrl && desc && typeof desc === 'string' && desc.includes(audioUrl)) {
+                                                            cleanText = desc.replace(audioUrl, '').replace(/Voice Note Link:?\s*/i, '').replace(/Voice Note:?\s*/i, '').trim();
+                                                        }
+
+                                                        if (!cleanText && !audioUrl) return <span className="text-gray-400 italic">No description</span>;
 
                                                         return (
                                                             <div className="space-y-2">
                                                                 {audioUrl && <AudioPlayer url={audioUrl} />}
-                                                                {(!audioUrl || desc.replace(audioUrl, '').trim().replace(/Voice Note Link:?\s*/i, '').length > 0) && (
-                                                                    <div className="whitespace-pre-wrap leading-relaxed">{desc}</div>
+                                                                {cleanText && (
+                                                                    <div className="whitespace-pre-wrap leading-relaxed">{cleanText}</div>
                                                                 )}
                                                             </div>
                                                         );
@@ -439,15 +444,20 @@ export default function AdminApprovalPage() {
                                     <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 space-y-2">
                                         {(() => {
                                             const desc = task.task_description || task.issue_description;
-                                            if (!desc) return <p className="text-xs text-gray-400 italic">No description</p>;
+                                            const audioUrl = task.audio_url || extractAudioUrl(desc);
 
-                                            const audioUrl = extractAudioUrl(desc);
+                                            let cleanText = desc || '';
+                                            if (audioUrl && desc && typeof desc === 'string' && desc.includes(audioUrl)) {
+                                                cleanText = desc.replace(audioUrl, '').replace(/Voice Note Link:?\s*/i, '').replace(/Voice Note:?\s*/i, '').trim();
+                                            }
+
+                                            if (!cleanText && !audioUrl) return <p className="text-xs text-gray-400 italic">No description</p>;
 
                                             return (
                                                 <div className="space-y-2">
                                                     {audioUrl && <AudioPlayer url={audioUrl} />}
-                                                    {(!audioUrl || desc.replace(audioUrl, '').trim().replace(/Voice Note Link:?\s*/i, '').length > 0) && (
-                                                        <p className="text-xs text-gray-800 leading-normal font-medium">{desc}</p>
+                                                    {cleanText && (
+                                                        <p className="text-xs text-gray-800 leading-normal font-medium">{cleanText}</p>
                                                     )}
                                                 </div>
                                             );

@@ -60,7 +60,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     // Sync with database to get the latest image
     const syncProfileImage = async () => {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("users")
           .select("profile_image")
           .eq("user_name", storedUsername)
@@ -221,9 +221,8 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
 
   // Submenu logic removed
 
-  // Get accessible routes and departments
+  // Get accessible routes
   const accessibleRoutes = getAccessibleRoutes();
-  const accessibleDepartments = getAccessibleDepartments(); // This function is now redundant but kept as per original structure
 
   if (!showLayout) {
     return <>{children}</>;
@@ -592,7 +591,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
                   src={profileImage}
                   alt={username}
                   className="h-full w-full object-cover"
-                  onError={(e) => {
+                  onError={() => {
                     console.error("❌ AdminLayout Image Failed to Load:", profileImage);
                     setProfileImage(""); // Fallback to initials
                   }}

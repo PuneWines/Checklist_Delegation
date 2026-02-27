@@ -52,16 +52,20 @@ const isAudioUrl = (url) => {
 };
 
 // RenderDescription component to handle text and audio links
-const RenderDescription = ({ text }) => {
-  if (!text) return "—";
+const RenderDescription = ({ text, audioUrl }) => {
+  if (!text && !audioUrl) return "—";
 
   const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|wav|ogg|webm|m4a|aac)(\?.*)?)/i;
-  const match = text && text.match(urlRegex);
+  const match = text && typeof text === 'string' && text.match(urlRegex);
 
-  if (match) {
-    const url = match[0];
-    const cleanText = text.replace(url, '').replace(/Voice Note Link:/i, '').replace(/Voice Note:/i, '').trim();
+  let url = audioUrl || (match ? match[0] : null);
+  let cleanText = text || '';
 
+  if (match && !audioUrl) {
+    cleanText = text.replace(match[0], '').replace(/Voice Note Link:/i, '').replace(/Voice Note:/i, '').trim();
+  }
+
+  if (url) {
     return (
       <div className="flex flex-col gap-2 min-w-[200px]">
         {cleanText && <span className="whitespace-pre-wrap text-sm">{cleanText}</span>}
@@ -70,7 +74,7 @@ const RenderDescription = ({ text }) => {
     );
   }
 
-  return <span className="whitespace-pre-wrap" title={text}>{text}</span>;
+  return <span className="whitespace-pre-wrap text-sm" title={cleanText}>{cleanText || "—"}</span>;
 };
 
 // Debounce hook for search optimization
@@ -1339,7 +1343,7 @@ function DelegationDataPage() {
                               <div
                                 className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
                               >
-                                <RenderDescription text={account.task_description} />
+                                <RenderDescription text={account.task_description} audioUrl={account.audio_url} />
                               </div>
                             </td>
                             <td className="px-2 sm:px-6 py-2 sm:py-4">
@@ -1529,7 +1533,7 @@ function DelegationDataPage() {
                           <div className="space-y-1">
                             <p className="text-[10px] text-gray-400 uppercase font-semibold">Description</p>
                             <div className="text-sm text-gray-800">
-                              <RenderDescription text={account.task_description} />
+                              <RenderDescription text={account.task_description} audioUrl={account.audio_url} />
                             </div>
                           </div>
 

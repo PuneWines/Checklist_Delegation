@@ -144,20 +144,7 @@ export default function QuickTask() {
     fetchDropdownData();
   }, [dispatch]);
 
-  // Re-fetch when activeTab changes
-  useEffect(() => {
-    if (activeTab === 'checklist') {
-      dispatch(resetChecklistPagination());
-      dispatch(uniqueChecklistTaskData({ page: 0, pageSize: 50, dateFilter, nameFilter: searchTerm }));
-    } else if (activeTab === 'delegation') {
-      dispatch(resetDelegationPagination());
-      dispatch(uniqueDelegationTaskData({ page: 0, pageSize: 50, dateFilter, nameFilter: searchTerm }));
-    } else if (activeTab === 'maintenance') {
-      dispatch(maintenanceData({ page: 1, frequency: freqFilter, searchTerm: searchTerm }));
-    }
-  }, [dispatch, activeTab]);
-
-  // Debounced search effect
+  // Re-fetch when activeTab or filters change (with debounced search)
   useEffect(() => {
     const handler = setTimeout(() => {
       if (activeTab === 'checklist') {
@@ -172,7 +159,7 @@ export default function QuickTask() {
     }, 500);
 
     return () => clearTimeout(handler);
-  }, [searchTerm, dispatch]);
+  }, [dispatch, activeTab, dateFilter, freqFilter, searchTerm]);
 
 
   // Add this new function
@@ -243,11 +230,12 @@ export default function QuickTask() {
         given_by: task.given_by || '',
         name: task.name || '',
         task_description: task.task_description || '',
+        audio_url: task.audio_url || null,
         task_start_date: task.task_start_date || '',
         freq: task.freq || '',
         status: task.status || '',
         remarks: task.remarks || '',
-        originalAudioUrl: isAudioUrl(task.task_description) ? task.task_description : null,
+        originalAudioUrl: task.audio_url || (isAudioUrl(task.task_description) ? task.task_description : null),
       });
     } else {
       setEditFormData({
@@ -304,6 +292,11 @@ export default function QuickTask() {
 
           finalEditData.audio_url = publicUrlData.publicUrl; // Store in audio_url column
 
+          // If legacy audio was in description, clear it to separate
+          if (isAudioUrl(finalEditData.task_description)) {
+            finalEditData.task_description = '';
+          }
+
           if (editFormData.originalAudioUrl) {
             audioToCleanup = editFormData.originalAudioUrl;
           }
@@ -313,7 +306,7 @@ export default function QuickTask() {
         } finally {
           setIsUploading(false);
         }
-      } else if (editFormData.originalAudioUrl && !isAudioUrl(editFormData.task_description)) {
+      } else if (editFormData.originalAudioUrl && editFormData.audio_url === null && !isAudioUrl(editFormData.task_description)) {
         audioToCleanup = editFormData.originalAudioUrl;
       }
 

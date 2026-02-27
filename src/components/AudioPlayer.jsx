@@ -36,7 +36,6 @@ const AudioPlayer = ({ url, className = "" }) => {
         }
     };
 
-    // Handle play if we just started interacting
     useEffect(() => {
         if (hasInteracted && audioRef.current && !isPlaying) {
             audioRef.current.play().catch(err => {
@@ -44,7 +43,7 @@ const AudioPlayer = ({ url, className = "" }) => {
             });
             setIsPlaying(true);
         }
-    }, [hasInteracted]);
+    }, [hasInteracted, isPlaying]);
 
     useEffect(() => {
         const audio = audioRef.current;

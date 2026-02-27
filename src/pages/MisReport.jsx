@@ -170,10 +170,9 @@ function StaffTasksPage() {
         }
     }, [dashboardStaffFilter, isLoading])
 
-    // Initial load when component mounts or dependencies change
     useEffect(() => {
         loadStaffData(1, false)
-    }, [dashboardStaffFilter])
+    }, [dashboardStaffFilter, loadStaffData])
 
     // Function to load more data
     const loadMoreData = () => {

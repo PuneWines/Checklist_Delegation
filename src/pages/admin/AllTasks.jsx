@@ -524,7 +524,7 @@ const AllTasks = () => {
 
       return true;
     });
-  }, [tasks, searchTerm, activeTab, dateFilter, sortDateColumn, statusDateColumn]);
+  }, [tasks, searchTerm, activeTab, dateFilter, sortDateColumn, statusDateColumn, getTimeStatus]);
 
   const filteredHistoryTasks = useMemo(() => {
     const completionField = "submission_date";

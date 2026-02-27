@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { CheckCircle2, AlertCircle, Info, X, Sparkles } from 'lucide-react';
 
 const MagicToast = ({ message, type, onClose, duration }) => {
@@ -17,12 +17,12 @@ const MagicToast = ({ message, type, onClose, duration }) => {
         }, 10);
 
         return () => clearInterval(interval);
-    }, [duration]);
+    }, [duration, handleClose]);
 
-    const handleClose = () => {
+    const handleClose = useCallback(() => {
         setIsExiting(true);
         setTimeout(onClose, 400); // Wait for exit animation
-    };
+    }, [onClose]);
 
     const getConfig = () => {
         switch (type) {

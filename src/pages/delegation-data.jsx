@@ -117,13 +117,14 @@ function DelegationPage({
       given_by: task.given_by || '',
       name: task.name || '',
       task_description: task.task_description || '',
+      audio_url: task.audio_url || null,
       task_start_date: task.task_start_date || '',
       frequency: task.frequency || '',
       duration: task.duration || '',
       enable_reminder: task.enable_reminder || '',
       require_attachment: task.require_attachment || '',
       remarks: task.remarks || '',
-      originalAudioUrl: isAudioUrl(task.task_description) ? task.task_description : null
+      originalAudioUrl: task.audio_url || (isAudioUrl(task.task_description) ? task.task_description : null)
     });
   };
 
@@ -158,7 +159,12 @@ function DelegationPage({
             .from('audio-recordings')
             .getPublicUrl(fileName);
 
-          finalEditData.task_description = publicUrlData.publicUrl;
+          finalEditData.audio_url = publicUrlData.publicUrl;
+
+          // If legacy audio was in description, clear it to separate
+          if (isAudioUrl(finalEditData.task_description)) {
+            finalEditData.task_description = '';
+          }
 
           if (editFormData.originalAudioUrl) {
             audioToCleanup = editFormData.originalAudioUrl;
@@ -169,7 +175,7 @@ function DelegationPage({
         } finally {
           setIsUploading(false);
         }
-      } else if (editFormData.originalAudioUrl && !isAudioUrl(editFormData.task_description)) {
+      } else if (editFormData.originalAudioUrl && editFormData.audio_url === null && !isAudioUrl(editFormData.task_description)) {
         audioToCleanup = editFormData.originalAudioUrl;
       }
 

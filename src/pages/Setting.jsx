@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, User, Building, X, Save, Edit, Trash2, Settings, Search, ChevronDown, Calendar, RefreshCw, Image } from 'lucide-react';
 import AdminLayout from '../components/layout/AdminLayout';
@@ -72,7 +72,7 @@ const Setting = () => {
   }, [userData, loading, error]);
 
 
-  const fetchDeviceLogsAndUpdateStatus = async () => {
+  const fetchDeviceLogsAndUpdateStatus = useCallback(async () => {
     // Set to true to enable background sync when the hardware API is online
     const ENABLE_DEVICE_SYNC = false;
     if (!ENABLE_DEVICE_SYNC) return;
@@ -161,7 +161,7 @@ const Setting = () => {
     } finally {
       setIsRefreshing(false);
     }
-  };
+  }, [dispatch, userData]);
 
   // Add real-time subscription
   useEffect(() => {
@@ -198,7 +198,7 @@ const Setting = () => {
       subscription.unsubscribe();
       clearInterval(intervalId);
     };
-  }, [dispatch]);
+  }, [dispatch, fetchDeviceLogsAndUpdateStatus]);
 
 
   // Add manual refresh button handler

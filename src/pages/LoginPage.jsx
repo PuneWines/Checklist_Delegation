@@ -16,12 +16,7 @@ const LoginPage = () => {
   const dispatch = useDispatch();
   const { showToast } = useMagicToast();
 
-  const [isDataLoading, setIsDataLoading] = useState(false)
   const [isLoginLoading, setIsLoginLoading] = useState(false)
-  const [masterData, setMasterData] = useState({
-    userCredentials: {},
-    userRoles: {}
-  })
   const [formData, setFormData] = useState({
     password: "",
   })
@@ -64,7 +59,7 @@ const LoginPage = () => {
       showToast(error, "error");
       setIsLoginLoading(false);
     }
-  }, [isLoggedIn, userData, error, navigate]);
+  }, [isLoggedIn, userData, error, navigate, showToast]);
 
 
 
@@ -125,9 +120,9 @@ const LoginPage = () => {
             <button
               type="submit"
               className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold hover:opacity-90 transition-all shadow-md active:scale-[0.98] disabled:opacity-50"
-              disabled={isLoginLoading || isDataLoading}
+              disabled={isLoginLoading}
             >
-              {isLoginLoading ? "Logging in..." : isDataLoading ? "Loading..." : "Login"}
+              {isLoginLoading ? "Logging in..." : "Login"}
             </button>
             <button
               type="button"
