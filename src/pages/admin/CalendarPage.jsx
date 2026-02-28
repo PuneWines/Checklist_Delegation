@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle2, AlertCircle, X, Edit, Save, Loader2, Play, Pause, Search, Mic, Users, Filter, Check, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle2, AlertCircle, X, Edit, Save, Loader2, Play, Pause, Search, Mic, Users, Filter, Check, ChevronDown, ShieldAlert } from 'lucide-react';
 import supabase from '../../SupabaseClient';
 
 const extractAudioUrl = (text) => {

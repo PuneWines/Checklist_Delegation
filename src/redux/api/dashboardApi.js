@@ -554,25 +554,20 @@ export const getTotalUsersCountApi = async (departmentFilter = null) => {
 
 export const getUniqueDepartmentsApi = async () => {
   try {
+    // Departments are managed in the dedicated 'departments' table (same as Settings page)
     const { data, error } = await supabase
-      .from('users')
-      .select('department')
-      .not('department', 'is', null)
-      .not('department', 'eq', '');
+      .from('departments')
+      .select('name')
+      .not('name', 'is', null)
+      .not('name', 'eq', '')
+      .order('name', { ascending: true });
 
     if (error) {
       console.error("Error fetching departments:", error);
       throw error;
     }
 
-    // Get unique departments, splitting comma-separated values
-    const uniqueDepartments = [...new Set(
-      data.flatMap(item => item.department.split(',')) // Split by comma
-        .map(dept => dept.trim()) // Remove extra spaces
-        .filter(dept => dept.length > 0) // Remove empty strings
-    )].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())); // Case-insensitive sort
-
-    return uniqueDepartments;
+    return (data || []).map(d => d.name.trim()).filter(Boolean);
   } catch (error) {
     console.error("Error from Supabase:", error);
     throw error;
@@ -580,14 +575,15 @@ export const getUniqueDepartmentsApi = async () => {
 };
 
 
+
 export const getStaffNamesByDepartmentApi = async (departmentFilter = null) => {
   try {
     let query = supabase
       .from('users')
-      .select('user_name, user_access')
+      .select('user_name, user_access, status')
       .not('user_name', 'is', null)
-      .neq('user_access', 'admin')
-      .not('user_name', 'eq', '');
+      .not('user_name', 'eq', '')
+      .eq('status', 'active'); // Only active users
 
     const { data, error } = await query;
 
@@ -596,20 +592,20 @@ export const getStaffNamesByDepartmentApi = async (departmentFilter = null) => {
       throw error;
     }
 
-    let filteredStaff = data.map(user => user.user_name);
+    // Exclude admins (user_access === 'admin')
+    let staff = data.filter(user => (user.user_access || '').toLowerCase() !== 'admin');
 
     // Filter by department if provided
     if (departmentFilter && departmentFilter !== 'all') {
-      filteredStaff = data
-        .filter(user => {
-          if (!user.user_access) return false;
-          const userDepartments = user.user_access.split(',').map(dept => dept.trim().toLowerCase());
-          return userDepartments.includes(departmentFilter.toLowerCase());
-        })
-        .map(user => user.user_name);
+      staff = staff.filter(user => {
+        if (!user.user_access) return false;
+        const userDepartments = user.user_access.split(',').map(dept => dept.trim().toLowerCase());
+        return userDepartments.includes(departmentFilter.toLowerCase());
+      });
     }
 
-    return [...new Set(filteredStaff)]; // Remove duplicates
+    const names = [...new Set(staff.map(user => user.user_name).filter(Boolean))];
+    return names.sort((a, b) => a.localeCompare(b)); // Alphabetical order
   } catch (error) {
     console.error("Error from Supabase:", error);
     throw error;

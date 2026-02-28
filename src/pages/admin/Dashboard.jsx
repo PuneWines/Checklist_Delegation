@@ -557,17 +557,23 @@ export default function AdminDashboard() {
       // Extract unique staff names for the dropdown BEFORE staff filtering
       let uniqueStaff;
 
-      if (dashboardType === 'checklist' && departmentFilter !== 'all') {
-        // For checklist with department filter, get staff from users table based on user_access
+      if (mainTab === 'maintenance' || mainTab === 'repair' ||
+        departmentFilter === 'Maintenance' || departmentFilter === 'Repair') {
+        // For maintenance/repair tabs, extract from task data (no users table link)
+        uniqueStaff = [...new Set(data.map((task) => task.name).filter((name) => name && name.trim() !== ""))];
+      } else {
+        // For checklist/delegation: always fetch from users table (department-aware)
+        // This shows ALL users in the selected department, not just those with tasks in the current batch
         try {
-          uniqueStaff = await getStaffNamesByDepartmentApi(departmentFilter);
+          uniqueStaff = await getStaffNamesByDepartmentApi(departmentFilter !== 'all' ? departmentFilter : null);
+          // Cross-filter: only show staff who actually have tasks assigned (in the full task table)
+          const staffWithTasks = new Set(data.map((task) => (task.name || '').trim().toLowerCase()));
+          uniqueStaff = uniqueStaff.filter(name => staffWithTasks.has((name || '').trim().toLowerCase()));
         } catch (error) {
-          console.error('Error fetching staff by department:', error);
+          console.error('Error fetching staff from users table:', error);
+          // Fallback: extract from loaded task data
           uniqueStaff = [...new Set(data.map((task) => task.name).filter((name) => name && name.trim() !== ""))];
         }
-      } else {
-        // Default behavior - extract from task data
-        uniqueStaff = [...new Set(data.map((task) => task.name).filter((name) => name && name.trim() !== ""))];
       }
 
       // For non-admin users, always ensure current user appears in staff dropdown
@@ -774,28 +780,9 @@ export default function AdminDashboard() {
   const fetchDepartments = async () => {
     if (dashboardType === 'checklist' || dashboardType === 'delegation') {
       try {
+        // Fetch all departments from the departments table — admins see all
         const departments = await getUniqueDepartmentsApi();
-        console.log('All departments from API:', departments);
-
-        // Get user's department access
-        const userAccess = localStorage.getItem("user_access") || "";
-        console.log('User access from localStorage:', userAccess);
-
-        const userDepartments = userAccess
-          ? userAccess.split(',').map(dept => dept.trim().toLowerCase())
-          : [];
-        console.log('Parsed user departments:', userDepartments);
-
-        // Filter departments based on user access for admin users
-        let filteredDepartments = departments;
-        if (userRole === "admin" && userDepartments.length > 0 && !userDepartments.includes('all')) {
-          filteredDepartments = departments.filter(dept =>
-            userDepartments.includes(dept.toLowerCase())
-          );
-        }
-
-        console.log('Filtered departments:', filteredDepartments);
-        setAvailableDepartments(filteredDepartments);
+        setAvailableDepartments(departments);
       } catch (error) {
         console.error('Error fetching departments:', error);
         setAvailableDepartments([]);

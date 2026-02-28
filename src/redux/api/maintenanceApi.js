@@ -281,9 +281,7 @@ export const updateMaintenanceTaskApi = async (updatedTask, originalTask) => {
             given_by: updatedTask.given_by,
             name: updatedTask.name,
             task_description: updatedTask.task_description,
-            audio_url: updatedTask.audio_url, // Added audio_url
-            task_start_date: updatedTask.task_start_date,
-            planned_date: updatedTask.task_start_date,
+            audio_url: updatedTask.audio_url,
             freq: updatedTask.freq,
             status: updatedTask.status,
             remarks: updatedTask.remarks

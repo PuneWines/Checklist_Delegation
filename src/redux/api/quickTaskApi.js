@@ -138,20 +138,17 @@ export const deleteChecklistTasksApi = async (tasks) => {
 };
 
 export const deleteDelegationTasksApi = async (tasks) => {
-  // Use task_id (stored as `id` in the mapped row) for a reliable single-row delete
-  const taskIds = tasks.map(t => t.task_id || t.id).filter(Boolean);
+  for (const task of tasks) {
+    const { error } = await supabase
+      .from("delegation")
+      .delete()
+      .eq("department", task.department)
+      .eq("name", task.name)
+      .eq("task_description", task.task_description)
+      .is("submission_date", null);
 
-  if (taskIds.length === 0) throw new Error("No valid task IDs to delete");
-
-  const { data, error } = await supabase
-    .from("delegation")
-    .delete()
-    .in("task_id", taskIds)
-    .is("submission_date", null)
-    .select();
-
-  if (error) throw error;
-  // Return the original task objects so the slice can filter them out by id
+    if (error) throw error;
+  }
   return tasks;
 };
 
@@ -162,13 +159,11 @@ export const updateChecklistTaskApi = async (updatedTask, originalTask) => {
       given_by: updatedTask.given_by,
       name: updatedTask.name,
       task_description: updatedTask.task_description,
-      audio_url: updatedTask.audio_url, // Added audio_url
-      task_start_date: updatedTask.task_start_date,
-      planned_date: updatedTask.task_start_date,
+      audio_url: updatedTask.audio_url,
       frequency: updatedTask.frequency,
       require_attachment: updatedTask.require_attachment,
       remark: updatedTask.remark,
-      admin_done: false // Reset admin approval on update if status changes? No, only specific status.
+      admin_done: false
     });
 
     if (originalTask) {
@@ -199,9 +194,7 @@ export const updateDelegationTaskApi = async (updatedTask, originalTask) => {
       given_by: updatedTask.given_by,
       name: updatedTask.name,
       task_description: updatedTask.task_description,
-      audio_url: updatedTask.audio_url, // Added audio_url
-      task_start_date: updatedTask.task_start_date,
-      planned_date: updatedTask.task_start_date,
+      audio_url: updatedTask.audio_url,
       frequency: updatedTask.frequency,
       duration: updatedTask.duration || null,
       enable_reminder: updatedTask.enable_reminder,
