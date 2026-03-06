@@ -233,6 +233,7 @@ export default function QuickTask() {
         audio_url: task.audio_url || null,
         task_start_date: task.task_start_date || '',
         freq: task.freq || '',
+        duration: task.duration || '',
         status: task.status || '',
         remarks: task.remarks || '',
         originalAudioUrl: task.audio_url || (isAudioUrl(task.task_description) ? task.task_description : null),
@@ -247,6 +248,7 @@ export default function QuickTask() {
         audio_url: task.audio_url || null, // Added audio_url
         task_start_date: task.task_start_date || '',
         frequency: task.frequency || '',
+        duration: task.duration || '',
         enable_reminder: task.enable_reminder || '',
         require_attachment: task.require_attachment || '',
         remark: task.remark || '',
@@ -703,7 +705,7 @@ export default function QuickTask() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
                         <input
                           type="checkbox"
-                          checked={selectedTasks.length === filteredChecklistTasks.length && filteredChecklistTasks.length > 0}
+                          checked={filteredChecklistTasks.length > 0 && filteredChecklistTasks.every(t => selectedTasks.find(s => s.id === t.id))}
                           onChange={handleSelectAll}
                           className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                         />
@@ -717,6 +719,7 @@ export default function QuickTask() {
                         { key: 'name', label: 'Name' },
                         { key: 'task_start_date', label: 'Working Day', bg: 'bg-yellow-50' },
                         { key: 'frequency', label: 'Frequency' },
+                        { key: 'duration', label: 'Duration' },
                         { key: 'enable_reminder', label: 'Reminders' },
                         { key: 'require_attachment', label: 'Attachment' },
                         { key: 'remarks', label: 'Remarks' },
@@ -746,7 +749,7 @@ export default function QuickTask() {
                           <td className="px-4 py-4 whitespace-nowrap">
                             <input
                               type="checkbox"
-                              checked={selectedTasks.includes(task)}
+                              checked={!!selectedTasks.find(t => t.id === task.id)}
                               onChange={() => handleCheckboxChange(task)}
                               className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                             />
@@ -979,6 +982,25 @@ export default function QuickTask() {
                             )}
                           </td>
 
+                          {/* Duration */}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-blue-50">
+                            {editingTaskId === task.id ? (
+                              <input
+                                type="text"
+                                value={editFormData.duration || ''}
+                                onChange={(e) => handleInputChange('duration', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                placeholder="e.g. 15 mins"
+                              />
+                            ) : (
+                              task.duration ? (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  ⏱ {task.duration}
+                                </span>
+                              ) : "—"
+                            )}
+                          </td>
+
                           {/* Enable Reminders */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {editingTaskId === task.id ? (
@@ -1050,7 +1072,7 @@ export default function QuickTask() {
                         <div className="flex justify-between items-start gap-3">
                           <input
                             type="checkbox"
-                            checked={selectedTasks.find(t => t.id === task.id)}
+                            checked={!!selectedTasks.find(t => t.id === task.id)}
                             onChange={() => handleCheckboxChange(task)}
                             className="mt-1 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                           />
@@ -1121,6 +1143,12 @@ export default function QuickTask() {
                                   <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>{task.department}</span>
                                   <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>{task.name}</span>
                                   <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>{formatTimestampToDDMMYYYY(task.task_start_date)}</span>
+                                  {task.duration && (
+                                    <span className="flex items-center gap-1.5 text-blue-600">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                                      ⏱ {task.duration}
+                                    </span>
+                                  )}
                                 </div>
                               </>
                             )}
@@ -1166,7 +1194,7 @@ export default function QuickTask() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
                         <input
                           type="checkbox"
-                          checked={selectedTasks.length === filteredMaintenance.length && filteredMaintenance.length > 0}
+                          checked={filteredMaintenance.length > 0 && filteredMaintenance.every(t => selectedTasks.find(s => s.id === t.id))}
                           onChange={handleSelectAll}
                           className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                         />
@@ -1182,6 +1210,7 @@ export default function QuickTask() {
                         { label: 'Name' },
                         { label: 'Working Day', bg: 'bg-yellow-50' },
                         { label: 'Frequency' },
+                        { label: 'Duration' },
                         { label: 'Status' },
                         { label: 'Remarks' },
                       ].map((column) => (
@@ -1468,6 +1497,25 @@ export default function QuickTask() {
                                 }`}>
                                 <span className="capitalize">{task.freq}</span>
                               </span>
+                            )}
+                          </td>
+
+                          {/* Duration */}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-blue-50">
+                            {editingTaskId === task.id ? (
+                              <input
+                                type="text"
+                                value={editFormData.duration || ''}
+                                onChange={(e) => handleInputChange('duration', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                placeholder="e.g. 1 hour"
+                              />
+                            ) : (
+                              task.duration ? (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  ⏱ {task.duration}
+                                </span>
+                              ) : "—"
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

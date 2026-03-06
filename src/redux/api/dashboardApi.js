@@ -77,10 +77,23 @@ export const fetchDashboardDataApi = async (
         break;
 
       case 'all':
-        // No date filters for all tasks
+        // Fetch tasks from start-of-previous-month up to today.
+        // This ensures we include the full current + previous month data (e.g. Feb 24 → Mar 6)
+        // while excluding stale old records that inflate the count.
+        {
+          const now2 = new Date();
+          // Lower bound: 1st day of the PREVIOUS month (covers last ~2 months)
+          const prevMonthStart = new Date(now2.getFullYear(), now2.getMonth() - 1, 1)
+            .toISOString().split('T')[0];
+          const upperBound = endDate || today;
+          const lowerBound = startDate || prevMonthStart;
+          query = query
+            .gte(dateColumn, `${lowerBound}T00:00:00`)
+            .lte(dateColumn, `${upperBound}T23:59:59`);
+        }
         break;
       default:
-        // For checklist/delegation "all" or undefined views, we don't want to restrict to today
+        // For checklist/delegation, default to lte today
         if (dashboardType !== 'checklist' && dashboardType !== 'delegation') {
           query = query.lte(dateColumn, `${today}T23:59:59`);
         }

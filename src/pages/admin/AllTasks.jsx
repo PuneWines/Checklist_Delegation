@@ -1205,7 +1205,11 @@ const AllTasks = () => {
                           <th className="px-3 sm:px-6 py-3 sm:py-4 text-left font-bold text-gray-900">
                             <input
                               type="checkbox"
-                              checked={selectedItems.size === filteredPendingTasks.length && filteredPendingTasks.length > 0}
+                              checked={(() => {
+                                const col = activeTab === "repair" ? "created_at" : "planned_date";
+                                const submittableTasks = filteredPendingTasks.filter(t => getTimeStatus(t[col], t.status) !== "Upcoming");
+                                return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
+                              })()}
                               onChange={handleSelectAll}
                               className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30"
                             />

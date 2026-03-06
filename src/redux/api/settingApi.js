@@ -107,28 +107,42 @@ export const createUserApi = async (newUser) => {
     const newId = lastId + 1;
 
     // Step 2: Insert user with new ID
-    const { data, error } = await supabase
+    const insertData = {
+      id: newId,
+      user_name: newUser.username,
+      password: newUser.password,
+      email_id: newUser.email,
+      number: newUser.phone,
+      employee_id: newUser.employee_id,
+      role: newUser.role,
+      status: newUser.status,
+      user_access: newUser.user_access,
+      department: newUser.department,
+      profile_image: newUser.profile_image || null,
+      leave_date: newUser.leave_date || null,
+      leave_end_date: newUser.leave_end_date || null,
+      remark: newUser.remark || null
+    };
+
+    // Add designation if provided
+    if (newUser.Designation) {
+      insertData.Designation = newUser.Designation;
+    }
+
+    let { data, error } = await supabase
       .from("users")
-      .insert([
-        {
-          id: newId,
-          user_name: newUser.username,
-          password: newUser.password,
-          email_id: newUser.email,
-          number: newUser.phone,
-          employee_id: newUser.employee_id, // Add this line
-          role: newUser.role,
-          status: newUser.status,
-          user_access: newUser.user_access,
-          department: newUser.department, // Add department
-          profile_image: newUser.profile_image || null, // Add profile_image
-          leave_date: newUser.leave_date || null,
-          leave_end_date: newUser.leave_end_date || null,
-          remark: newUser.remark || null
-        }
-      ])
+      .insert([insertData])
       .select()
       .maybeSingle();
+
+    // Fallback if Designation column doesn't exist
+    if (error && (error.code === 'PGRST204' || error.message?.includes('Designation') || error.code === '42703')) {
+      console.warn("⚠️ Column 'Designation' likely missing, retrying without it:", error.message);
+      const { Designation, ...fallbackData } = insertData;
+      const retry = await supabase.from("users").insert([fallbackData]).select().maybeSingle();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.log("Error when posting data:", error);
@@ -144,6 +158,7 @@ export const createUserApi = async (newUser) => {
 
 export const updateUserDataApi = async ({ id, updatedUser }) => {
   try {
+    // Build the update payload - NEVER include undefined values (causes Supabase 400)
     const updateData = {
       user_name: updatedUser.user_name,
       email_id: updatedUser.email_id,
@@ -152,44 +167,57 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
       role: updatedUser.role,
       status: updatedUser.status,
       user_access: updatedUser.user_access,
-      department: updatedUser.department, // Add department
-      profile_image: updatedUser.profile_image // Add profile_image
+      department: updatedUser.department,
+      profile_image: updatedUser.profile_image
     };
+
+    // Only include Designation if explicitly set
+    if ('Designation' in updatedUser && updatedUser.Designation !== undefined) {
+      updateData.Designation = updatedUser.Designation || null;
+    }
 
     // Only update password if a new one is provided
     if (updatedUser.password && updatedUser.password.trim() !== "") {
       updateData.password = updatedUser.password;
     }
 
-    // Add leave data if provided
-    if (updatedUser.leave_date !== undefined) {
-      updateData.leave_date = updatedUser.leave_date;
-    }
-    if (updatedUser.leave_end_date !== undefined) {
-      updateData.leave_end_date = updatedUser.leave_end_date;
-    }
-    if (updatedUser.remark !== undefined) {
-      updateData.remark = updatedUser.remark;
-    }
+    // Add optional fields
+    const optionalFields = ['leave_date', 'leave_end_date', 'remark'];
+    optionalFields.forEach(field => {
+      if (updatedUser[field] !== undefined) {
+        updateData[field] = updatedUser[field];
+      }
+    });
 
-    const { data, error } = await supabase
+    console.log("🚀 Attempting to update user ID:", id, "with data:", updateData);
+
+    let { data, error } = await supabase
       .from("users")
       .update(updateData)
       .eq("id", id)
       .select()
       .maybeSingle();
 
-    console.log(data, "data")
-    console.log(error, "error")
+    // If 400 error (column not found or invalid column reference)
+    // PGRST204: column not found in select
+    // 42703: column does not exist in update
+    if (error && (error.code === 'PGRST204' || error.code === '42703' || error.message?.toLowerCase().includes('Designation'.toLowerCase()))) {
+      console.warn("⚠️ Designation update failed, retrying without Designation field. Error:", error.message);
+      const { Designation, ...fallbackData } = updateData;
+      const retry = await supabase.from("users").update(fallbackData).eq("id", id).select().maybeSingle();
+      data = retry.data;
+      error = retry.error;
+    }
+
     if (error) {
-      console.log("Error when update data", error);
+      console.error("❌ Final update error:", error);
       throw error;
     }
 
-    console.log("update successfully", data);
+    console.log("✅ Update successful:", data);
     return data;
   } catch (error) {
-    console.log("Error from Supabase", error);
+    console.error("❌ Exception in updateUserDataApi:", error);
     throw error;
   }
 };

@@ -283,6 +283,7 @@ export const updateMaintenanceTaskApi = async (updatedTask, originalTask) => {
             task_description: updatedTask.task_description,
             audio_url: updatedTask.audio_url,
             freq: updatedTask.freq,
+            duration: updatedTask.duration || null,
             status: updatedTask.status,
             remarks: updatedTask.remarks
         });

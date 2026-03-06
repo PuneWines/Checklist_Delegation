@@ -483,25 +483,47 @@ export default function AdminDashboard() {
 
   const fetchDepartmentData = async (page = 1, append = false) => {
     try {
-      if (page === 1) {
-        setIsLoadingMore(true)
-        setHasMoreData(true)
-      } else {
-        setIsLoadingMore(true)
-      }
+      setIsLoadingMore(true);
+      if (page === 1) setHasMoreData(true);
 
-      // Use the updated API function with department filter
-      let data = []
+      // Fetch ALL pages of data for accurate stat counts
+      let data = [];
 
-      // Determine what data to fetch based on mainTab and dashboardType
       if (mainTab === 'maintenance' || departmentFilter === 'Maintenance') {
-        const result = await fetchAllMaintenanceTasksForDashboard(page, batchSize);
-        data = result.data || [];
+        // Maintenance pagination
+        let p = 1;
+        let hasMore = true;
+        while (hasMore) {
+          const result = await fetchAllMaintenanceTasksForDashboard(p, batchSize);
+          const batch = result.data || [];
+          data = [...data, ...batch];
+          if (batch.length < batchSize) hasMore = false;
+          p++;
+          if (p > 20) break; // safety limit
+        }
       } else if (mainTab === 'repair' || departmentFilter === 'Repair') {
-        const result = await fetchAllRepairTasks(page, batchSize);
-        data = result.data || [];
+        // Repair pagination
+        let p = 1;
+        let hasMore = true;
+        while (hasMore) {
+          const result = await fetchAllRepairTasks(p, batchSize);
+          const batch = result.data || [];
+          data = [...data, ...batch];
+          if (batch.length < batchSize) hasMore = false;
+          p++;
+          if (p > 20) break; // safety limit
+        }
       } else {
-        data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', departmentFilter)
+        // Checklist / Delegation: fetch ALL pages for full accurate count
+        let p = 1;
+        let hasMore = true;
+        while (hasMore) {
+          const batch = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, p, batchSize, 'all', departmentFilter);
+          data = [...data, ...(batch || [])];
+          if (!batch || batch.length < batchSize) hasMore = false;
+          p++;
+          if (p > 30) break; // safety limit (30,000 records max)
+        }
       }
 
       if (!data || data.length === 0) {
@@ -514,19 +536,23 @@ export default function AdminDashboard() {
             pendingTasks: 0,
             overdueTasks: 0,
             completionRate: 0,
-          }))
+          }));
         }
-        setHasMoreData(false)
-        setIsLoadingMore(false)
-        return
+        setHasMoreData(false);
+        setIsLoadingMore(false);
+        return;
       }
 
-      console.log(`Fetched ${data.length} records successfully for ${mainTab || departmentFilter}`)
+      console.log(`✅ Fetched ${data.length} TOTAL records for ${mainTab || dashboardType}`);
 
       const username = localStorage.getItem("user-name")
       const userRole = (localStorage.getItem("role") || "").toLowerCase()
-      const today = new Date()
-      today.setHours(23, 59, 59, 999)
+      // Reference point for all date comparisons
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      const today = todayEnd; // alias: every task with date <= today is counted
 
       let totalTasks = 0
       let completedTasks = 0
@@ -610,15 +636,29 @@ export default function AdminDashboard() {
           const taskStartDate = parseTaskStartDate(task.planned_date || task.task_start_date || task.created_at);
           const completionDate = task.submission_date ? parseTaskStartDate(task.submission_date) : null;
 
-          let status = "pending";
+          // Determine task status accurately
+          let status;
           if (completionDate) {
             status = "completed";
-          } else if (taskStartDate && isDateInPast(taskStartDate)) {
+          } else if (taskStartDate && taskStartDate < todayStart) {
+            // Past date, no submission = overdue
             status = "overdue";
+          } else if (taskStartDate && taskStartDate >= todayStart && taskStartDate <= todayEnd) {
+            // Today's date, no submission = pending (Due Today)
+            status = "pending";
+          } else {
+            // Future date = upcoming
+            status = "upcoming";
           }
 
-          // Only count tasks up to today for cards (but keep all tasks for table display)
+          // ── STATS COUNTING ──────────────────────────────────────────
+          // We fetched all tasks up to today. Now classify each one:
+          //   Completed  → has submission_date (regardless of planned_date)
+          //   Due Today  → planned_date == today, no submission_date
+          //   Overdue    → planned_date < today, no submission_date
+          // Future tasks (planned_date > today) are NOT counted in stats.
           if (taskStartDate && taskStartDate <= today) {
+            totalTasks++; // Analyzed = everything up to today
             if (status === "completed") {
               completedTasks++;
               if (dashboardType === "delegation" && task.submission_date) {
@@ -626,11 +666,12 @@ export default function AdminDashboard() {
                 else if (task.color_code_for === 2) completedRatingTwo++;
                 else if (task.color_code_for >= 3) completedRatingThreePlus++;
               }
-            } else {
-              pendingTasks++;
-              if (status === "overdue") overdueTasks++;
+            } else if (status === "overdue") {
+              overdueTasks++;  // past date, not submitted
+            } else if (status === "pending") {
+              pendingTasks++;  // today's date, not submitted
             }
-            totalTasks++;
+            // "upcoming" not counted — future tasks
           }
 
           // Update monthly data for all tasks
@@ -1029,10 +1070,12 @@ export default function AdminDashboard() {
     pendingTasks: filteredDateStats.pendingTasks || 0,
     overdueTasks: filteredDateStats.overdueTasks || 0,
   } : {
-    totalTasks: totalTask || 0,
-    completedTasks: completeTask || 0,
-    pendingTasks: pendingTask || 0,
-    overdueTasks: overdueTask || 0,
+    // Use departmentData which is computed from the FULL paginated fetch (all tasks up to today)
+    // This matches the actual row count in the table/sheet rather than the Redux month-restricted count
+    totalTasks: departmentData.totalTasks || 0,
+    completedTasks: departmentData.completedTasks || 0,
+    pendingTasks: departmentData.pendingTasks || 0,
+    overdueTasks: departmentData.overdueTasks || 0,
   };
 
   const notDoneTask = (displayStats.totalTasks || 0) - (displayStats.completedTasks || 0);

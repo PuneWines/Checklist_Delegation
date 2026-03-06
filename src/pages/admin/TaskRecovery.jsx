@@ -11,16 +11,15 @@ export default function TaskRecovery() {
     const [anchorDate, setAnchorDate] = useState("");
     const [status, setStatus] = useState("");
     const [holidays, setHolidays] = useState([]);
-
     const [workingDays, setWorkingDays] = useState(new Set());
-    const [activeTab, setActiveTab] = useState('checklist');
+    const [activeTab, setActiveTab] = useState('checklist'); // checklist, maintenance_tasks, delegation
     const [duplicateStats, setDuplicateStats] = useState({}); // { seriesKey: count }
 
     useEffect(() => {
         fetchUniqueSeries();
         fetchHolidays();
         fetchWorkingDays();
-    }, []);
+    }, [activeTab]);
 
     const fetchHolidays = async () => {
         const { data } = await supabase.from('holidays').select('holiday_date');
@@ -36,21 +35,19 @@ export default function TaskRecovery() {
 
     const fetchUniqueSeries = async (query = "") => {
         setIsLoading(true);
-        const tableName = activeTab === 'maintenance' ? 'maintenance_tasks' : activeTab;
-        const descField = activeTab === 'maintenance' ? 'task_description' : 'task_description'; // unified field
+        const tableName = activeTab;
 
-        setStatus(query ? `Searching across 15,000+ tasks for "${query}" in ${activeTab}...` : `Loading unique series from ${activeTab}...`);
+        setStatus(query ? `Searching for "${query}" in ${activeTab}...` : `Loading ${activeTab} series...`);
         try {
             let allData = [];
             let from = 0;
             const step = 1000;
             let hasMore = true;
 
-            while (hasMore && from < 20000) {
+            while (hasMore && from < 30000) {
                 let supabaseQuery = supabase
                     .from(tableName)
-                    .select(`task_description, name, ${activeTab === 'maintenance' ? 'machine_name' : 'department'}, ${activeTab === 'maintenance' ? 'freq' : 'frequency'}`)
-                    .is('submission_date', null)
+                    .select(`planned_date, task_description, name, ${activeTab === 'maintenance_tasks' ? 'machine_name' : 'department'}, ${activeTab === 'maintenance_tasks' ? 'freq' : 'frequency'}`)
                     .range(from, from + step - 1);
 
                 if (query) {
@@ -67,21 +64,23 @@ export default function TaskRecovery() {
                 if (!query) setStatus(`Fetched ${allData.length} records...`);
             }
 
-            const seen = new Set();
+            const seenSeries = new Set();
             const unique = [];
             const duplicates = {};
 
             allData.forEach(row => {
                 const dateKey = row.planned_date?.split('T')[0] || "no-date";
-                const seriesKey = `${row.task_description}|${row.name}`;
+                const name = (row.name || "").trim().toLowerCase();
+                const desc = (row.task_description || "").trim().toLowerCase();
+                const context = (row.department || row.machine_name || "").trim().toLowerCase();
+                const seriesKey = `${name}|${desc}|${context}`;
                 const clashKey = `${seriesKey}|${dateKey}`;
 
-                if (!seen.has(seriesKey)) {
-                    seen.add(seriesKey);
+                if (!seenSeries.has(seriesKey)) {
+                    seenSeries.add(seriesKey);
                     unique.push(row);
                 }
 
-                // Track how many tasks exist for EXACTLY the same day
                 if (duplicates[clashKey]) {
                     duplicates[clashKey]++;
                     duplicates[seriesKey] = (duplicates[seriesKey] || 0) + 1;
@@ -89,9 +88,10 @@ export default function TaskRecovery() {
                     duplicates[clashKey] = 1;
                 }
             });
+
             setSeriesList(unique);
             setDuplicateStats(duplicates);
-            setStatus(`Analysis complete. Found ${unique.length} unique series across ${allData.length} pending tasks in ${activeTab}.`);
+            setStatus(`Analysis complete. Found ${unique.length} series in ${activeTab}.`);
         } catch (err) {
             console.error(err);
             setStatus("Fetch failed: " + err.message);
@@ -115,43 +115,45 @@ export default function TaskRecovery() {
             ];
 
             for (const table of tables) {
-                setStatus(`Scanning entire ${table.name} table (Live & History)...`);
-                let allData = [];
+                setStatus(`Scanning ${table.name}...`);
+                let allItems = [];
                 let from = 0;
                 let hasMore = true;
 
                 while (hasMore) {
-                    // Removed .is('submission_date', null) to include history in cleanup
                     const { data, error } = await supabase.from(table.name).select(`*`).range(from, from + 999);
                     if (error) throw error;
-                    allData = [...allData, ...data];
+                    allItems = [...allItems, ...data];
                     if (data.length < 1000) hasMore = false;
                     from += 1000;
                 }
 
-                // IMPORTANT: Sort by ID so we always keep the FIRST one created
-                allData.sort((a, b) => (a[table.idField] || 0) - (b[table.idField] || 0));
+                // Keep submitted tasks over pending, then keep oldest by ID
+                allItems.sort((a, b) => {
+                    if (a.submission_date && !b.submission_date) return -1;
+                    if (!a.submission_date && b.submission_date) return 1;
+                    return (a[table.idField] || 0) - (b[table.idField] || 0);
+                });
 
-                const seen = new Set();
+                const seenKeys = new Set();
                 const toDelete = [];
 
-                allData.forEach(row => {
-                    const dateStr = row[table.dateField]?.split('T')[0] || "no-date";
-                    // Identity is Person + Task Description + DATE
-                    const key = `${row.name?.trim()}|${row.task_description?.trim()}|${dateStr}`;
+                allItems.forEach(item => {
+                    const dateStr = item[table.dateField]?.split('T')[0] || "no-date";
+                    const name = (item.name || "").trim().toLowerCase();
+                    const desc = (item.task_description || "").trim().toLowerCase();
+                    const context = (item.department || item.machine_name || "").trim().toLowerCase();
+                    const key = `${name}|${desc}|${context}|${dateStr}`;
 
-                    if (seen.has(key)) {
-                        // This is a duplicate (Live or History)
-                        toDelete.push(row[table.idField]);
+                    if (seenKeys.has(key)) {
+                        toDelete.push(item[table.idField]);
                     } else {
-                        // This is the primary record for this date, keep it
-                        seen.set(key, true);
+                        seenKeys.add(key);
                     }
                 });
 
                 if (toDelete.length > 0) {
-                    setStatus(`Deleting ${toDelete.length} duplicates from ${table.name}...`);
-                    // Deleting in chunks of 100 to avoid URL length issues
+                    setStatus(`Cleaning ${toDelete.length} duplicates from ${table.name}...`);
                     for (let i = 0; i < toDelete.length; i += 100) {
                         const chunk = toDelete.slice(i, i + 100);
                         const { error: delError } = await supabase.from(table.name).delete().in(table.idField, chunk);
@@ -161,7 +163,7 @@ export default function TaskRecovery() {
                 }
             }
 
-            setStatus(`SUCCESS: Global cleanup complete. Total ${totalDeleted} duplicate rows removed.`);
+            setStatus(`SUCCESS: Cleanup complete. Removed ${totalDeleted} duplicates.`);
             fetchUniqueSeries();
         } catch (err) {
             console.error(err);
@@ -181,14 +183,13 @@ export default function TaskRecovery() {
             const step = 1000;
             let hasMore = true;
 
-            // Fetch ALL tasks for this series (including history) using pagination
             while (hasMore) {
                 const { data, error } = await supabase
-                    .from('checklist')
+                    .from(activeTab)
                     .select('*')
                     .eq('task_description', series.task_description)
                     .eq('name', series.name)
-                    .order('task_id', { ascending: true })
+                    .order(activeTab === 'maintenance_tasks' ? 'id' : 'task_id', { ascending: true })
                     .range(from, from + step - 1);
 
                 if (error) throw error;
@@ -198,41 +199,22 @@ export default function TaskRecovery() {
             }
 
             setTasks(allTasks);
-
-            // Auto-set anchor to first unsubmitted task
             const firstUnsubmitted = allTasks.find(t => !t.submission_date);
             if (firstUnsubmitted) {
                 setAnchorDate(firstUnsubmitted.planned_date.substring(0, 16));
             }
         } catch (err) {
-            setStatus("Error loading details: " + err.message);
+            setStatus("Error: " + err.message);
         } finally {
             setIsLoading(false);
         }
     };
 
-    const getLocalDateString = (d) => {
+    const isBadDate = (d) => {
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-
-    const getNextDate = (date, frequency) => {
-        const next = new Date(date);
-        const f = (frequency || 'daily').toLowerCase();
-        if (f.includes('daily')) next.setDate(next.getDate() + 1);
-        else if (f.includes('weekly')) next.setDate(next.getDate() + 7);
-        else if (f.includes('monthly')) next.setMonth(next.getMonth() + 1);
-        else if (f.includes('alternate')) next.setDate(next.getDate() + 2);
-        else if (f.includes('fortnight')) next.setDate(next.getDate() + 14);
-        else next.setDate(next.getDate() + 1);
-        return next;
-    };
-
-    const isBadDate = (d) => {
-        const dateStr = getLocalDateString(d);
-        // Is bad if it's a holiday OR if it is NOT in the working day calendar
+        const dateStr = `${year}-${month}-${day}`;
         return holidays.includes(dateStr) || !workingDays.has(dateStr);
     };
 
@@ -242,40 +224,41 @@ export default function TaskRecovery() {
         setStatus("Repairing dates...");
 
         try {
-            const unsubmitted = tasks.filter(t => !t.submission_date).sort((a, b) => a.task_id - b.task_id);
+            const unsubmitted = tasks.filter(t => !t.submission_date).sort((a, b) => (a.task_id || a.id) - (b.task_id || b.id));
             const timePart = anchorDate.split('T')[1] || "09:00";
-
             let currentLoopDate = new Date(anchorDate);
 
-            // Validate first date (if manually entered date is a weekend/holiday, find next good day)
             while (isBadDate(currentLoopDate)) {
-                currentLoopDate = getNextDate(currentLoopDate, 'daily');
+                currentLoopDate.setDate(currentLoopDate.getDate() + 1);
             }
 
             for (let i = 0; i < unsubmitted.length; i++) {
                 const task = unsubmitted[i];
+                const year = currentLoopDate.getFullYear();
+                const month = String(currentLoopDate.getMonth() + 1).padStart(2, '0');
+                const day = String(currentLoopDate.getDate()).padStart(2, '0');
+                const targetDate = `${year}-${month}-${day}T${timePart}:00`;
 
-                let targetDate;
-                if (i === 0) {
-                    targetDate = `${getLocalDateString(currentLoopDate)}T${timePart}:00`;
-                } else {
-                    let nextDate = getNextDate(currentLoopDate, selectedSeries.frequency);
-                    while (isBadDate(nextDate)) {
-                        nextDate = getNextDate(nextDate, 'daily');
-                    }
-                    currentLoopDate = nextDate;
-                    targetDate = `${getLocalDateString(currentLoopDate)}T${timePart}:00`;
-                }
-
-                await supabase.from('checklist')
+                await supabase.from(activeTab)
                     .update({ planned_date: targetDate, task_start_date: targetDate })
-                    .eq('task_id', task.task_id);
+                    .eq(activeTab === 'maintenance_tasks' ? 'id' : 'task_id', task.task_id || task.id);
+
+                // Increment for next
+                const freq = (selectedSeries.frequency || selectedSeries.freq || 'daily').toLowerCase();
+                if (freq.includes('weekly')) currentLoopDate.setDate(currentLoopDate.getDate() + 7);
+                else if (freq.includes('monthly')) currentLoopDate.setMonth(currentLoopDate.getMonth() + 1);
+                else if (freq.includes('alternate')) currentLoopDate.setDate(currentLoopDate.getDate() + 2);
+                else currentLoopDate.setDate(currentLoopDate.getDate() + 1);
+
+                while (isBadDate(currentLoopDate)) {
+                    currentLoopDate.setDate(currentLoopDate.getDate() + 1);
+                }
             }
 
             setStatus("Series repaired successfully.");
-            loadSeriesDetail(selectedSeries); // refresh list
+            loadSeriesDetail(selectedSeries);
         } catch (err) {
-            setStatus("Repair failed: " + err.message);
+            setStatus("Error: " + err.message);
         } finally {
             setIsLoading(false);
         }
@@ -284,7 +267,7 @@ export default function TaskRecovery() {
     return (
         <AdminLayout>
             <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                     <h1 style={{ margin: 0 }}>Task Recovery & Maintenance</h1>
                     <button
                         onClick={handleCleanupDuplicates}
@@ -294,151 +277,122 @@ export default function TaskRecovery() {
                         Cleanup All Duplicates
                     </button>
                 </div>
-                <p style={{ color: '#666', marginBottom: '20px' }}>Fix series dates or wipe out duplicate rows from all tables.</p>
+
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                    {['checklist', 'maintenance_tasks', 'delegation'].map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => { setActiveTab(tab); setSelectedSeries(null); setTasks([]); }}
+                            style={{
+                                padding: '10px 20px',
+                                backgroundColor: activeTab === tab ? '#2563eb' : '#f3f4f6',
+                                color: activeTab === tab ? 'white' : '#475569',
+                                border: '1px solid #ddd',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: 'bold',
+                                textTransform: 'capitalize'
+                            }}
+                        >
+                            {tab.replace('_tasks', '')}
+                        </button>
+                    ))}
+                </div>
 
                 {status && (
-                    <div style={{ padding: '15px', borderRadius: '4px', backgroundColor: status.includes('Error') ? '#fee2e2' : '#dcfce7', color: status.includes('Error') ? '#991b1b' : '#166534', marginBottom: '20px', fontWeight: 'bold' }}>
+                    <div style={{ padding: '15px', borderRadius: '4px', backgroundColor: status.includes('Error') || status.includes('Failed') ? '#fee2e2' : '#dcfce7', color: status.includes('Error') || status.includes('Failed') ? '#991b1b' : '#166534', marginBottom: '20px', fontWeight: 'bold' }}>
                         {status}
                     </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1fr) 2fr', gap: '20px' }}>
-                    {/* Left Panel: Search & Select */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1fr) 2fr', gap: '30px' }}>
                     <div>
-                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
                             <input
                                 type="text"
-                                placeholder="Search description or staff..."
+                                placeholder="Search series..."
                                 style={{ flex: 1, padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && fetchUniqueSeries(searchTerm)}
                             />
                             <button
                                 onClick={() => fetchUniqueSeries(searchTerm)}
                                 disabled={isLoading}
-                                style={{ padding: '0 15px', backgroundColor: '#475569', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                                style={{ padding: '0 20px', backgroundColor: '#475569', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                             >
                                 Search
                             </button>
                         </div>
-                        <div style={{ height: '650px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: 'white' }}>
+                        <div style={{ height: '600px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: 'white' }}>
                             {seriesList.length > 0 ? seriesList.map((s, i) => {
-                                const seriesKey = `${s.task_description}|${s.name}`;
-                                const dupCount = duplicateStats[seriesKey] || 0;
+                                const name = (s.name || "").trim().toLowerCase();
+                                const desc = (s.task_description || "").trim().toLowerCase();
+                                const ctx = (s.department || s.machine_name || "").trim().toLowerCase();
+                                const skey = `${name}|${desc}|${ctx}`;
+                                const dcount = duplicateStats[skey] || 0;
                                 return (
                                     <div
                                         key={i}
                                         onClick={() => loadSeriesDetail(s)}
-                                        style={{
-                                            padding: '15px',
-                                            borderBottom: '1px solid #eee',
-                                            cursor: 'pointer',
-                                            backgroundColor: selectedSeries === s ? '#eff6ff' : 'white',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center'
-                                        }}
+                                        style={{ padding: '15px', borderBottom: '1px solid #eee', cursor: 'pointer', backgroundColor: selectedSeries === s ? '#eff6ff' : 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                                     >
-                                        <div>
-                                            <div style={{ fontWeight: '900', fontSize: '14px', color: '#1e293b' }}>{s.task_description}</div>
-                                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
-                                                <span style={{ fontWeight: 'bold', color: '#475569' }}>{s.name}</span> | {s.frequency || s.freq}
-                                            </div>
+                                        <div style={{ overflow: 'hidden' }}>
+                                            <div style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{s.task_description}</div>
+                                            <div style={{ fontSize: '12px', color: '#64748b' }}>{s.name} | {s.frequency || s.freq}</div>
                                         </div>
-                                        {dupCount > 0 && (
-                                            <span style={{ backgroundColor: '#fee2e2', color: '#dc2626', fontSize: '10px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px' }}>
-                                                {dupCount} CLASHES
-                                            </span>
-                                        )}
+                                        {dcount > 0 && <span style={{ backgroundColor: '#fee2e2', color: '#dc2626', fontSize: '10px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px' }}>{dcount} CLASHES</span>}
                                     </div>
                                 );
-                            }) : (
-                                <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>
-                                    {isLoading ? 'Searching database...' : 'No results found.'}
-                                </div>
-                            )}
+                            }) : <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No series found.</div>}
                         </div>
                     </div>
 
-                    {/* Right Panel: Detail & Fix */}
                     <div style={{ border: '1px solid #ddd', borderRadius: '4px', padding: '20px', backgroundColor: 'white' }}>
                         {selectedSeries ? (
                             <>
                                 <h2 style={{ marginTop: 0 }}>{selectedSeries.task_description}</h2>
-                                <p style={{ color: '#666' }}>Staff: {selectedSeries.name} | Frequency: {selectedSeries.frequency}</p>
+                                <p style={{ color: '#666' }}>{selectedSeries.department || selectedSeries.machine_name} | {selectedSeries.name}</p>
 
                                 <div style={{ border: '1px solid #e5e7eb', padding: '15px', borderRadius: '4px', backgroundColor: '#f9fafb', marginBottom: '20px' }}>
                                     <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>New Start Date for First Pending Task:</label>
                                     <div style={{ display: 'flex', gap: '10px' }}>
-                                        <input
-                                            type="datetime-local"
-                                            value={anchorDate}
-                                            onChange={(e) => setAnchorDate(e.target.value)}
-                                            style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', flex: 1 }}
-                                        />
-                                        <button
-                                            onClick={handleRepair}
-                                            disabled={isLoading || !anchorDate}
-                                            style={{
-                                                padding: '8px 20px',
-                                                backgroundColor: '#2563eb',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: '4px',
-                                                cursor: isLoading ? 'not-allowed' : 'pointer',
-                                                fontWeight: 'bold'
-                                            }}
-                                        >
-                                            {isLoading ? 'Processing...' : 'Repair This Series'}
-                                        </button>
+                                        <input type="datetime-local" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px', flex: 1 }} />
+                                        <button onClick={handleRepair} disabled={isLoading || !anchorDate} style={{ padding: '8px 20px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Repair Series</button>
                                     </div>
                                 </div>
 
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                                    <thead>
-                                        <tr style={{ backgroundColor: '#f3f4f6' }}>
-                                            <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'left' }}>Task ID</th>
-                                            <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'left' }}>Planned Date</th>
-                                            <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'left' }}>Status / Conflict</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {(() => {
-                                            const dateCounter = {};
-                                            return tasks.map((t, idx) => {
-                                                const dateStr = t.planned_date.split('T')[0];
-                                                dateCounter[dateStr] = (dateCounter[dateStr] || 0) + 1;
-                                                const isClash = dateCounter[dateStr] > 1;
-
-                                                return (
-                                                    <tr key={idx} style={{ backgroundColor: isClash ? '#fff1f2' : 'transparent' }}>
-                                                        <td style={{ border: '1px solid #ddd', padding: '10px' }}>#{t.task_id || t.id}</td>
-                                                        <td style={{ border: '1px solid #ddd', padding: '10px' }}>
-                                                            {t.planned_date.replace('T', ' ')}
-                                                            {isClash && <span style={{ marginLeft: '10px', color: '#e11d48', fontSize: '10px', fontWeight: 'bold' }}>⚠️ DUPLICATE DATE</span>}
-                                                        </td>
-                                                        <td style={{ border: '1px solid #ddd', padding: '10px' }}>
-                                                            {t.submission_date ? (
-                                                                <span style={{ color: '#059669', fontWeight: 'bold' }}>DONE</span>
-                                                            ) : isClash ? (
-                                                                <span style={{ color: '#e11d48', fontWeight: 'bold' }}>FOR DELETION</span>
-                                                            ) : (
-                                                                <span style={{ color: '#d97706', fontWeight: 'bold' }}>PENDING (SERIES)</span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            });
-                                        })()}
-                                    </tbody>
-                                </table>
+                                <div style={{ maxHeight: '450px', overflowY: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                        <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f3f4f6' }}>
+                                            <tr>
+                                                <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>ID</th>
+                                                <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Date</th>
+                                                <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(() => {
+                                                const dcounts = {};
+                                                return tasks.map((t, idx) => {
+                                                    const dkey = t.planned_date.split('T')[0];
+                                                    dcounts[dkey] = (dcounts[dkey] || 0) + 1;
+                                                    const clash = dcounts[dkey] > 1;
+                                                    return (
+                                                        <tr key={idx} style={{ backgroundColor: clash ? '#fff1f2' : 'transparent' }}>
+                                                            <td style={{ border: '1px solid #ddd', padding: '8px' }}>#{t.task_id || t.id}</td>
+                                                            <td style={{ border: '1px solid #ddd', padding: '8px' }}>{t.planned_date.replace('T', ' ')}{clash && <b style={{ color: '#e11d48', fontSize: '10px', marginLeft: '5px' }}>⚠️ DUP</b>}</td>
+                                                            <td style={{ border: '1px solid #ddd', padding: '8px' }}>
+                                                                {t.submission_date ? <b style={{ color: '#059669' }}>DONE</b> : clash ? <b style={{ color: '#e11d48' }}>CLASH</b> : <span>PENDING</span>}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                });
+                                            })()}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </>
-                        ) : (
-                            <div style={{ textAlign: 'center', padding: '100px', color: '#999' }}>
-                                Select a task series from the left to view and fix.
-                            </div>
-                        )}
+                        ) : <div style={{ textAlign: 'center', padding: '100px', color: '#999' }}>Select a series to repair.</div>}
                     </div>
                 </div>
             </div>

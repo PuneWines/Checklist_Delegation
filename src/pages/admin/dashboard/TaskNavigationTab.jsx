@@ -348,6 +348,18 @@ export default function TaskNavigationTabs({
 
       // Apply client-side search filter AND smart deduplication
       let filteredTasks = processedTasks.filter((task) => {
+        // 0. Tab view strict filter (Prevents UTC offset task leakage across tabs)
+        // If the task view is 'recent', we only want TODAY'S tasks. If the local calculation 
+        // says it's "Upcoming", we hide it from this tab.
+        if (taskView === 'recent') {
+          // Keep tasks categorized as Today or already Submitted
+          if (task.timeStatus !== 'Today' && task.timeStatus !== 'Submitted') return false;
+        } else if (taskView === 'upcoming') {
+          if (task.timeStatus !== 'Upcoming') return false;
+        } else if (taskView === 'overdue') {
+          if (task.timeStatus !== 'Overdue') return false;
+        }
+
         // 1. Search filter
         if (searchQuery && searchQuery.trim() !== "") {
           const query = searchQuery.toLowerCase().trim()

@@ -17,7 +17,8 @@ const parseJsonIfNeeded = (val) => {
 export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all') => {
   try {
     // Fetch a large batch so we can deduplicate client-side, then paginate
-    const FETCH_LIMIT = 2000;
+    // Increased to 10000 to cover all pending rows, even after large task generation
+    const FETCH_LIMIT = 10000;
 
     let query = supabase
       .from('checklist')
@@ -71,7 +72,7 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
 // Fetch unique delegation tasks — one row per unique task_description + name combination
 export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all') => {
   try {
-    const FETCH_LIMIT = 2000;
+    const FETCH_LIMIT = 10000;
 
     let query = supabase
       .from('delegation')
@@ -165,6 +166,7 @@ export const updateChecklistTaskApi = async (updatedTask, originalTask) => {
       task_description: updatedTask.task_description,
       audio_url: updatedTask.audio_url,
       frequency: updatedTask.frequency,
+      duration: updatedTask.duration || null,
       require_attachment: updatedTask.require_attachment,
       remark: updatedTask.remark,
       admin_done: false

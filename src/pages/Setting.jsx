@@ -479,6 +479,7 @@ const Setting = () => {
     status: 'active',
     department: '',
     user_access: '',
+    Designation: '',
     profile_image: ''
   });
 
@@ -584,11 +585,12 @@ const Setting = () => {
       password: userForm.password,
       email_id: userForm.email,
       number: userForm.phone,
-      employee_id: userForm.employee_id, // Add this line
+      employee_id: userForm.employee_id,
       role: userForm.role,
       status: userForm.status,
       user_access: userForm.user_access || userForm.department,
       department: userForm.department,
+      Designation: userForm.Designation || null,
       profile_image: imageUrl,
       leave_date: userForm.leave_date || null,
       leave_end_date: userForm.leave_end_date || null,
@@ -839,6 +841,7 @@ const Setting = () => {
       user_access: user.user_access || '',
       role: user.role || 'user',
       status: user.status || 'active',
+      Designation: user.Designation || '',
       profile_image: user.profile_image || '',
       leave_date: user.leave_date ? user.leave_date.split('T')[0] : '',
       leave_end_date: user.leave_end_date ? user.leave_end_date.split('T')[0] : '',
@@ -899,11 +902,12 @@ const Setting = () => {
       password: '',
       phone: '',
       employee_id: '',
-      department: '', // Add this line
+      department: '',
       user_access: '',
       givenBy: '',
       role: 'user',
       status: 'active',
+      Designation: '',
       profile_image: '',
       leave_date: '',
       leave_end_date: '',
@@ -1420,6 +1424,9 @@ const Setting = () => {
                           Department
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Designation
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Status
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1465,6 +1472,9 @@ const Setting = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">{user?.department || '—'}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-purple-700 font-bold">{user?.Designation || '—'}</div>
                           </td>
 
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -1570,6 +1580,12 @@ const Setting = () => {
                               <p className="text-[10px] text-gray-400 uppercase font-semibold">Department</p>
                               <p className="text-xs text-indigo-700 font-bold">{user?.department || '—'}</p>
                             </div>
+                            {user?.Designation && (
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Designation</p>
+                                <p className="text-xs text-purple-700 font-bold">{user.Designation}</p>
+                              </div>
+                            )}
                           </div>
 
                           {(user?.status === 'on leave' || user?.status === 'on_leave') && user?.leave_date && (
@@ -2156,10 +2172,24 @@ const Setting = () => {
                       </select>
                     </div>
 
+                    {/* Designation Field — shown for both new and edit */}
+                    <div className="space-y-2">
+                      <label htmlFor="Designation" className="block text-sm font-bold text-gray-700 ml-1">Designation</label>
+                      <input
+                        type="text"
+                        name="Designation"
+                        id="Designation"
+                        value={userForm.Designation}
+                        onChange={handleUserInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                        placeholder="e.g. Senior Technician, Supervisor..."
+                      />
+                    </div>
+
                     {isEditing && (
                       <>
                         <div className="md:col-span-2 border-t border-gray-100 pt-4 mt-2">
-                          <h4 className="text-sm font-bold text-indigo-900 mb-4 px-1">Leave & Status Management</h4>
+                          <h4 className="text-sm font-bold text-indigo-900 mb-4 px-1">Leave &amp; Status Management</h4>
                         </div>
 
                         <div className="space-y-2">
@@ -2215,6 +2245,7 @@ const Setting = () => {
                         </div>
                       </>
                     )}
+
                   </div>
 
                   <div className="flex justify-end gap-3 pt-6 border-t border-gray-50 mt-4">

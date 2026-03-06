@@ -561,11 +561,21 @@ export default function ChecklistTask() {
                 return;
             }
 
-            // Holiday check for one-time tasks
+            // Holiday & Working Day check for one-time tasks (matches handlePreview validation)
             if (t.frequency === "One Time (No Recurrence)") {
                 const dateStr = formatDateISO(t.date);
-                if (holidays.includes(dateStr)) {
-                    alert(`Task ${i + 1}: The selected date (${dateStr}) is a holiday. One-time tasks cannot be assigned on holidays.`);
+                const isH = holidays.includes(dateStr);
+
+                // Fetch working day status for this specific date
+                const { data: isW } = await supabase
+                    .from('working_day_calender')
+                    .select('working_date')
+                    .eq('working_date', dateStr)
+                    .single();
+
+                if (isH || !isW) {
+                    alert(`Task ${i + 1}: The selected date (${dateStr}) is a ${isH ? 'holiday' : 'non-working day'}. Please select a different working day.`);
+                    setIsSubmitting(false);
                     return;
                 }
             }
