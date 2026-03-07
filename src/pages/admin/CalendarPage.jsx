@@ -385,11 +385,11 @@ const CalendarPage = () => {
             if (task.type === 'checklist') {
                 tableName = 'checklist';
                 updates.remark = editForm.remark;
-                if (editForm.status === 'yes') updates.submission_date = new Date().toISOString();
+                if (editForm.status === 'yes') updates.submission_date = new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30');
             } else if (task.type === 'maintenance') {
                 tableName = 'maintenance_tasks';
                 updates.remarks = editForm.remark;
-                if (editForm.status === 'completed') updates.submission_date = new Date().toISOString();
+                if (editForm.status === 'completed') updates.submission_date = new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30');
             } else if (task.type === 'repair') {
                 tableName = 'repair_tasks';
                 updates.remarks = editForm.remark;

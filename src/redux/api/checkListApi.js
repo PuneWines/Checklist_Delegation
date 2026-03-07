@@ -168,7 +168,7 @@ export const updateChecklistData = async (submissionData) => {
         task_id: item.taskId || item.id,
         status: item.status?.toLowerCase(), // Convert to lowercase for DB enum
         remark: item.remarks,
-        submission_date: new Date().toISOString(),
+        submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
         image: imageUrl,
         // // Add other fields as needed
         // department: item.department,
@@ -206,9 +206,14 @@ export const postChecklistAdminDoneAPI = async (selectedHistoryItems) => {
     // const formattedDate = currentDate.toISOString(); // Or format as needed
 
     // Prepare the updates
+    const now = new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30');
+    const username = localStorage.getItem("user-name") || "Admin";
+
     const updates = selectedHistoryItems.map(item => ({
       task_id: item.id || item.task_id, // Assuming each item has an 'id' or 'task_id' field
       admin_done: "Done",
+      admin_approval_date: now,
+      admin_approved_by: username
       // You can add other fields to update if needed
     }));
 

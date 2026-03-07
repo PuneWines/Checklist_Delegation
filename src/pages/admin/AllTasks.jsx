@@ -872,7 +872,7 @@ const AllTasks = () => {
               task_description: task?.task_description,
               status: "extended", // Lowercase
               audio_url: task?.audio_url || null,
-              submission_date: new Date().toISOString(),
+              submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
               reason: remarksData[id] || null, // Aligned with delegation
               image_url: imageUrl, // Added to store image proof for extensions
               given_by: task?.given_by || localStorage.getItem("user-name") || "Admin",
@@ -889,7 +889,7 @@ const AllTasks = () => {
               extended_date: extendedDate, // Added to store extended date explicitly
               status: "extended", // Keep as extended so it's visible as such
               remarks: remarksData[id] || null,
-              updated_at: new Date().toISOString()
+              updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
             }).eq("task_id", id);
             if (updateError) throw updateError;
 
@@ -916,7 +916,7 @@ const AllTasks = () => {
               task_description: task?.task_description,
               status: "pending", // Waiting for admin approval (Lowercase)
               audio_url: task?.audio_url || null,
-              submission_date: new Date().toISOString(),
+              submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
               reason: remarksData[id] || null,
               image_url: imageUrl,
               given_by: task?.given_by || localStorage.getItem("user-name") || "Admin",
@@ -931,7 +931,7 @@ const AllTasks = () => {
               status: "done", // Mark as done for admin approval
               remarks: remarksData[id] || null,
               admin_done: false,
-              updated_at: new Date().toISOString()
+              updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
             };
             if (imageUrl) {
               updates.image_url = imageUrl;
@@ -942,7 +942,7 @@ const AllTasks = () => {
         } else {
           // Original logic for other task types
           const updates = {
-            [completionField]: new Date().toISOString(),
+            [completionField]: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
             [remarksField]: remarksData[id] || null,
             status: statusData[id] || ((activeTab === "checklist" || activeTab === "delegation") ? "yes" : "Done"),
             admin_done: false

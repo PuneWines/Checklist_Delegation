@@ -97,8 +97,8 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
 
           // Step 3: Update delegation table based on status
           let delegationUpdate = {
-            updated_at: new Date().toISOString(),
-            submission_date: new Date().toISOString(),
+            updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
+            submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
             image: imageUrl,
             remarks: taskData.reason
           };
@@ -305,10 +305,18 @@ export const updateDelegationDoneStatus = createAsyncThunk(
     try {
       console.log('Approve delegation task:', { id, taskId });
 
+      const username = localStorage.getItem("user-name") || "Admin";
+      const now = new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30');
+
       // Update delegation_done admin_done status
       const { data: doneData, error: doneError } = await supabase
         .from('delegation_done')
-        .update({ status: 'done', admin_done: true })
+        .update({
+          status: 'done',
+          admin_done: true,
+          admin_approval_date: now,
+          admin_approved_by: username
+        })
         .eq('id', id)
         .select()
         .maybeSingle();
@@ -319,7 +327,12 @@ export const updateDelegationDoneStatus = createAsyncThunk(
       if (taskId) {
         const { error: mainError } = await supabase
           .from('delegation')
-          .update({ admin_done: true, status: 'done' })
+          .update({
+            admin_done: true,
+            status: 'done',
+            admin_approval_date: now,
+            admin_approved_by: username
+          })
           .eq('task_id', taskId);
 
         if (mainError) throw mainError;

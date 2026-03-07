@@ -411,9 +411,15 @@ export const fetchPendingChecklistApprovals = async () => {
 
 export const approveChecklistTask = async (id) => {
   try {
+    const username = localStorage.getItem("user-name") || "Admin";
+    const now = new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30');
     const { data, error } = await supabase
       .from('checklist')
-      .update({ admin_done: true })
+      .update({
+        admin_done: true,
+        admin_approval_date: now,
+        admin_approved_by: username
+      })
       .eq('task_id', id)
       .select()
       .maybeSingle();

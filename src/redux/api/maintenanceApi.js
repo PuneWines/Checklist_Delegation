@@ -227,7 +227,7 @@ export const updateMaintenanceData = async (submissionData) => {
                 id: item.taskId,
                 status: item.status, // 'Done' or 'Issue'
                 remarks: item.remarks, // Note: Schema might be 'remarks' or 'remark' - check assumption. Schema likely 'remarks' if copied from checklist pattern, or check previous code.
-                submission_date: new Date().toISOString(),
+                submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
                 uploaded_image_url: imageUrl,
                 admin_done: false // Reset/Set to false when user submits maintenance task
             };
@@ -354,9 +354,15 @@ export const fetchPendingMaintenanceApprovals = async () => {
 
 export const approveMaintenanceTask = async (id) => {
     try {
+        const username = localStorage.getItem("user-name") || "Admin";
+        const now = new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30');
         const { data, error } = await supabase
             .from('maintenance_tasks')
-            .update({ admin_done: true })
+            .update({
+                admin_done: true,
+                admin_approval_date: now,
+                admin_approved_by: username
+            })
             .eq('id', id)
             .select() // .single may fail if no row found but here we have ID
             .maybeSingle();

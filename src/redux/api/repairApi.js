@@ -89,7 +89,7 @@ export const updateRepairData = async (updates) => {
                     vendor_name: item.vendorName || null,
                     work_photo_url: item.workPhotoUrl || null,
                     bill_copy_url: item.billCopyUrl || null,
-                    submission_date: new Date().toISOString(),
+                    submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
                 })
                 .eq('id', item.taskId)
                 .select();
@@ -156,10 +156,14 @@ export const fetchPendingRepairApprovals = async () => {
 
 export const approveRepairTask = async (id) => {
     try {
+        const username = localStorage.getItem("user-name") || "Admin";
+        const now = new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30');
         const { data, error } = await supabase
             .from('repair_tasks')
             .update({
-                status: 'Approved' // Just set status for now
+                status: 'Approved', // Just set status for now
+                admin_approval_date: now,
+                admin_approved_by: username
             })
             .eq('id', id)
             .select()

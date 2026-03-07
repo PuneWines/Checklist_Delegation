@@ -107,7 +107,7 @@ export const completeEATask = async (task, remarks = '', imageUrl = '') => {
                 planned_date: task.planned_date,
                 task_description: task.task_description,
                 status: 'pending', // Lowercase to match delegation pattern
-                submission_date: new Date().toISOString(),
+                submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
                 reason: remarks, // Aligned with delegation
                 image_url: imageUrl,
                 audio_url: task.audio_url || null, // Preserve audio_url in snapshot
@@ -126,7 +126,7 @@ export const completeEATask = async (task, remarks = '', imageUrl = '') => {
                 remarks: remarks,
                 image_url: imageUrl,
                 admin_done: false,
-                updated_at: new Date().toISOString()
+                updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
             })
             .eq('task_id', task.id || task.task_id)
             .select();
@@ -154,7 +154,7 @@ export const extendEATask = async (task, newPlannedDate, remarks = '', imageUrl 
                 planned_date: task.planned_date,
                 task_description: task.task_description,
                 status: 'extended', // Lowercase
-                submission_date: new Date().toISOString(),
+                submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
                 reason: remarks,
                 image_url: imageUrl, // Added to store image proof
                 audio_url: task.audio_url || null, // Preserve audio_url in snapshot
@@ -174,7 +174,7 @@ export const extendEATask = async (task, newPlannedDate, remarks = '', imageUrl 
                 extended_date: newPlannedDate, // Added to store extended date explicitly
                 status: 'extended',
                 remarks: remarks,
-                updated_at: new Date().toISOString()
+                updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
             })
             .eq('task_id', task.id || task.task_id)
             .select();
@@ -250,11 +250,19 @@ export const fetchPendingEAApprovals = async () => {
 export const approveEATaskV2 = async (id, doneId) => {
     console.log("APPROVING EA TASK WITH ID:", id, "DONE_ID:", doneId);
     try {
+        const username = localStorage.getItem("user-name") || "Admin";
+        const now = new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30');
+
         // 1. Update ea_tasks_done
         if (doneId) {
             await supabase
                 .from('ea_tasks_done')
-                .update({ status: 'done', updated_at: new Date().toISOString() })
+                .update({
+                    status: 'done',
+                    updated_at: now,
+                    admin_approval_date: now,
+                    admin_approved_by: username
+                })
                 .eq('id', doneId);
         }
 
@@ -264,7 +272,9 @@ export const approveEATaskV2 = async (id, doneId) => {
             .update({
                 admin_done: true,
                 status: 'done',
-                updated_at: new Date().toISOString()
+                updated_at: now,
+                admin_approval_date: now,
+                admin_approved_by: username
             })
             .eq('task_id', id)
             .select();
@@ -283,7 +293,7 @@ export const rejectEATask = async (id, doneId, reason) => {
         if (doneId) {
             await supabase
                 .from('ea_tasks_done')
-                .update({ status: 'rejected', updated_at: new Date().toISOString() })
+                .update({ status: 'rejected', updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30') })
                 .eq('id', doneId);
         }
 
@@ -294,7 +304,7 @@ export const rejectEATask = async (id, doneId, reason) => {
                 admin_done: false,
                 status: 'pending',
                 remarks: reason,
-                updated_at: new Date().toISOString()
+                updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
             })
             .eq('task_id', id)
             .select()

@@ -710,7 +710,7 @@ function DelegationDataPage() {
           image_url: uploadedImages[id] ? null : item.image,
           require_attachment: item.require_attachment,
           audio_url: item.audio_url || null,
-          submission_timestamp: new Date().toISOString()
+          submission_timestamp: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
         };
       });
 

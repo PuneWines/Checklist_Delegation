@@ -7,7 +7,7 @@ import { fetchPendingMaintenanceApprovals, approveMaintenanceTask, rejectMainten
 import { fetchPendingRepairApprovals, approveRepairTask, rejectRepairTask, fetchApprovedRepairs } from "../../redux/api/repairApi";
 import { fetchPendingEAApprovals, approveEATaskV2, rejectEATask, fetchApprovedEA } from "../../redux/api/eaApi";
 import { fetchPendingChecklistApprovals, approveChecklistTask, rejectChecklistTask, fetchChecklistHistory } from "../../redux/api/quickTaskApi";
-import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase, XCircle, History, Clock } from "lucide-react";
+import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase, XCircle, History, Clock, User } from "lucide-react";
 import { sendTaskRejectionNotification } from "../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../context/MagicToastContext";
@@ -155,7 +155,17 @@ export default function AdminApprovalPage() {
     const formatDate = (dateStr) => {
         if (!dateStr) return "-";
         try {
-            return new Date(dateStr).toLocaleString();
+            // Ensure proper Indian Standard Time formatting
+            const date = new Date(dateStr);
+            return date.toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
         } catch {
             return dateStr;
         }
@@ -277,7 +287,9 @@ export default function AdminApprovalPage() {
                                             activeTab === "maintenance" ? "Task/Machine" : "Issue/Machine"}
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submission Time</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        {viewMode === "pending" ? "Submission Time" : "Approval Data"}
+                                    </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proof</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                                 </tr>
@@ -352,8 +364,19 @@ export default function AdminApprovalPage() {
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">{task.department || '-'}</span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-medium">
-                                                {formatDate(task.created_at || task.submission_timestamp || task.submission_date)}
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                {viewMode === 'pending' ? (
+                                                    <span className="text-xs text-gray-500 font-medium">
+                                                        {formatDate(task.submission_date || task.submission_timestamp || task.created_at)}
+                                                    </span>
+                                                ) : (
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Approved By</span>
+                                                        <span className="text-sm font-bold text-gray-800">{task.admin_approved_by || "Admin"}</span>
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">At Time</span>
+                                                        <span className="text-xs text-blue-600 font-medium">{formatDate(task.admin_approval_date || task.updated_at || task.submission_date)}</span>
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {task.image_url || task.uploaded_image_url || task.work_photo_url ? (
@@ -439,9 +462,16 @@ export default function AdminApprovalPage() {
                                     <div className="flex justify-between items-start">
                                         <div className="space-y-1">
                                             <p className="text-sm font-black text-gray-900">{task.doer_name || task.name || task.filled_by}</p>
-                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                                                <Clock size={10} /> {formatDate(task.created_at || task.submission_timestamp || task.submission_date)}
-                                            </p>
+                                            <div className="space-y-1 mt-1">
+                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                                                    <Clock size={10} /> {viewMode === 'pending' ? 'Submitted' : 'Approved'}: {formatDate(viewMode === 'pending' ? (task.submission_date || task.submission_timestamp || task.created_at) : (task.admin_approval_date || task.updated_at || task.submission_date))}
+                                                </p>
+                                                {viewMode === 'history' && (
+                                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                        <User size={10} /> By: {task.admin_approved_by || "Admin"}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
                                         <span className="text-[10px] font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
                                             {task.department || 'No Dept'}

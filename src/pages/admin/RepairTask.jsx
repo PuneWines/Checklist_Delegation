@@ -45,7 +45,6 @@ function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions,
         today.setHours(0, 0, 0, 0);
 
         return userData.filter(u => {
-            if (u.role !== 'user') return false;
 
             // If they are on leave, check the dates
             if ((u.status === 'on leave' || u.status === 'on_leave') && u.leave_date && u.leave_end_date) {
@@ -196,9 +195,9 @@ export default function RepairTask() {
     const { givenBy } = useSelector((state) => state.assignTask);
     const { customDropdowns = [], userData = [] } = useSelector((state) => state.setting || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [successMessage, setSuccessMessage] = useState("");
     const [tasks, setTasks] = useState([defaultTask()]);
     const [holidays, setHolidays] = useState([]);
+    const [isTodayWorkingDay, setIsTodayWorkingDay] = useState(true);
 
     const getUniqueDropdownValues = (category) => {
         const items = customDropdowns.filter(item => item.category === category);
@@ -207,11 +206,24 @@ export default function RepairTask() {
     };
 
     useEffect(() => {
-        const fetchHolidays = async () => {
-            const { data } = await supabase.from('holidays').select('holiday_date');
-            if (data) setHolidays(data.map(h => h.holiday_date));
+        const fetchHolidaysAndWorkingDays = async () => {
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            // Fetch holidays
+            const { data: holidayData } = await supabase.from('holidays').select('holiday_date');
+            if (holidayData) setHolidays(holidayData.map(h => h.holiday_date));
+
+            // Fetch working days for today
+            const { data: workingData } = await supabase
+                .from('working_day_calender')
+                .select('working_date')
+                .eq('working_date', todayStr)
+                .single();
+
+            if (workingData) setIsTodayWorkingDay(true);
+            else setIsTodayWorkingDay(false);
         };
-        fetchHolidays();
+        fetchHolidaysAndWorkingDays();
         dispatch(uniqueGivenByData());
         dispatch(customDropdownDetails());
         dispatch(userDetails());
@@ -238,10 +250,11 @@ export default function RepairTask() {
             }
         }
 
-        // Holiday check for today (Repairs are created for today)
+        // Holiday & Working Day check for today (Repairs are created for today)
         const todayStr = new Date().toISOString().split('T')[0];
-        if (holidays.includes(todayStr)) {
-            showToast(`Cannot submit repair requests today as it is a holiday (${todayStr}).`, 'error');
+
+        if (holidays.includes(todayStr) || !isTodayWorkingDay) {
+            showToast(`Cannot submit repair requests today as it is a ${holidays.includes(todayStr) ? 'holiday' : 'non-working day'} (${todayStr}).`, 'error');
             return;
         }
 
@@ -321,17 +334,6 @@ export default function RepairTask() {
                         <X className="w-5 h-5" />
                     </button>
                 </div>
-
-                {/* Success Message */}
-                {successMessage && (
-                    <div className="mb-5 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <CheckCircle2 size={18} />
-                            <span className="font-bold text-sm">{successMessage}</span>
-                        </div>
-                        <button onClick={() => setSuccessMessage("")} className="text-green-600 hover:text-green-800 font-bold text-lg">×</button>
-                    </div>
-                )}
 
                 {/* Task Cards */}
                 <div className="space-y-4">
