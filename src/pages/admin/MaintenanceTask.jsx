@@ -739,7 +739,7 @@ export default function MaintenanceTask() {
                         if (task) {
                             const notificationData = {
                                 doerName: task.name,
-                                taskId: task.id,
+                                taskId: task.id || task.task_id,
                                 description: task.task_description,
                                 audioUrl: task.audio_url,
                                 startDate: new Date(task.task_start_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),

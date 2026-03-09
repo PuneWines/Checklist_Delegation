@@ -314,7 +314,7 @@ export default function RepairTask() {
                     if (assignee) {
                         await sendTaskAssignmentNotification({
                             doerName: assignee,
-                            taskId: insertedTask.id,
+                            taskId: insertedTask.id || insertedTask.task_id,
                             description: insertedTask.issue_description,
                             audioUrl: insertedTask.audio_url,
                             startDate: new Date(insertedTask.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),

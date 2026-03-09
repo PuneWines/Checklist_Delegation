@@ -675,7 +675,7 @@ export default function ChecklistTask() {
 
                             await sendTaskAssignmentNotification({
                                 doerName: t.name,
-                                taskId: t.id,
+                                taskId: t.task_id || t.id,
                                 description: t.task_description,
                                 audioUrl: t.audio_url,
                                 startDate: new Date(t.task_start_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
