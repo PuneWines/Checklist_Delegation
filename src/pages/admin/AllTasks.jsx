@@ -111,8 +111,11 @@ const AllTasks = () => {
   const [userRole, setUserRole] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
+
+  // Infinite Scroll Tracking
+  const [visibleCount, setVisibleCount] = useState(50);
+  const loadingRef = useRef(null);
+
   const statusDateColumn = activeTab === "repair" ? "created_at" : "planned_date";
   // Use planned_date for checklist/delegation sort — task_start_date is same for all occurrences of a recurring task
   const sortDateColumn = activeTab === "repair" ? "created_at" : "planned_date";
@@ -430,18 +433,24 @@ const AllTasks = () => {
         } else if (activeTab === "ea") {
           query = query.in("status", ["pending", "extend", "extended"]).order("task_start_date", { ascending: true });
         } else if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance") {
-          // Fetch ALL pending tasks (no DB date restriction).
-          // Smart dedup in filteredPendingTasks handles upcoming dedup:
-          //   Overdue/Today → show all occurrences per day
-          //   Upcoming      → show only NEXT occurrence per task series
-          // Sorted ascending: oldest overdue first → today → next upcoming
+          // Pre-filter: Don't fetch absurdly old records, keep UI fast and avoid freezing.
+          // Fetch overdue (up to 1.5 years back) to upcoming tasks (up to 6 months forward)
+          const pastDate = new Date();
+          pastDate.setFullYear(pastDate.getFullYear() - 1);
+          pastDate.setMonth(pastDate.getMonth() - 6);
+
+          const futureDate = new Date();
+          futureDate.setMonth(futureDate.getMonth() + 6);
+
           query = query
             .is(completionField, null)
+            .gte('planned_date', pastDate.toISOString().split('T')[0] + 'T00:00:00')
+            .lte('planned_date', futureDate.toISOString().split('T')[0] + 'T23:59:59')
             .order('planned_date', { ascending: true });
         }
       }
 
-      // Fetch once without loop
+      // Fetch
       const { data, error: fetchError } = await query.limit(10000);
 
       if (fetchError) throw fetchError;
@@ -632,89 +641,41 @@ const AllTasks = () => {
       }
     }, [filteredPendingTasks, dateFilter, activeTab, getTimeStatus]);
 
-  // Handle Page Change
-  const handlePageChange = useCallback((page) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  const paginatedTasks = useMemo(() => {
+    return (showHistory ? filteredHistoryTasks : filteredPendingTasks).slice(0, visibleCount);
+  }, [showHistory, filteredHistoryTasks, filteredPendingTasks, visibleCount]);
 
-  // Reset page when filters change
+  const totalItemsRendered = paginatedTasks.length;
+  const exactTotalAvailable = (showHistory ? filteredHistoryTasks : filteredPendingTasks).length;
+
+  // Intersection Observer for infinite scrolling inside AdminLayout
   useEffect(() => {
-    setCurrentPage(1);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoading) {
+          setVisibleCount((prev) => prev + 50);
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    );
+
+    if (loadingRef.current) {
+      observer.observe(loadingRef.current);
+    }
+
+    return () => {
+      if (loadingRef.current) observer.unobserve(loadingRef.current);
+    };
+  }, [isLoading, paginatedTasks.length]);
+
+  // Reset visible count when filters or UI scope changes
+  useEffect(() => {
+    setVisibleCount(50);
   }, [activeTab, showHistory, searchTerm, dateFilter, startDate, endDate]);
 
-  const paginatedTasks = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return (showHistory ? filteredHistoryTasks : filteredPendingTasks).slice(start, start + itemsPerPage);
-  }, [showHistory, filteredHistoryTasks, filteredPendingTasks, currentPage, itemsPerPage]);
+  // Output pagination definitions successfully hoisted.
 
-  const totalPages = Math.ceil((showHistory ? filteredHistoryTasks : filteredPendingTasks).length / itemsPerPage);
-
-  const PaginationUI = () => {
-    if (totalPages <= 1) return null;
-    return (
-      <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200 mt-4 rounded-xl shadow-sm">
-        <div className="flex justify-between flex-1 sm:hidden">
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className="relative ml-3 inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-          >
-            Next
-          </button>
-        </div>
-        <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm text-gray-700 font-medium">
-              Showing <span className="text-purple-600">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="text-purple-600">{Math.min(currentPage * itemsPerPage, (showHistory ? filteredHistoryTasks : filteredPendingTasks).length)}</span> of <span className="text-purple-600">{(showHistory ? filteredHistoryTasks : filteredPendingTasks).length}</span> results
-            </p>
-          </div>
-          <div>
-            <nav className="inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum;
-                if (totalPages <= 5) pageNum = i + 1;
-                else if (currentPage <= 3) pageNum = i + 1;
-                else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
-                else pageNum = currentPage - 2 + i;
-
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => handlePageChange(pageNum)}
-                    className={`relative inline-flex items-center px-4 py-2 text-sm font-bold ${currentPage === pageNum ? 'z-10 bg-purple-600 text-white shadow-lg' : 'text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50'}`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-            </nav>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  // Pagination loader logic is directly in the return standard JSX now.
 
   // File Upload
   const handleImageUpload = useCallback((id, e) => {
@@ -1701,7 +1662,20 @@ const AllTasks = () => {
                     </div>
                   )}
                 </div>
-                <PaginationUI />
+
+                {/* Infinite Scroll Sentinel */}
+                {exactTotalAvailable > 0 && (
+                  <div ref={loadingRef} className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm w-full">
+                    {totalItemsRendered < exactTotalAvailable ? (
+                      <div className="flex items-center space-x-3 bg-white px-6 py-3 rounded-full shadow-sm border border-gray-100">
+                        <div className="w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+                        <span className="font-medium text-gray-600">Loading more tasks...</span>
+                      </div>
+                    ) : (
+                      <span className="bg-gray-50 text-gray-400 px-4 py-2 rounded-full font-medium text-xs">All tasks loaded.</span>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>

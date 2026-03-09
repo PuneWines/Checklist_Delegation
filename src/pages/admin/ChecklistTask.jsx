@@ -472,11 +472,13 @@ export default function ChecklistTask() {
 
                 // For other frequencies, shift to next working day if current is bad
                 let target = new Date(current);
-                while (isHoliday(target) || !isWorkingDay(target)) {
+                while (target <= endDate && (isHoliday(target) || !isWorkingDay(target))) {
                     target.setDate(target.getDate() + 1);
                 }
 
-                dates.push(toLocalISO(target));
+                if (target <= endDate) {
+                    dates.push(toLocalISO(target));
+                }
 
                 if (freqKey === 'weekly') current = addDays(current, 7);
                 else if (freqKey === 'fortnight') current = addDays(current, 14);
@@ -491,52 +493,52 @@ export default function ChecklistTask() {
     };
 
     const handlePreview = async () => {
-        for (let i = 0; i < tasks.length; i++) {
-            const t = tasks[i];
-            if (!t.department || !t.givenBy) {
-                showToast(`Task ${i + 1}: Please select Department and Assign From.`, 'error');
-                return;
-            }
-            if (!t.doer || !t.date || (!t.description && !t.recordedAudio)) {
-                showToast(`Task ${i + 1}: Please fill in Doer, Date, and Description or Voice Note.`, 'error');
-                return;
-            }
-
-            // Holiday & Working Day check for one-time tasks
-            if (t.frequency === "One Time (No Recurrence)") {
-                const dateStr = formatDateISO(t.date);
-                const isH = holidays.includes(dateStr);
-
-                // Fetch working day status for this specific date
-                const { data: isW } = await supabase
-                    .from('working_day_calender')
-                    .select('working_date')
-                    .eq('working_date', dateStr)
-                    .single();
-
-                if (isH || !isW) {
-                    showToast(`Task ${i + 1}: The selected date (${dateStr}) is a ${isH ? 'holiday' : 'non-working day'}. Please select a different working day.`, 'error');
-                    return;
-                }
-            }
-        }
-
         setIsSubmitting(true);
         try {
-            const allTasks = [];
-            for (const task of tasks) {
+            // Parallel Validation
+            const validationResults = await Promise.all(tasks.map(async (t, i) => {
+                if (!t.department || !t.givenBy) {
+                    return { success: false, message: `Task ${i + 1}: Please select Department and Assign From.` };
+                }
+                if (!t.doer || !t.date || (!t.description && !t.recordedAudio)) {
+                    return { success: false, message: `Task ${i + 1}: Please fill in Doer, Date, and Description or Voice Note.` };
+                }
+
+                if (t.frequency === "One Time (No Recurrence)") {
+                    const dateStr = formatDateISO(t.date);
+                    const isH = holidays.includes(dateStr);
+                    const { data: isW } = await supabase.from('working_day_calender').select('working_date').eq('working_date', dateStr).single();
+
+                    if (isH || !isW) {
+                        return { success: false, message: `Task ${i + 1}: The selected date (${dateStr}) is a ${isH ? 'holiday' : 'non-working day'}. Please select a different working day.` };
+                    }
+                }
+                return { success: true };
+            }));
+
+            const failedValidation = validationResults.find(r => !r.success);
+            if (failedValidation) {
+                showToast(failedValidation.message, 'error');
+                setIsSubmitting(false);
+                return;
+            }
+
+            // Task Generation in Parallel
+            const generationPromises = tasks.map(async (task) => {
                 const dates = await generateDatesForTask(task);
                 const freqKey = freqMap[task.frequency] || "one-time";
-                for (const dueDate of dates) {
-                    allTasks.push({
-                        ...task,
-                        dueDate,
-                        frequency: freqKey
-                    });
-                }
-            }
+                return dates.map(dueDate => ({
+                    ...task,
+                    dueDate,
+                    frequency: freqKey
+                }));
+            });
+
+            const allResultsArrays = await Promise.all(generationPromises);
+            const allTasks = allResultsArrays.flat();
+
             if (allTasks.length === 0) {
-                showToast("No valid tasks generated based on calendar and holidays.", "error");
+                showToast("No valid tasks generated based on calendar and holidays. If assigning for future dates, please ensure the Working Day Calendar is filled for that month.", "error");
                 return;
             }
             setAllGeneratedTasks(allTasks);
@@ -583,30 +585,45 @@ export default function ChecklistTask() {
 
         setIsSubmitting(true);
         try {
-            const allTasksToSubmit = [];
-
-            for (const task of tasks) {
-                let audioUrl = null;
+            // 1. Parallelize Audio Uploads
+            const audioUploadPromises = tasks.map(async (task) => {
                 if (task.recordedAudio && task.recordedAudio.blob) {
                     const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
                     const { error: uploadError } = await supabase.storage
                         .from('audio-recordings')
-                        .upload(fileName, task.recordedAudio.blob, { contentType: task.recordedAudio.blob.type || 'audio/webm', upsert: false });
-                    if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
-                    const { data: publicUrlData } = supabase.storage.from('audio-recordings').getPublicUrl(fileName);
-                    audioUrl = publicUrlData.publicUrl;
-                }
+                        .upload(fileName, task.recordedAudio.blob, {
+                            contentType: task.recordedAudio.blob.type || 'audio/webm',
+                            upsert: false
+                        });
 
+                    if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
+
+                    const { data: publicUrlData } = supabase.storage.from('audio-recordings').getPublicUrl(fileName);
+                    return { id: task.id, audioUrl: publicUrlData.publicUrl };
+                }
+                return { id: task.id, audioUrl: null };
+            });
+
+            const uploadedAudioResults = await Promise.all(audioUploadPromises);
+            const audioUrlMap = uploadedAudioResults.reduce((map, item) => {
+                map[item.id] = item.audioUrl;
+                return map;
+            }, {});
+
+            // 2. Generate all occurrences
+            const allTasksToSubmit = [];
+            for (const task of tasks) {
                 const dates = await generateDatesForTask(task);
                 const freqKey = freqMap[task.frequency] || "one-time";
+                const audioUrl = audioUrlMap[task.id];
 
                 for (const dueDate of dates) {
                     allTasksToSubmit.push({
                         department: task.department,
                         givenBy: task.givenBy,
                         doer: task.doer,
-                        task_description: task.description, // Aligned with schema
-                        audio_url: audioUrl, // Added audio_url
+                        task_description: task.description,
+                        audio_url: audioUrl,
                         frequency: freqKey,
                         duration: task.duration || null,
                         enableReminders: task.enableReminders,
@@ -621,26 +638,41 @@ export default function ChecklistTask() {
 
             if (allTasksToSubmit.length === 0) {
                 alert("No tasks to submit.");
+                setIsSubmitting(false);
                 return;
             }
 
-            const result = await dispatch(assignTaskInTable({ tasks: allTasksToSubmit, table: null }));
-            if (result.error) throw new Error(result.error.message || "Failed to assign tasks");
+            // 3. Chunked Database Inserts (100 per chunk)
+            const CHUNK_SIZE = 100;
+            const insertedTasks = [];
 
-            // Send WhatsApp notifications for checklist & delegation task assignment
+            for (let i = 0; i < allTasksToSubmit.length; i += CHUNK_SIZE) {
+                const chunk = allTasksToSubmit.slice(i, i + CHUNK_SIZE);
+                const result = await dispatch(assignTaskInTable({ tasks: chunk, table: null }));
+                if (result.error) throw new Error(result.error.message || "Failed to assign tasks in chunk " + (Math.floor(i / CHUNK_SIZE) + 1));
+                if (result.payload) {
+                    // Normalize results if it's nested
+                    const data = result.payload;
+                    insertedTasks.push(...(Array.isArray(data) ? data : [data]));
+                }
+            }
+
+            // 4. Send WhatsApp notifications
             try {
-                const insertedTasks = result.payload;
                 if (insertedTasks && insertedTasks.length > 0) {
                     for (const uiTask of tasks) {
+                        const freqKey = freqMap[uiTask.frequency]?.toLowerCase();
                         const t = insertedTasks.find(it =>
                             it.name === uiTask.doer &&
-                            it.frequency?.toLowerCase() === freqMap[uiTask.frequency]?.toLowerCase() &&
-                            (it.task_description === uiTask.description || (uiTask.recordedAudio && it.task_description?.includes('audio-recordings')))
+                            it.frequency?.toLowerCase() === freqKey &&
+                            (it.task_description === uiTask.description || (audioUrlMap[uiTask.id] && it.audio_url === audioUrlMap[uiTask.id]))
                         );
+
                         if (t) {
                             const isOneTime = t.frequency?.toLowerCase().includes('one time') ||
                                 t.frequency?.toLowerCase().includes('one-time') ||
                                 t.frequency?.toLowerCase().includes('no recurrence');
+
                             await sendTaskAssignmentNotification({
                                 doerName: t.name,
                                 taskId: t.id,

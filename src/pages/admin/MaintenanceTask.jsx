@@ -587,11 +587,13 @@ export default function MaintenanceTask() {
 
                 // For other frequencies, shift to next working day if current is bad
                 let target = new Date(current);
-                while (isHoliday(target) || !isWorkingDay(target)) {
+                while (target <= endDate && (isHoliday(target) || !isWorkingDay(target))) {
                     target.setDate(target.getDate() + 1);
                 }
 
-                addEntry(target, task.workDescription);
+                if (target <= endDate) {
+                    addEntry(target, task.workDescription);
+                }
 
                 if (freq === 'weekly') current = addDays(current, 7);
                 else if (freq === 'fortnight') current = addDays(current, 14);
@@ -606,49 +608,52 @@ export default function MaintenanceTask() {
     };
 
     const handlePreview = async () => {
-        for (let i = 0; i < tasks.length; i++) {
-            const t = tasks[i];
-            if (!t.givenBy) {
-                showToast(`Task ${i + 1}: Please select 'Assign From'.`, 'error');
-                return;
-            }
-            if (!t.doerName || !t.startDate) {
-                showToast(`Task ${i + 1}: Please fill in Doer's Name and Start Date.`, 'error');
-                return;
-            }
-
-            // Holiday & Working Day check for one-time tasks
-            if (t.frequency === "one-time") {
-                const dateStr = t.startDate;
-                const isH = holidays.includes(dateStr);
-
-                // Fetch working day status for this specific date
-                const { data: isW } = await supabase
-                    .from('working_day_calender')
-                    .select('working_date')
-                    .eq('working_date', dateStr)
-                    .single();
-
-                if (isH || !isW) {
-                    showToast(`Task ${i + 1}: The selected date (${dateStr}) is a ${isH ? 'holiday' : 'non-working day'}. Please select a different working day.`, 'error');
-                    return;
-                }
-            }
-        }
         setIsSubmitting(true);
         try {
-            const allTasks = [];
-            for (let i = 0; i < tasks.length; i++) {
-                const task = tasks[i];
-                const generated = await generateDatesForTask(task);
-                generated.forEach(g => {
-                    allTasks.push({
-                        ...g,
-                        recordedAudio: task.recordedAudio
-                    });
-                });
+            // Parallel Validation
+            const validationResults = await Promise.all(tasks.map(async (t, i) => {
+                if (!t.givenBy) {
+                    return { success: false, message: `Task ${i + 1}: Please select 'Assign From'.` };
+                }
+                if (!t.doerName || !t.startDate) {
+                    return { success: false, message: `Task ${i + 1}: Please fill in Doer's Name and Start Date.` };
+                }
+
+                if (t.frequency === "one-time") {
+                    const dateStr = t.startDate;
+                    const isH = holidays.includes(dateStr);
+                    const { data: isW } = await supabase.from('working_day_calender').select('working_date').eq('working_date', dateStr).single();
+
+                    if (isH || !isW) {
+                        return { success: false, message: `Task ${i + 1}: The selected date (${dateStr}) is a ${isH ? 'holiday' : 'non-working day'}. Please select a different working day.` };
+                    }
+                }
+                return { success: true };
+            }));
+
+            const failedValidation = validationResults.find(r => !r.success);
+            if (failedValidation) {
+                showToast(failedValidation.message, 'error');
+                setIsSubmitting(false);
+                return;
             }
-            if (allTasks.length === 0) { showToast("No valid tasks generated.", "error"); return; }
+
+            // Task Generation in Parallel
+            const generationPromises = tasks.map(async (task) => {
+                const generated = await generateDatesForTask(task);
+                return generated.map(g => ({
+                    ...g,
+                    recordedAudio: task.recordedAudio
+                }));
+            });
+
+            const allResultsArrays = await Promise.all(generationPromises);
+            const allTasks = allResultsArrays.flat();
+
+            if (allTasks.length === 0) {
+                showToast("No valid tasks generated based on calendar and holidays. If assigning for future dates, please ensure the Working Day Calendar is filled for that month.", "error");
+                return;
+            }
             setAllGeneratedTasks(allTasks);
             setShowPreviewModal(true);
         } catch (err) {
@@ -662,45 +667,74 @@ export default function MaintenanceTask() {
     const confirmSubmission = async () => {
         setIsSubmitting(true);
         try {
-            const finalTasks = [];
-            for (let i = 0; i < tasks.length; i++) {
-                const task = tasks[i];
-                let audioUrl = null;
-
+            // 1. Parallelize Audio Uploads
+            const audioUploadPromises = tasks.map(async (task) => {
                 if (task.recordedAudio && task.recordedAudio.blob) {
                     const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
                     const { error: uploadError } = await supabase.storage
                         .from('audio-recordings')
-                        .upload(fileName, task.recordedAudio.blob, { contentType: task.recordedAudio.blob.type || 'audio/webm', upsert: false });
-                    if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
-                    const { data: publicUrlData } = supabase.storage.from('audio-recordings').getPublicUrl(fileName);
-                    audioUrl = publicUrlData.publicUrl;
-                }
+                        .upload(fileName, task.recordedAudio.blob, {
+                            contentType: task.recordedAudio.blob.type || 'audio/webm',
+                            upsert: false
+                        });
 
+                    if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
+
+                    const { data: publicUrlData } = supabase.storage.from('audio-recordings').getPublicUrl(fileName);
+                    return { id: task.id, audioUrl: publicUrlData.publicUrl };
+                }
+                return { id: task.id, audioUrl: null };
+            });
+
+            const uploadedAudioResults = await Promise.all(audioUploadPromises);
+            const audioUrlMap = uploadedAudioResults.reduce((map, item) => {
+                map[item.id] = item.audioUrl;
+                return map;
+            }, {});
+
+            // 2. Generate all occurrences
+            const allTasksToSubmit = [];
+            for (const task of tasks) {
                 const generated = await generateDatesForTask({
                     ...task,
-                    workDescription: task.workDescription // Keep text separate
+                    workDescription: task.workDescription
                 });
 
-                // Add audio_url to each generated occurrence
+                const audioUrl = audioUrlMap[task.id];
+
                 generated.forEach(g => {
-                    g.audio_url = audioUrl;
+                    allTasksToSubmit.push({
+                        ...g,
+                        audio_url: audioUrl
+                    });
                 });
-
-                finalTasks.push(...generated);
             }
 
-            const { data: insertedData, error } = await supabase.from('maintenance_tasks').insert(finalTasks).select();
-            if (error) throw new Error(`Database Insert Error: ${error.message}`);
+            if (allTasksToSubmit.length === 0) {
+                showToast("No tasks to submit.", "error");
+                setIsSubmitting(false);
+                return;
+            }
 
-            // Send WhatsApp notifications (one per unique doer)
+            // 3. Chunked Database Inserts (100 per chunk)
+            const CHUNK_SIZE = 100;
+            const insertedData = [];
+
+            for (let i = 0; i < allTasksToSubmit.length; i += CHUNK_SIZE) {
+                const chunk = allTasksToSubmit.slice(i, i + CHUNK_SIZE);
+                const { data, error } = await supabase.from('maintenance_tasks').insert(chunk).select();
+                if (error) throw new Error(`Database Insert Error (Chunk ${Math.floor(i / CHUNK_SIZE) + 1}): ${error.message}`);
+                if (data) insertedData.push(...data);
+            }
+
+            // 4. Send WhatsApp notifications
             try {
                 if (insertedData && insertedData.length > 0) {
                     for (const uiTask of tasks) {
                         const task = insertedData.find(it =>
                             it.name === uiTask.doerName &&
                             it.freq?.toLowerCase() === uiTask.frequency?.toLowerCase() &&
-                            (it.task_description === uiTask.workDescription || (uiTask.recordedAudio && it.task_description?.includes('audio-recordings')))
+                            (it.task_description === uiTask.workDescription || (audioUrlMap[uiTask.id] && it.audio_url === audioUrlMap[uiTask.id]))
                         );
                         if (task) {
                             const notificationData = {
@@ -724,7 +758,7 @@ export default function MaintenanceTask() {
                 console.error('WhatsApp notification error:', whatsappError);
             }
 
-            showToast(`${finalTasks.length} Maintenance Task(s) assigned successfully!`, 'success');
+            showToast(`${allTasksToSubmit.length} Maintenance Task(s) assigned successfully!`, 'success');
             setTasks([defaultTask()]);
             setShowPreviewModal(false);
             setTimeout(() => navigate('/dashboard/admin'), 2200);

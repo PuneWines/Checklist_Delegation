@@ -367,39 +367,60 @@ export default function EATask() {
         setIsSubmitting(true);
         try {
             const givenBy = localStorage.getItem("user-name") || "Admin";
-            const tasksToInsert = [];
 
-            for (const task of tasks) {
-                let audioUrl = null;
-
+            // 1. Parallelize Audio Uploads
+            const audioUploadPromises = tasks.map(async (task) => {
                 if (task.recordedAudio && task.recordedAudio.blob) {
                     const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
                     const { error: uploadError } = await supabase.storage
                         .from('audio-recordings')
-                        .upload(fileName, task.recordedAudio.blob, { contentType: task.recordedAudio.blob.type || 'audio/webm', upsert: false });
-                    if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
-                    const { data: publicUrlData } = supabase.storage.from('audio-recordings').getPublicUrl(fileName);
-                    audioUrl = publicUrlData.publicUrl;
-                }
+                        .upload(fileName, task.recordedAudio.blob, {
+                            contentType: task.recordedAudio.blob.type || 'audio/webm',
+                            upsert: false
+                        });
 
+                    if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
+
+                    const { data: publicUrlData } = supabase.storage.from('audio-recordings').getPublicUrl(fileName);
+                    return { id: task.id, audioUrl: publicUrlData.publicUrl };
+                }
+                return { id: task.id, audioUrl: null };
+            });
+
+            const uploadedAudioResults = await Promise.all(audioUploadPromises);
+            const audioUrlMap = uploadedAudioResults.reduce((map, item) => {
+                map[item.id] = item.audioUrl;
+                return map;
+            }, {});
+
+            // 2. Prepare tasks for insertion
+            const tasksToInsert = tasks.map(task => {
                 const startDate = new Date(`${task.planned_date}T${task.planned_time || "00:00"}:00`);
-                tasksToInsert.push({
+                return {
                     doer_name: task.doer_name,
                     phone_number: task.phone_number,
                     planned_date: startDate.toISOString(),
-                    task_start_date: startDate.toISOString(), // Store original plan date
+                    task_start_date: startDate.toISOString(),
                     task_description: task.task_description,
-                    audio_url: audioUrl,
+                    audio_url: audioUrlMap[task.id],
                     duration: task.duration || null,
                     status: 'pending',
                     given_by: givenBy
-                });
+                };
+            });
+
+            // 3. Chunked Database Inserts (100 per chunk, though EA usually has fewer)
+            const CHUNK_SIZE = 100;
+            const insertedData = [];
+
+            for (let i = 0; i < tasksToInsert.length; i += CHUNK_SIZE) {
+                const chunk = tasksToInsert.slice(i, i + CHUNK_SIZE);
+                const { data, error } = await supabase.from('ea_tasks').insert(chunk).select();
+                if (error) throw error;
+                if (data) insertedData.push(...data);
             }
 
-            const { data: insertedData, error } = await supabase.from('ea_tasks').insert(tasksToInsert).select();
-            if (error) throw error;
-
-            // Send WhatsApp notifications (one per unique doer)
+            // 4. Send WhatsApp notifications
             try {
                 if (insertedData && insertedData.length > 0) {
                     for (const task of insertedData) {

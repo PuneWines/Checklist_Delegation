@@ -260,31 +260,54 @@ export default function RepairTask() {
 
         setIsSubmitting(true);
         try {
-            const allResults = [];
-            for (const task of tasks) {
-                let audioUrl = null;
+            // 1. Parallelize Audio Uploads
+            const audioUploadPromises = tasks.map(async (task) => {
                 if (task.recordedAudio && task.recordedAudio.blob) {
                     const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
                     const { error: uploadError } = await supabase.storage
                         .from('audio-recordings')
-                        .upload(fileName, task.recordedAudio.blob, { contentType: task.recordedAudio.blob.type || 'audio/webm', upsert: false });
-                    if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
-                    const { data: publicUrlData } = supabase.storage.from('audio-recordings').getPublicUrl(fileName);
-                    audioUrl = publicUrlData.publicUrl;
-                }
+                        .upload(fileName, task.recordedAudio.blob, {
+                            contentType: task.recordedAudio.blob.type || 'audio/webm',
+                            upsert: false
+                        });
 
-                const result = await dispatch(createRepair({
-                    ...task,
-                    filledBy: task.filledBy,
-                    issueDetails: task.issueDetails, // Keep text separate
-                    audio_url: audioUrl, // Added audio_url
-                    duration: task.duration || null,
-                })).unwrap();
-                if (Array.isArray(result)) allResults.push(...result);
-                else if (result) allResults.push(result);
+                    if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
+
+                    const { data: publicUrlData } = supabase.storage.from('audio-recordings').getPublicUrl(fileName);
+                    return { id: task.id, audioUrl: publicUrlData.publicUrl };
+                }
+                return { id: task.id, audioUrl: null };
+            });
+
+            const uploadedAudioResults = await Promise.all(audioUploadPromises);
+            const audioUrlMap = uploadedAudioResults.reduce((map, item) => {
+                map[item.id] = item.audioUrl;
+                return map;
+            }, {});
+
+            // 2. Prepare payload for insertion
+            const requestsToInsert = tasks.map(task => ({
+                filled_by: task.filledBy,
+                assigned_person: task.assignedPerson,
+                machine_name: task.machineName,
+                issue_description: task.issueDetails,
+                audio_url: audioUrlMap[task.id],
+                duration: task.duration || null,
+                status: 'pending'
+            }));
+
+            // 3. Chunked Database Inserts (though repairs are usually fewer than Checklist)
+            const CHUNK_SIZE = 50;
+            const allResults = [];
+
+            for (let i = 0; i < requestsToInsert.length; i += CHUNK_SIZE) {
+                const chunk = requestsToInsert.slice(i, i + CHUNK_SIZE);
+                const { data, error } = await supabase.from('repair_requests').insert(chunk).select();
+                if (error) throw error;
+                if (data) allResults.push(...data);
             }
 
-            // Send WhatsApp notifications (one per unique assignee)
+            // 4. Send WhatsApp notifications
             try {
                 for (const insertedTask of allResults) {
                     const assignee = insertedTask.assigned_person;
@@ -310,7 +333,7 @@ export default function RepairTask() {
             setTimeout(() => navigate('/dashboard/assign-task'), 2000);
         } catch (error) {
             console.error("Submission failed:", error);
-            showToast("Failed to submit requests. Please try again.", 'error');
+            showToast("Failed to submit requests: " + error.message, 'error');
         } finally {
             setIsSubmitting(false);
         }

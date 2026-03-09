@@ -7,7 +7,7 @@ import { fetchPendingMaintenanceApprovals, approveMaintenanceTask, rejectMainten
 import { fetchPendingRepairApprovals, approveRepairTask, rejectRepairTask, fetchApprovedRepairs } from "../../redux/api/repairApi";
 import { fetchPendingEAApprovals, approveEATaskV2, rejectEATask, fetchApprovedEA } from "../../redux/api/eaApi";
 import { fetchPendingChecklistApprovals, approveChecklistTask, rejectChecklistTask, fetchChecklistHistory } from "../../redux/api/quickTaskApi";
-import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase, XCircle, History, Clock, User } from "lucide-react";
+import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase, XCircle, History, Clock, User, Loader2 } from "lucide-react";
 import { sendTaskRejectionNotification } from "../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../context/MagicToastContext";
@@ -28,6 +28,8 @@ export default function AdminApprovalPage() {
     const [loading, setLoading] = useState(true);
     const [processingId, setProcessingId] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
+    const [visibleCount, setVisibleCount] = useState(50);
+    const loadingRef = useRef(null);
     const dispatch = useDispatch();
 
     const loadTasks = useCallback(async () => {
@@ -58,7 +60,28 @@ export default function AdminApprovalPage() {
 
     useEffect(() => {
         loadTasks();
+        setVisibleCount(50); // Reset count on tab/mode change
     }, [loadTasks]);
+
+    // Intersection Observer for infinite scrolling
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && !loading) {
+                    setVisibleCount((prev) => prev + 50);
+                }
+            },
+            { threshold: 0.1, rootMargin: '100px' }
+        );
+
+        if (loadingRef.current) {
+            observer.observe(loadingRef.current);
+        }
+
+        return () => {
+            if (loadingRef.current) observer.unobserve(loadingRef.current);
+        };
+    }, [loading]);
 
     const handleApprove = async (task) => {
         setProcessingId(task.id);
@@ -171,6 +194,8 @@ export default function AdminApprovalPage() {
         }
     };
 
+    const paginatedTasks = filteredTasks.slice(0, visibleCount);
+
     return (
         <AdminLayout>
             <div className="space-y-4 sm:space-y-6">
@@ -199,7 +224,7 @@ export default function AdminApprovalPage() {
                                 <div className="px-4 py-2 bg-purple-50 rounded-xl border border-purple-100 flex items-center gap-2.5">
                                     <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
                                     <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
-                                        {pendingTasks.length} Pending
+                                        {pendingTasks.length} {viewMode === 'pending' ? 'Pending' : 'Total'}
                                     </span>
                                 </div>
                             </div>
@@ -304,14 +329,14 @@ export default function AdminApprovalPage() {
                                             Loading...
                                         </td>
                                     </tr>
-                                ) : filteredTasks.length === 0 ? (
+                                ) : paginatedTasks.length === 0 ? (
                                     <tr>
                                         <td colSpan="6" className="px-6 py-10 text-center text-gray-500">
-                                            No pending approvals found.
+                                            No {viewMode} approvals found.
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredTasks.map((task) => (
+                                    paginatedTasks.map((task) => (
                                         <tr key={task.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-bold text-gray-900">{task.doer_name || task.name || task.filled_by}</div>
@@ -450,13 +475,13 @@ export default function AdminApprovalPage() {
                                 </div>
                                 <p className="text-sm font-medium">Loading tasks...</p>
                             </div>
-                        ) : filteredTasks.length === 0 ? (
+                        ) : paginatedTasks.length === 0 ? (
                             <div className="p-10 text-center text-gray-500 bg-gray-50/50">
                                 <BookCheck size={40} className="mx-auto text-gray-200 mb-3" />
                                 <p className="text-sm font-medium">No tasks found</p>
                             </div>
                         ) : (
-                            filteredTasks.map((task) => (
+                            paginatedTasks.map((task) => (
                                 <div key={`card-${task.id}`} className="p-4 space-y-4 hover:bg-blue-50/30 transition-colors">
                                     {/* Card Header: User & Info */}
                                     <div className="flex justify-between items-start">
@@ -571,6 +596,19 @@ export default function AdminApprovalPage() {
                             ))
                         )}
                     </div>
+                </div>
+
+                {/* Infinite Scroll Trigger */}
+                <div ref={loadingRef} className="py-8 flex justify-center">
+                    {paginatedTasks.length < filteredTasks.length && (
+                        <div className="flex items-center gap-2 text-gray-400">
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span className="text-sm font-medium">Loading more records...</span>
+                        </div>
+                    )}
+                    {paginatedTasks.length >= filteredTasks.length && filteredTasks.length > 0 && (
+                        <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">— End of List —</span>
+                    )}
                 </div>
             </div>
         </AdminLayout>
