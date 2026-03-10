@@ -364,9 +364,17 @@ export default function EATask() {
                 return;
             }
 
-            // Holiday check
-            if (holidays.includes(t.planned_date)) {
-                showToast(`Task ${i + 1}: The selected date (${t.planned_date}) is a holiday.`, 'error');
+            // Holiday & Working Day check
+            const dateStr = t.planned_date;
+            const isH = holidays.includes(dateStr);
+            const { data: isW } = await supabase
+                .from('working_day_calender')
+                .select('working_date')
+                .eq('working_date', dateStr)
+                .single();
+
+            if (isH || !isW) {
+                showToast(`Task ${i + 1}: The selected date (${dateStr}) is a ${isH ? 'holiday' : 'non-working day'}. Please select a different working day.`, 'error');
                 return;
             }
         }

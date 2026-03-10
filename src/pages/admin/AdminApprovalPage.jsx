@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { fetchPendingApprovals, updateDelegationDoneStatus, rejectDelegationTask, fetchDelegationHistory } from "../../redux/api/delegationApi";
@@ -29,6 +29,9 @@ export default function AdminApprovalPage() {
     const [processingId, setProcessingId] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [visibleCount, setVisibleCount] = useState(50);
+    const [showRejectModal, setShowRejectModal] = useState(false);
+    const [taskToReject, setTaskToReject] = useState(null);
+    const [rejectionReason, setRejectionReason] = useState("");
     const loadingRef = useRef(null);
     const dispatch = useDispatch();
 
@@ -120,15 +123,25 @@ export default function AdminApprovalPage() {
         }
     };
 
-    const handleReject = async (task) => {
-        const reason = window.prompt("Enter rejection reason (User will be notified via WhatsApp):");
-        if (reason === null) return; // Cancelled
-        if (!reason.trim()) {
+    const handleReject = (task) => {
+        setTaskToReject(task);
+        setRejectionReason("");
+        setShowRejectModal(true);
+    };
+
+    const confirmReject = async () => {
+        if (!taskToReject) return;
+        if (!rejectionReason.trim()) {
             showToast("Rejection reason is required.", "error");
             return;
         }
 
+        const task = taskToReject;
+        const reason = rejectionReason;
+
         setProcessingId(task.id);
+        setShowRejectModal(false);
+
         try {
             if (activeTab === "delegation") {
                 await rejectDelegationTask(task.id, task.task_id, reason);
@@ -159,6 +172,7 @@ export default function AdminApprovalPage() {
             showToast("Failed to reject task: " + (error.message || "Unknown error"), "error");
         } finally {
             setProcessingId(null);
+            setTaskToReject(null);
         }
     };
 
@@ -610,6 +624,68 @@ export default function AdminApprovalPage() {
                         <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">— End of List —</span>
                     )}
                 </div>
+
+                {/* Rejection Modal */}
+                <AnimatePresence>
+                    {showRejectModal && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={() => setShowRejectModal(false)}
+                                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                            />
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                                className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
+                            >
+                                <div className="p-6 space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+                                            <XCircle className="w-6 h-6 text-red-600" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-black text-gray-900">Reject Task</h3>
+                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Provide a reason for rejection</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Rejection Reason</label>
+                                        <textarea
+                                            value={rejectionReason}
+                                            onChange={(e) => setRejectionReason(e.target.value)}
+                                            placeholder="Example: Proof is blurry, Task not completed properly..."
+                                            className="w-full h-32 p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500/50 transition-all resize-none"
+                                            autoFocus
+                                        />
+                                        <p className="text-[10px] text-gray-400 italic px-1">
+                                            * User will be notified via WhatsApp including this reason.
+                                        </p>
+                                    </div>
+
+                                    <div className="flex gap-3 pt-2">
+                                        <button
+                                            onClick={() => setShowRejectModal(false)}
+                                            className="flex-1 py-3 text-sm font-black text-gray-500 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-all"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={confirmReject}
+                                            className="flex-[2] py-3 text-sm font-black text-white bg-red-600 shadow-lg shadow-red-200 hover:bg-red-700 active:scale-95 transition-all rounded-2xl"
+                                        >
+                                            Confirm Rejection
+                                        </button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
             </div>
         </AdminLayout>
     );
