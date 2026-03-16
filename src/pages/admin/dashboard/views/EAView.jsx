@@ -151,7 +151,7 @@ export default function EAView() {
         }
     };
 
-    const [view, setView] = useState('active'); // 'active' or 'completed'
+    const [view, setView] = useState('active'); // 'active', 'upcoming', or 'completed'
 
     useEffect(() => {
         fetchEATasks();
@@ -199,15 +199,28 @@ export default function EAView() {
                 const isApproved = (t.status?.toLowerCase() === 'approved') || (t.status?.toLowerCase() === 'done' && t.admin_done);
                 if (isApproved) return false;
 
-                // Use task_start_date or planned_date as fallback to show in active console
                 const referenceDate = t.task_start_date || t.planned_date;
                 if (!referenceDate) return true;
 
                 const taskDate = new Date(referenceDate);
                 taskDate.setHours(0, 0, 0, 0);
 
-                // Show if it was started on or before today, or if it is specifically 'extended'
+                // For active, show tasks that are for today or in the past
                 return taskDate <= today || t.status?.toLowerCase() === 'extended' || t.status?.toLowerCase() === 'extend';
+            });
+        } else if (view === 'upcoming') {
+            return eaTasks.filter(t => {
+                const isApproved = (t.status?.toLowerCase() === 'approved') || (t.status?.toLowerCase() === 'done' && t.admin_done);
+                if (isApproved) return false;
+
+                const referenceDate = t.task_start_date || t.planned_date;
+                if (!referenceDate) return false;
+
+                const taskDate = new Date(referenceDate);
+                taskDate.setHours(0, 0, 0, 0);
+
+                // For upcoming, show tasks that are for tomorrow or later
+                return taskDate > today && t.status?.toLowerCase() !== 'extended' && t.status?.toLowerCase() !== 'extend';
             });
         } else {
             // Completed view: show all approved/admin_done tasks
@@ -485,6 +498,13 @@ export default function EAView() {
                         >
                             Active Console
                             {view === 'active' && <div className="absolute bottom-0 left-0 w-full h-1 bg-indigo-600 rounded-t-full"></div>}
+                        </button>
+                        <button
+                            onClick={() => setView('upcoming')}
+                            className={`pb-4 pt-1 text-xs font-black uppercase tracking-widest relative transition-all ${view === 'upcoming' ? 'text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+                        >
+                            Upcoming Plan
+                            {view === 'upcoming' && <div className="absolute bottom-0 left-0 w-full h-1 bg-indigo-600 rounded-t-full"></div>}
                         </button>
                         <button
                             onClick={() => setView('completed')}

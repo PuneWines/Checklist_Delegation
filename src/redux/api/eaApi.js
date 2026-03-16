@@ -259,6 +259,7 @@ export const approveEATaskV2 = async (id, doneId) => {
                 .from('ea_tasks_done')
                 .update({
                     status: 'done',
+                    admin_done: true,
                     updated_at: now,
                     admin_approval_date: now,
                     admin_approved_by: username

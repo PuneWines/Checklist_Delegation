@@ -467,8 +467,13 @@ const AllTasks = () => {
           if (!taskDate) return true;
 
           const isHoliday = holidaysList.includes(taskDate);
-          const isWorkingDay = workingDaysList.includes(taskDate);
+          
+          // Relaxed check for EA tasks: Allow dates even if missing from working calendar
+          if (activeTab === "ea") {
+            return !isHoliday;
+          }
 
+          const isWorkingDay = workingDaysList.includes(taskDate);
           return !isHoliday && isWorkingDay;
         });
 

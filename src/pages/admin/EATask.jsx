@@ -364,7 +364,7 @@ export default function EATask() {
                 return;
             }
 
-            // Holiday & Working Day check
+            // Relaxed check for EA tasks: Allow dates even if missing from working calendar
             const dateStr = t.planned_date;
             const isH = holidays.includes(dateStr);
             const { data: isW } = await supabase
@@ -373,9 +373,15 @@ export default function EATask() {
                 .eq('working_date', dateStr)
                 .single();
 
-            if (isH || !isW) {
-                showToast(`Task ${i + 1}: The selected date (${dateStr}) is a ${isH ? 'holiday' : 'non-working day'}. Please select a different working day.`, 'error');
+            if (isH) {
+                showToast(`Task ${i + 1}: The selected date (${dateStr}) is a holiday. Please select a different day.`, 'error');
                 return;
+            }
+
+            // If it's not a holiday, we allow it for EA tasks even if not in working_day_calender
+            // This enables assigning tasks beyond the current calendar range (e.g. after Feb 2027)
+            if (!isW) {
+                console.log(`Allowing EA Task for non-calendar date: ${dateStr}`);
             }
         }
 
