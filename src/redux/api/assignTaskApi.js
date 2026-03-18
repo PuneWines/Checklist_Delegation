@@ -13,11 +13,19 @@ export const fetchUniqueDepartmentDataApi = async () => {
 
     if (error) throw error;
 
+    const role = localStorage.getItem('role');
+    const userAccess = localStorage.getItem('user_access');
+
     // Filter out nulls/empties and get unique values
-    const uniqueDepartments = [...new Set(data
+    let uniqueDepartments = [...new Set(data
       .map(item => item.user_access)
       .filter(dept => dept && dept.trim() !== "")
     )].sort();
+
+    if (role === 'HOD' && userAccess && userAccess !== 'all') {
+      const allowedDepts = userAccess.split(',').map(d => d.trim().toLowerCase());
+      uniqueDepartments = uniqueDepartments.filter(d => allowedDepts.includes(d.toLowerCase()));
+    }
 
     console.log("✅ Unique departments found:", uniqueDepartments);
     return uniqueDepartments;
@@ -82,7 +90,7 @@ export const fetchUniqueDoerNameDataApi = async (department) => {
 
     let query = supabase
       .from("users")
-      .select("user_name, user_access, status, leave_date, leave_end_date")
+      .select("user_name, user_access, status, leave_date, leave_end_date, reported_by")
       .order("user_name", { ascending: true });
 
     if (department) {
@@ -97,17 +105,28 @@ export const fetchUniqueDoerNameDataApi = async (department) => {
       return [];
     }
 
+    const role = localStorage.getItem('role');
+    const username = localStorage.getItem('user-name');
+
     // Filter unique by user_name just in case there are duplicates
     const uniqueUsers = [];
     const seenNames = new Set();
 
     data?.forEach(user => {
       if (user.user_name && !seenNames.has(user.user_name)) {
+        // Apply HOD filtering: only show themselves or their reports
+        if (role === 'HOD' && username) {
+            if (user.reported_by !== username && user.user_name !== username) {
+                return;
+            }
+        }
+
         uniqueUsers.push({
           user_name: user.user_name,
           status: user.status,
           leave_date: user.leave_date,
-          leave_end_date: user.leave_end_date
+          leave_end_date: user.leave_end_date,
+          reported_by: user.reported_by
         });
         seenNames.add(user.user_name);
       }

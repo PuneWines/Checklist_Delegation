@@ -207,11 +207,19 @@ const CalendarPage = () => {
 
     const fetchUsers = async () => {
         try {
-            const { data, error } = await supabase
+            const role = localStorage.getItem('role');
+            const username = localStorage.getItem('user-name');
+            let query = supabase
                 .from('users')
-                .select('user_name')
+                .select('user_name, reported_by')
                 .eq('status', 'active')
                 .order('user_name', { ascending: true });
+            
+            if (role === 'HOD' && username) {
+                query = query.or(`reported_by.eq.${username},user_name.eq.${username}`);
+            }
+
+            const { data, error } = await query;
             if (error) throw error;
             if (data) setAllUsers(data.map(u => u.user_name));
         } catch (err) {
@@ -241,13 +249,25 @@ const CalendarPage = () => {
             let eaQuery = supabase.from('ea_tasks').select('*').gte('planned_date', startStr).lte('planned_date', endStr);
 
             // Role Filters
-            // For regular users, only show their own tasks
             if (role === 'user' && username) {
-                checklistQuery = checklistQuery.eq('name', username);
-                maintenanceQuery = maintenanceQuery.eq('name', username);
-                repairQuery = repairQuery.eq('assigned_person', username); // standardizing on assigned_person
-                delegationQuery = delegationQuery.eq('name', username);
-                eaQuery = eaQuery.eq('doer_name', username);
+                const filter = username;
+                checklistQuery = checklistQuery.eq('name', filter);
+                maintenanceQuery = maintenanceQuery.eq('name', filter);
+                repairQuery = repairQuery.eq('assigned_person', filter);
+                delegationQuery = delegationQuery.eq('name', filter);
+                eaQuery = eaQuery.eq('doer_name', filter);
+            } else if (role === 'HOD' && username) {
+                const { data: reports } = await supabase
+                    .from("users")
+                    .select("user_name")
+                    .eq("reported_by", username);
+                const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+                
+                checklistQuery = checklistQuery.in('name', reportingUsers);
+                maintenanceQuery = maintenanceQuery.in('name', reportingUsers);
+                repairQuery = repairQuery.in('assigned_person', reportingUsers);
+                delegationQuery = delegationQuery.in('name', reportingUsers);
+                eaQuery = eaQuery.in('doer_name', reportingUsers);
             }
             // For admins, we now show EVERYTHING by default to match the global counts 
             // of the Working Day Calendar, unless we WANT to add optional filtering later.

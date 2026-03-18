@@ -11,6 +11,7 @@ import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hamm
 import { sendTaskRejectionNotification } from "../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../context/MagicToastContext";
+import supabase from "../../SupabaseClient";
 
 // Helper to extract audio URL from text
 const extractAudioUrl = (text) => {
@@ -32,6 +33,9 @@ export default function AdminApprovalPage() {
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [taskToReject, setTaskToReject] = useState(null);
     const [rejectionReason, setRejectionReason] = useState("");
+    const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+    const [bulkProcessing, setBulkProcessing] = useState(false);
+    const [selectedImage, setSelectedImage] = useState(null); // Full-screen image URL
     const loadingRef = useRef(null);
     const dispatch = useDispatch();
 
@@ -54,16 +58,52 @@ export default function AdminApprovalPage() {
                 else if (activeTab === "ea") data = await fetchApprovedEA();
                 else if (activeTab === "checklist") data = await fetchChecklistHistory();
             }
+
+            // Deduplicate data to ensure each task only shows once
+            const seenIds = new Set();
+            const uniqueData = (data || []).filter(task => {
+                // Use task_id or original_task_id as the primary key for deduplication
+                const baseId = task.task_id || task.original_task_id || task.id;
+                if (!baseId || seenIds.has(baseId)) return false;
+                seenIds.add(baseId);
+                return true;
+            });
+            data = uniqueData; // Update 'data' with unique data
+
         } catch (error) {
             console.error("Error loading tasks:", error);
         }
-        setPendingTasks(data || []);
+        const userRole = localStorage.getItem("role");
+        const username = localStorage.getItem("user-name");
+        
+        // Filter tasks if not super admin
+        let filteredData = data || [];
+        if (username !== "admin") {
+            let reportingUsers = [username];
+            if (userRole === "admin" || userRole === "HOD") {
+                const { data: reports } = await supabase
+                    .from("users")
+                    .select("user_name")
+                    .eq("reported_by", username);
+                if (reports && reports.length > 0) {
+                    reportingUsers = [username, ...reports.map((r) => r.user_name)];
+                }
+            }
+            
+            filteredData = filteredData.filter(task => {
+                const doerName = task.doer_name || task.name || task.filled_by;
+                return reportingUsers.includes(doerName);
+            });
+        }
+
+        setPendingTasks(filteredData);
         setLoading(false);
     }, [activeTab, viewMode]);
 
     useEffect(() => {
         loadTasks();
         setVisibleCount(50); // Reset count on tab/mode change
+        setSelectedTaskIds([]); // Reset selection
     }, [loadTasks]);
 
     // Intersection Observer for infinite scrolling
@@ -127,6 +167,66 @@ export default function AdminApprovalPage() {
         setTaskToReject(task);
         setRejectionReason("");
         setShowRejectModal(true);
+    };
+
+    const toggleTaskSelection = (taskId) => {
+        setSelectedTaskIds(prev =>
+            prev.includes(taskId)
+                ? prev.filter(id => id !== taskId)
+                : [...prev, taskId]
+        );
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedTaskIds.length === paginatedTasks.length && paginatedTasks.length > 0) {
+            setSelectedTaskIds([]);
+        } else {
+            setSelectedTaskIds(paginatedTasks.map(t => t.id));
+        }
+    };
+
+    const handleBulkApprove = async () => {
+        if (selectedTaskIds.length === 0) return;
+
+        setBulkProcessing(true);
+        let successCount = 0;
+        let failCount = 0;
+
+        const tasksToApprove = pendingTasks.filter(t => selectedTaskIds.includes(t.id));
+
+        for (const task of tasksToApprove) {
+            try {
+                if (activeTab === "delegation") {
+                    await dispatch(updateDelegationDoneStatus({
+                        id: task.id,
+                        status: 'done',
+                        taskId: task.task_id
+                    })).unwrap();
+                } else if (activeTab === "maintenance") {
+                    await approveMaintenanceTask(task.id);
+                } else if (activeTab === "repair") {
+                    await approveRepairTask(task.id);
+                } else if (activeTab === "ea") {
+                    await approveEATaskV2(task.id, task.done_id);
+                } else if (activeTab === "checklist") {
+                    await approveChecklistTask(task.id);
+                }
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to approve task ${task.id}:`, error);
+                failCount++;
+            }
+        }
+
+        loadTasks();
+        setSelectedTaskIds([]);
+        setBulkProcessing(false);
+
+        if (failCount === 0) {
+            showToast(`Successfully approved ${successCount} tasks!`, "success");
+        } else {
+            showToast(`Approved ${successCount} tasks, ${failCount} failed.`, "warning");
+        }
     };
 
     const confirmReject = async () => {
@@ -235,6 +335,22 @@ export default function AdminApprovalPage() {
                             </div>
 
                             <div className="flex items-center gap-4">
+                                {viewMode === 'pending' && selectedTaskIds.length > 0 && (
+                                    <motion.button
+                                        initial={{ scale: 0.9, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        onClick={handleBulkApprove}
+                                        disabled={bulkProcessing}
+                                        className="px-4 py-2 bg-green-600 text-white rounded-xl shadow-lg shadow-green-200 flex items-center gap-2 text-xs font-black hover:bg-green-700 disabled:opacity-50 transition-all"
+                                    >
+                                        {bulkProcessing ? (
+                                            <Loader2 size={14} className="animate-spin" />
+                                        ) : (
+                                            <CheckCircle2 size={14} />
+                                        )}
+                                        Approve Selected ({selectedTaskIds.length})
+                                    </motion.button>
+                                )}
                                 <div className="px-4 py-2 bg-purple-50 rounded-xl border border-purple-100 flex items-center gap-2.5">
                                     <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
                                     <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
@@ -320,6 +436,16 @@ export default function AdminApprovalPage() {
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                                 <tr>
+                                    {viewMode === 'pending' && (
+                                        <th className="px-6 py-3 text-left">
+                                            <input
+                                                type="checkbox"
+                                                className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
+                                                checked={selectedTaskIds.length === paginatedTasks.length && paginatedTasks.length > 0}
+                                                onChange={toggleSelectAll}
+                                            />
+                                        </th>
+                                    )}
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         {activeTab === "delegation" || activeTab === "ea" || activeTab === "checklist" ? "Task Description" :
@@ -336,7 +462,7 @@ export default function AdminApprovalPage() {
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan="6" className="px-6 py-10 text-center text-gray-500">
+                                        <td colSpan={viewMode === 'pending' ? "7" : "6"} className="px-6 py-10 text-center text-gray-500">
                                             <div className="flex justify-center mb-2">
                                                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                                             </div>
@@ -345,13 +471,23 @@ export default function AdminApprovalPage() {
                                     </tr>
                                 ) : paginatedTasks.length === 0 ? (
                                     <tr>
-                                        <td colSpan="6" className="px-6 py-10 text-center text-gray-500">
+                                        <td colSpan={viewMode === 'pending' ? "7" : "6"} className="px-6 py-10 text-center text-gray-500">
                                             No {viewMode} approvals found.
                                         </td>
                                     </tr>
                                 ) : (
                                     paginatedTasks.map((task) => (
-                                        <tr key={task.id} className="hover:bg-gray-50 transition-colors">
+                                        <tr key={task.id} className={`hover:bg-gray-50 transition-colors ${selectedTaskIds.includes(task.id) ? 'bg-purple-50/50' : ''}`}>
+                                            {viewMode === 'pending' && (
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
+                                                        checked={selectedTaskIds.includes(task.id)}
+                                                        onChange={() => toggleTaskSelection(task.id)}
+                                                    />
+                                                </td>
+                                            )}
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-bold text-gray-900">{task.doer_name || task.name || task.filled_by}</div>
                                                 <div className="text-[10px] text-gray-500 font-medium uppercase tracking-tight">By: {task.given_by || '-'}</div>
@@ -418,16 +554,34 @@ export default function AdminApprovalPage() {
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                {task.image_url || task.uploaded_image_url || task.work_photo_url ? (
-                                                    <a
-                                                        href={task.image_url || task.uploaded_image_url || task.work_photo_url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm shadow-blue-100 inline-flex items-center gap-1.5"
-                                                    >
-                                                        View Proof
-                                                    </a>
-                                                ) : <span className="text-gray-300 text-xs italic">No Proof</span>}
+                                                {(() => {
+                                                    const proofs = [];
+                                                    if (task.work_photo_url) proofs.push({ url: task.work_photo_url, label: 'Work Photo' });
+                                                    if (task.bill_copy_url) proofs.push({ url: task.bill_copy_url, label: 'Bill Copy' });
+                                                    
+                                                    const commonImg = task.image || task.image_url || task.img_url || task.uploaded_image_url;
+                                                    if (commonImg && !proofs.some(p => p.url === commonImg)) {
+                                                        proofs.push({ url: commonImg, label: (activeTab === 'checklist' ? 'Checklist Proof' : 'Proof') });
+                                                    }
+
+                                                    if (proofs.length === 0) return <span className="text-gray-300 text-xs italic">No Proof</span>;
+                                                    
+                                                    return (
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            {proofs.map((proof, idx) => (
+                                                                <div key={idx} className="flex flex-col items-center gap-1">
+                                                                    <div 
+                                                                        onClick={() => setSelectedImage(proof.url)}
+                                                                        className="w-12 h-12 rounded-lg overflow-hidden border border-gray-100 shadow-sm cursor-zoom-in hover:scale-110 transition-transform bg-gray-50"
+                                                                    >
+                                                                        <img src={proof.url} className="w-full h-full object-cover" alt={proof.label} />
+                                                                    </div>
+                                                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">{proof.label}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                 {viewMode === 'pending' ? (
@@ -496,20 +650,30 @@ export default function AdminApprovalPage() {
                             </div>
                         ) : (
                             paginatedTasks.map((task) => (
-                                <div key={`card-${task.id}`} className="p-4 space-y-4 hover:bg-blue-50/30 transition-colors">
+                                <div key={`card-${task.id}`} className={`p-4 space-y-4 hover:bg-blue-50/30 transition-colors ${selectedTaskIds.includes(task.id) ? 'bg-purple-50/80 border-l-4 border-l-purple-500' : ''}`}>
                                     {/* Card Header: User & Info */}
                                     <div className="flex justify-between items-start">
-                                        <div className="space-y-1">
-                                            <p className="text-sm font-black text-gray-900">{task.doer_name || task.name || task.filled_by}</p>
-                                            <div className="space-y-1 mt-1">
-                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                                                    <Clock size={10} /> {viewMode === 'pending' ? 'Submitted' : 'Approved'}: {formatDate(viewMode === 'pending' ? (task.submission_date || task.submission_timestamp || task.created_at) : (task.admin_approval_date || task.updated_at || task.submission_date))}
-                                                </p>
-                                                {viewMode === 'history' && (
-                                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
-                                                        <User size={10} /> By: {task.admin_approved_by || "Admin"}
+                                        <div className="flex gap-3">
+                                            {viewMode === 'pending' && (
+                                                <input
+                                                    type="checkbox"
+                                                    className="w-5 h-5 mt-1 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
+                                                    checked={selectedTaskIds.includes(task.id)}
+                                                    onChange={() => toggleTaskSelection(task.id)}
+                                                />
+                                            )}
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-black text-gray-900">{task.doer_name || task.name || task.filled_by}</p>
+                                                <div className="space-y-1 mt-1">
+                                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                                                        <Clock size={10} /> {viewMode === 'pending' ? 'Submitted' : 'Approved'}: {formatDate(viewMode === 'pending' ? (task.submission_date || task.submission_timestamp || task.created_at) : (task.admin_approval_date || task.updated_at || task.submission_date))}
                                                     </p>
-                                                )}
+                                                    {viewMode === 'history' && (
+                                                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                            <User size={10} /> By: {task.admin_approved_by || "Admin"}
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                         <span className="text-[10px] font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
@@ -555,20 +719,43 @@ export default function AdminApprovalPage() {
                                     </div>
 
                                     {/* proof & Metadata */}
-                                    <div className="flex items-center justify-between text-[10px] font-bold">
-                                        <div className="text-gray-400 uppercase tracking-widest">
-                                            Given By: <span className="text-gray-600">{task.given_by || '-'}</span>
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                            Given By: <span className="text-gray-600 block sm:inline">{task.given_by || '-'}</span>
                                         </div>
-                                        {task.image_url || task.uploaded_image_url || task.work_photo_url ? (
-                                            <a
-                                                href={task.image_url || task.uploaded_image_url || task.work_photo_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-blue-600 flex items-center gap-1 underline"
-                                            >
-                                                View Proof
-                                            </a>
-                                        ) : <span className="text-gray-300 font-normal italic">No Proof</span>}
+                                        {(() => {
+                                            const proofs = [];
+                                            if (task.work_photo_url) proofs.push({ url: task.work_photo_url, label: 'Work Photo' });
+                                            if (task.bill_copy_url) proofs.push({ url: task.bill_copy_url, label: 'Bill Copy' });
+                                            
+                                            const commonImg = task.image || task.image_url || task.img_url || task.uploaded_image_url;
+                                            if (commonImg && !proofs.some(p => p.url === commonImg)) {
+                                                proofs.push({ url: commonImg, label: 'Proof' });
+                                            }
+
+                                            if (proofs.length === 0) return <span className="text-gray-300 text-[10px] italic">No Proof</span>;
+                                            
+                                            return (
+                                                <div className="flex flex-wrap items-center justify-end gap-3">
+                                                    {proofs.map((proof, idx) => (
+                                                        <div key={idx} className="flex flex-col items-end gap-1">
+                                                            <div 
+                                                                onClick={() => setSelectedImage(proof.url)}
+                                                                className="w-14 h-14 rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-white cursor-zoom-in"
+                                                            >
+                                                                <img src={proof.url} className="w-full h-full object-cover" alt={proof.label} />
+                                                            </div>
+                                                            <button 
+                                                                onClick={() => setSelectedImage(proof.url)}
+                                                                className="text-blue-600 text-[9px] font-black uppercase tracking-wider underline"
+                                                            >
+                                                                {proof.label}
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
 
                                     {/* Actions */}
@@ -684,6 +871,52 @@ export default function AdminApprovalPage() {
                                 </div>
                             </motion.div>
                         </div>
+                    )}
+                </AnimatePresence>
+                {/* Lightbox / Full Screen Modal */}
+                <AnimatePresence>
+                    {selectedImage && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 sm:p-10 cursor-zoom-out"
+                            onClick={() => setSelectedImage(null)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="relative max-w-full max-h-full"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <img
+                                    src={selectedImage}
+                                    alt="Full Proof"
+                                    className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl border-4 border-white/20"
+                                />
+                                <div className="absolute -top-12 left-0 right-0 flex justify-between items-center text-white px-2">
+                                    <span className="text-sm font-bold bg-black/40 px-3 py-1 rounded-full border border-white/10 uppercase tracking-widest">Task Proof Proof</span>
+                                    <button
+                                        onClick={() => setSelectedImage(null)}
+                                        className="p-2 bg-white/10 hover:bg-red-500/80 rounded-full transition-colors group"
+                                    >
+                                        <XCircle size={24} className="group-hover:rotate-90 transition-transform duration-300" />
+                                    </button>
+                                </div>
+                                <div className="mt-4 flex justify-center">
+                                    <a
+                                        href={selectedImage}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-6 py-2 bg-purple-600 text-white rounded-full text-sm font-black uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-900/40"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        Open Original URL
+                                    </a>
+                                </div>
+                            </motion.div>
+                        </motion.div>
                     )}
                 </AnimatePresence>
             </div>

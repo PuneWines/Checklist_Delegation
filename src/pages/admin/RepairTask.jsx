@@ -60,6 +60,15 @@ function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions,
                 return false; // Skip inactive and other non-active statuses
             }
 
+            // HOD Restriction
+            const currentU = localStorage.getItem("user-name");
+            const currentR = localStorage.getItem("role");
+            if (currentR === "HOD" || (currentR === "admin" && currentU !== "admin")) {
+                const dName = u.user_name || u.name;
+                const reportedBy = u.reported_by;
+                if (dName !== currentU && reportedBy !== currentU) return false;
+            }
+
             return true;
         });
     };
@@ -90,7 +99,8 @@ function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions,
                         name="filledBy"
                         value={task.filledBy}
                         onChange={handleChange}
-                        className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm"
+                        disabled={localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")}
+                        className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${(localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? 'opacity-70 cursor-not-allowed' : ''}`}
                     >
                         <option value="">Select person...</option>
                         {givenBy.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -195,7 +205,12 @@ export default function RepairTask() {
     const { givenBy } = useSelector((state) => state.assignTask);
     const { customDropdowns = [], userData = [] } = useSelector((state) => state.setting || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [tasks, setTasks] = useState([defaultTask()]);
+    const [tasks, setTasks] = useState([
+        { 
+            ...defaultTask(), 
+            filledBy: (localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? localStorage.getItem("user-name") : "" 
+        }
+    ]);
     const [holidays, setHolidays] = useState([]);
     const [isTodayWorkingDay, setIsTodayWorkingDay] = useState(true);
 
@@ -238,7 +253,7 @@ export default function RepairTask() {
         const lastTask = prev[prev.length - 1];
         return [...prev, {
             ...defaultTask(),
-            filledBy: lastTask?.filledBy || "",
+            filledBy: (localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? localStorage.getItem("user-name") : (lastTask?.filledBy || ""),
             assignedPerson: lastTask?.assignedPerson || ""
         }];
     });
@@ -309,7 +324,7 @@ export default function RepairTask() {
 
             for (let i = 0; i < requestsToInsert.length; i += CHUNK_SIZE) {
                 const chunk = requestsToInsert.slice(i, i + CHUNK_SIZE);
-                const { data, error } = await supabase.from('repair_requests').insert(chunk).select();
+                const { data, error } = await supabase.from('repair_tasks').insert(chunk).select();
                 if (error) throw error;
                 if (data) allResults.push(...data);
             }

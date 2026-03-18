@@ -112,48 +112,48 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Dashboard",
       icon: Database,
       active: location.pathname === "/dashboard/admin",
-      showFor: ["admin", "user"],
+      showFor: ["admin", "user", "HOD"],
     },
     {
       href: "/dashboard/quick-task",
       label: "Quick Task",
       icon: Zap,
       active: location.pathname === "/dashboard/quick-task",
-      // Only show for super admin (username = 'admin')
-      showFor: isSuperAdmin ? ["admin"] : [],
+      // Show for super admin OR HOD
+      showFor: (isSuperAdmin || userRole === "HOD") ? ["admin", "HOD"] : [],
     },
     {
       href: "/dashboard/assign-task",
       label: "Assign Task",
       icon: CheckSquare,
       active: location.pathname === "/dashboard/assign-task",
-      showFor: ["admin"],
+      showFor: ["admin", "HOD"],
     },
     {
       href: "/dashboard/delegation",
       label: "Delegation",
       icon: ClipboardList,
       active: location.pathname === "/dashboard/delegation",
-      showFor: ["admin", "user"],
+      showFor: ["admin", "user", "HOD"],
     },
     {
       href: "/dashboard/task",
       label: "Task",
       icon: CalendarCheck,
       active: location.pathname === "/dashboard/task",
-      showFor: ["admin", "user"],
+      showFor: ["admin", "HOD", "user"],
     },
     {
       href: "/dashboard/calendar",
       label: "Calendar",
       icon: CalendarIcon,
       active: location.pathname === "/dashboard/calendar",
-      showFor: ["admin", "user"],
+      showFor: ["admin", "user", "HOD"],
     },
     {
       label: "Holiday",
       icon: CalendarIcon, // Or a specific holiday icon
-      showFor: ["admin"],
+      showFor: isSuperAdmin ? ["admin"] : [], // Restricted to Super Admin
       isSubmenu: true,
       isOpen: isHolidaySubmenuOpen,
       setIsOpen: setIsHolidaySubmenuOpen,
@@ -163,7 +163,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
           href: "/dashboard/holiday-list",
           label: "Holiday List",
           active: location.pathname === "/dashboard/holiday-list",
-          showFor: ["admin"], // Holiday management for admin
+          showFor: ["admin"],
         },
         {
           href: "/dashboard/working-day-calendar",
@@ -178,7 +178,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Admin Approval",
       icon: BookmarkCheck,
       active: location.pathname === "/dashboard/admin-approval",
-      showFor: ["admin"],
+      showFor: ["admin", "HOD"],
     },
     // {
     //   href: "/dashboard/mis-report",
@@ -205,8 +205,16 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
   // Filter routes based on user role and super admin status
   const getAccessibleRoutes = () => {
     const userRole = localStorage.getItem("role") || "user";
+    const username = localStorage.getItem("user-name");
+    
     return routes
-      .filter((route) => route.showFor.includes(userRole))
+      .filter((route) => {
+        // If it's the Setting or Holiday page, only show for super admin (admin username)
+        if (route.label === "Settings" || route.label === "Holiday") {
+          return username === "admin";
+        }
+        return route.showFor.includes(userRole);
+      })
       .map(route => {
         if (route.subItems) {
           return {
@@ -326,7 +334,9 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
                       ? isSuperAdmin
                         ? "(Super Admin)"
                         : "(Admin)"
-                      : ""}
+                      : userRole === "HOD"
+                        ? "(HOD)"
+                        : ""}
                   </p>
                   <p className="text-xs text-blue-600 truncate">
                     {userEmail || "user@example.com"}
@@ -502,7 +512,9 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
                         ? isSuperAdmin
                           ? "(Super Admin)"
                           : "(Admin)"
-                        : ""}
+                        : userRole === "HOD"
+                          ? "(HOD)"
+                          : ""}
                     </p>
                     <p className="text-xs text-blue-600">
                       {userEmail || "user@example.com"}
@@ -644,7 +656,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
             <span className="text-[10px] mt-1 font-bold">Tasks</span>
           </Link>
 
-          {userRole === "admin" && (
+          {(userRole === "admin" || userRole === "HOD") && (
             <div className="relative -mt-12">
               <Link
                 to="/dashboard/assign-task"
@@ -713,7 +725,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
                     </h3>
                     <div className="flex justify-center flex-wrap gap-2">
                       <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] px-3 py-1 bg-indigo-50 rounded-full border border-indigo-100/50">
-                        {userRole === "admin" ? (isSuperAdmin ? "Super Admin" : "Administrator") : "Staff"}
+                        {userRole === "admin" ? (isSuperAdmin ? "Super Admin" : "Administrator") : userRole === "HOD" ? "HOD / Supervisor" : "Staff"}
                       </span>
                     </div>
                   </div>

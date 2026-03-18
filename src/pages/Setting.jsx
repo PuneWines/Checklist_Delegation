@@ -480,7 +480,8 @@ const Setting = () => {
     department: '',
     user_access: '',
     Designation: '',
-    profile_image: ''
+    profile_image: '',
+    reported_by: ''
   });
 
   const [deptForm, setDeptForm] = useState({
@@ -545,7 +546,8 @@ const Setting = () => {
       employee_id: generatedEmpId,
       user_access: userForm.user_access || userForm.department,
       department: userForm.department,
-      profile_image: imageUrl
+      profile_image: imageUrl,
+      reported_by: userForm.reported_by
     };
 
     try {
@@ -594,7 +596,8 @@ const Setting = () => {
       profile_image: imageUrl,
       leave_date: userForm.leave_date || null,
       leave_end_date: userForm.leave_end_date || null,
-      remark: userForm.remark || null
+      remark: userForm.remark || null,
+      reported_by: userForm.reported_by
     };
 
     try {
@@ -845,7 +848,8 @@ const Setting = () => {
       profile_image: user.profile_image || '',
       leave_date: user.leave_date ? user.leave_date.split('T')[0] : '',
       leave_end_date: user.leave_end_date ? user.leave_end_date.split('T')[0] : '',
-      remark: user.remark || ''
+      remark: user.remark || '',
+      reported_by: user.reported_by || ''
     });
     setProfilePreview(user.profile_image || null);
     setProfileFile(null);
@@ -911,7 +915,8 @@ const Setting = () => {
       profile_image: '',
       leave_date: '',
       leave_end_date: '',
-      remark: ''
+      remark: '',
+      reported_by: ''
     });
     setProfileFile(null);
     setProfilePreview(null);
@@ -976,6 +981,7 @@ const Setting = () => {
   const getRoleColor = (role) => {
     switch (role) {
       case 'admin': return 'bg-blue-100 text-blue-800';
+      case 'HOD': return 'bg-orange-100 text-orange-800';
       case 'manager': return 'bg-purple-100 text-purple-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -1433,6 +1439,9 @@ const Setting = () => {
                           Role
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Reported To
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
@@ -1508,6 +1517,9 @@ const Setting = () => {
                             <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleColor(user?.role)}`}>
                               {user?.role}
                             </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-xs font-medium text-gray-600">{user?.reported_by || 'Admin'}</span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex space-x-2">
@@ -2148,7 +2160,27 @@ const Setting = () => {
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
                       >
                         <option value="admin">Admin</option>
+                        <option value="HOD">HOD</option>
                         <option value="user">User</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="reported_by" className="block text-sm font-bold text-gray-700 ml-1">Reported To (Supervisor)</label>
+                      <select
+                        id="reported_by"
+                        name="reported_by"
+                        value={userForm.reported_by}
+                        onChange={handleUserInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                      >
+                        <option value="">No Supervisor (Direct Admin)</option>
+                        {userData && userData.length > 0 && userData
+                          .filter(u => u.user_name !== userForm.username && u.user_name !== 'admin')
+                          .map((u, i) => (
+                            <option key={i} value={u.user_name}>{u.user_name}</option>
+                          ))
+                        }
                       </select>
                     </div>
 

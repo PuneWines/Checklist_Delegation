@@ -86,12 +86,9 @@ export const fetchDepartmentDataApi = async () => {
     return [];
   }
 };
-
-
-
 export const createUserApi = async (newUser) => {
   try {
-    // Step 1: Get the current max ID
+    // Step 1: Get the current highest ID
     const { data: maxIdData, error: maxIdError } = await supabase
       .from("users")
       .select("id")
@@ -121,7 +118,8 @@ export const createUserApi = async (newUser) => {
       profile_image: newUser.profile_image || null,
       leave_date: newUser.leave_date || null,
       leave_end_date: newUser.leave_end_date || null,
-      remark: newUser.remark || null
+      remark: newUser.remark || null,
+      reported_by: newUser.reported_by
     };
 
     // Add designation if provided
@@ -168,7 +166,8 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
       status: updatedUser.status,
       user_access: updatedUser.user_access,
       department: updatedUser.department,
-      profile_image: updatedUser.profile_image
+      profile_image: updatedUser.profile_image,
+      reported_by: updatedUser.reported_by
     };
 
     // Only include Designation if explicitly set

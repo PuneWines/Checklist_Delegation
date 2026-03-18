@@ -547,7 +547,9 @@ function DelegationDataPage() {
       const checked = e.target.checked;
 
       if (checked) {
-        const visibleIds = paginatedTasks.map((item) => item.id);
+        const visibleIds = paginatedTasks
+          .filter(item => item.timeStatus !== "Upcoming")
+          .map((item) => item.id);
         setSelectedItems(new Set(visibleIds));
 
         const newStatusData = {};
@@ -563,7 +565,7 @@ function DelegationDataPage() {
         setNextTargetDate({});
       }
     },
-    [delegation]
+    [paginatedTasks]
   );
 
   const handleImageUpload = useCallback((id, e) => {
@@ -1284,8 +1286,10 @@ function DelegationDataPage() {
                             <td className="px-2 sm:px-6 py-2 sm:py-4">
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
                                 checked={isSelected}
+                                disabled={task.timeStatus === "Upcoming"}
+                                title={task.timeStatus === "Upcoming" ? "Cannot submit upcoming tasks" : ""}
                                 onChange={(e) =>
                                   handleCheckboxClick(e, task.id)
                                 }

@@ -22,9 +22,9 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
             task_description: taskData.task_description,
             given_by: taskData.given_by,
             duration: taskData.duration || '',
-            image_url: taskData.image_url,
-            audio_url: taskData.audio_url || null, // Added audio_url
-            admin_done: false, // Added to match schema
+            image_url: taskData.image || taskData.image_url, // Reverted to image_url for delegation_done table
+            audio_url: taskData.audio_url || null,
+            admin_done: false,
           };
 
           console.log('Inserting into delegation_done:', delegationDoneData);
@@ -35,12 +35,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
             .select();
 
           if (doneError) {
-            console.error('Error inserting delegation_done:', {
-              message: doneError.message,
-              details: doneError.details,
-              hint: doneError.hint,
-              code: doneError.code
-            });
+            console.error('Error inserting delegation_done:', doneError);
             throw doneError;
           }
 
@@ -48,7 +43,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
           console.log('Successfully inserted delegation_done:', doneData);
 
           // Step 2: Handle image upload if exists
-          let imageUrl = taskData.image_url;
+          let imageUrl = taskData.image || taskData.image_url;
           const taskImage = uploadedImages[taskData.id];
 
           if (taskImage) {
@@ -59,24 +54,23 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
               const timestamp = Date.now();
               const fileName = `delegation_${taskData.id}_${timestamp}_${taskImage.name}`;
 
-              // Upload to Supabase storage
+              // Upload to Supabase storage using 'checklist' bucket as 'delegation' bucket doesn't exist
               const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('delegation') // Make sure this bucket exists
+                .from('checklist')
                 .upload(fileName, taskImage);
 
               if (uploadError) {
                 console.error('Image upload error:', uploadError);
-                // Continue without image if upload fails
               } else {
-                // Get public URL
+                // Get public URL from 'checklist' bucket
                 const { data: { publicUrl } } = supabase.storage
-                  .from('delegation')
+                  .from('checklist')
                   .getPublicUrl(fileName);
 
                 imageUrl = publicUrl;
 
                 if (doneData) {
-                  // Update delegation_done with image URL
+                  // Update delegation_done with correct column name (image_url)
                   const { error: updateImageError } = await supabase
                     .from('delegation_done')
                     .update({ image_url: imageUrl })
@@ -91,7 +85,6 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
               }
             } catch (imageError) {
               console.error('Image processing error:', imageError);
-              // Continue without failing the entire submission
             }
           }
 
@@ -99,17 +92,14 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
           let delegationUpdate = {
             updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
             submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
-            image: imageUrl,
+            image: imageUrl, // Keep using 'image' for delegation table as requested
             remarks: taskData.reason
           };
 
           if (taskData.status === 'done') {
-            // Mark as completed
             delegationUpdate.status = 'done';
-            delegationUpdate.status = 'done';
-            delegationUpdate.admin_done = false; // Require admin approval
+            delegationUpdate.admin_done = false;
           } else if (taskData.status === 'extend') {
-            // Update planned_date for extension
             if (taskData.next_extend_date) {
               delegationUpdate.planned_date = new Date(taskData.next_extend_date).toISOString();
               delegationUpdate.task_start_date = delegationUpdate.planned_date;
@@ -131,124 +121,43 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
             throw updateError;
           }
 
-          console.log('Successfully updated delegation:', updateData);
-
-          results.push({
-            id: taskData.id,
-            status: 'success',
-            delegation_done: doneData,
-            delegation_updated: updateData,
-            image_url: imageUrl
-          });
-
+          results.push({ id: taskData.id, status: 'success', data: updateData, done_id: doneData?.id });
         } catch (taskError) {
-          console.error(`Error processing task ${taskData.id}:`, taskError);
-          results.push({
-            id: taskData.id,
-            status: 'error',
-            error: taskError.message
-          });
+          console.error(`Failed to process task ${taskData.id}:`, taskError);
+          results.push({ id: taskData.id, status: 'error', error: taskError.message });
         }
       }
 
-      console.log('All submissions processed:', results);
-
-      // Check if any submissions failed
-      const failedTasks = results.filter(r => r.status === 'error');
-      if (failedTasks.length > 0) {
-        console.warn('Some tasks failed:', JSON.stringify(failedTasks, null, 2));
-      }
-
       return results;
-
     } catch (error) {
-      console.error('Batch submission error:', error);
+      console.error('Overall error in insertDelegationDoneAndUpdate:', error);
       return rejectWithValue(error.message);
     }
   }
 );
 
-// export const fetchDelegationDataSortByDate = async () => {
-
-//   const role = localStorage.getItem("role");
-//   const username = localStorage.getItem("user-name");
-//   try {
-//     let query = supabase
-//       .from('delegation')
-//       .select('*')
-//       .order('task_start_date', { ascending: true })
-//       .or('status.is.null,status.eq.extend');
-
-//     // Apply role-based filter
-//     if (role === 'user' && username) {
-//       query = query.eq('name', username);
-//     }
-
-//     const { data, error } = await query;
-
-//     if (error) {
-//       console.log("Error when fetching data", error);
-//       return [];
-//     }
-
-//     console.log("Fetched successfully", data);
-//     return data;
-
-//   } catch (error) {
-//     console.log("Error from Supabase", error);
-//     return [];
-//   }
-// };
-
-// export const fetchDelegation_DoneDataSortByDate = async () => {
-//   const role = localStorage.getItem("role");
-//   const username = localStorage.getItem("user-name");
-//   try {
-//     let query = supabase
-//       .from('delegation_done')
-//       .select('*')
-//       .order('created_at', { ascending: false });
-
-//     // Filter by user if role is 'user'
-//     if (role === 'user' && username) {
-//       query = query.eq('name', username);
-//     }
-
-//     const { data, error } = await query;
-
-//     if (error) {
-//       console.log("Error when fetching data", error);
-//       return [];
-//     }
-
-//     console.log("Fetched successfully", data);
-//     return data;
-
-//   } catch (error) {
-//     console.log("Error from Supabase", error);
-//     return [];
-//   }
-// };
-
-
-
 export const fetchDelegationDataSortByDate = async () => {
-  const role = localStorage.getItem("role");
-  const username = localStorage.getItem("user-name");
-  const userAccess = localStorage.getItem("user_access"); // Add this line
-
   try {
+    const role = localStorage.getItem('role');
+    const username = localStorage.getItem('user-name');
+    const userAccess = localStorage.getItem('user_access');
+
     let query = supabase
       .from('delegation')
       .select('*')
-      .order('task_start_date', { ascending: true })
-      .or('status.is.null,status.eq.extend,status.eq.pending,status.eq.Pending');
+      .is('submission_date', null) // Only fetch pending tasks
+      .order('planned_date', { ascending: true });
 
-    // Apply role-based filter
     if (role === 'user' && username) {
       query = query.eq('name', username);
+    } else if (role === 'HOD' && username) {
+      const { data: reports } = await supabase
+        .from("users")
+        .select("user_name")
+        .eq("reported_by", username);
+      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+      query = query.in('name', reportingUsers);
     } else if (role === 'admin' && userAccess && userAccess !== 'all') {
-      // Filter by departments in user_access for admin
       const allowedDepartments = userAccess.split(',').map(dept => dept.trim()).filter(d => d && d !== 'all');
       if (allowedDepartments.length > 0) {
         query = query.in('department', allowedDepartments);
@@ -256,59 +165,58 @@ export const fetchDelegationDataSortByDate = async () => {
     }
 
     const { data, error } = await query;
-
-    if (error) {
-      console.log("Error when fetching data", error);
-      return [];
-    }
-
-    console.log("Fetched successfully", data);
+    if (error) throw error;
     return (data || []).map(row => ({ ...row, id: row.task_id }));
-
   } catch (error) {
-    console.log("Error from Supabase", error);
+    console.log("Error from Supabase fetchDelegationDataSortByDate", error);
     return [];
   }
 };
 
 export const fetchDelegation_DoneDataSortByDate = async () => {
   try {
-    let query = supabase
+    const { data, error } = await supabase
       .from('delegation_done')
       .select('*')
       .order('created_at', { ascending: false });
 
-    const { data: doneData, error } = await query;
+    if (error) throw error;
 
-    if (error) {
-      console.log("Error when fetching delegation_done data", error);
-      return [];
+    const taskIds = data.map(d => d.task_id).filter(id => id);
+    let taskDetails = [];
+    if (taskIds.length > 0) {
+      const { data: details } = await supabase
+        .from('delegation')
+        .select('*')
+        .in('task_id', taskIds);
+      taskDetails = details || [];
     }
 
-    const formattedData = (doneData || []).map(item => ({
-      ...item,
-      id: item.task_id
-    }));
-
-    console.log("Fetched delegation history:", formattedData);
-    return formattedData;
-
+    return data.map(doneItem => {
+      const detail = taskDetails.find(t => t.task_id === doneItem.task_id) || {};
+      return {
+        ...detail,
+        ...doneItem,
+        done_id: doneItem.id,
+        original_task_id: doneItem.task_id
+      };
+    });
   } catch (error) {
     console.log("Error from Supabase fetchDelegation_DoneDataSortByDate", error);
     return [];
   }
 };
 
+export const fetchDelegationData = fetchDelegationDataSortByDate;
+export const fetchDelegationHistory = fetchDelegation_DoneDataSortByDate;
+
 export const updateDelegationDoneStatus = createAsyncThunk(
   'delegation/updateDelegationDoneStatus',
   async ({ id, status, taskId }, { rejectWithValue }) => {
     try {
-      console.log('Approve delegation task:', { id, taskId });
-
       const username = localStorage.getItem("user-name") || "Admin";
       const now = new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30');
 
-      // Update delegation_done admin_done status
       const { data: doneData, error: doneError } = await supabase
         .from('delegation_done')
         .update({
@@ -323,9 +231,8 @@ export const updateDelegationDoneStatus = createAsyncThunk(
 
       if (doneError) throw doneError;
 
-      // Also update the main delegation table
       if (taskId) {
-        const { error: mainError } = await supabase
+        await supabase
           .from('delegation')
           .update({
             admin_done: true,
@@ -334,13 +241,10 @@ export const updateDelegationDoneStatus = createAsyncThunk(
             admin_approved_by: username
           })
           .eq('task_id', taskId);
-
-        if (mainError) throw mainError;
       }
 
       return doneData;
     } catch (error) {
-      console.error('Error updating status:', error);
       return rejectWithValue(error.message);
     }
   }
@@ -348,84 +252,49 @@ export const updateDelegationDoneStatus = createAsyncThunk(
 
 export const fetchPendingApprovals = async () => {
   try {
-    console.log('Fetching pending delegation approvals (DEBUG MODE)...');
-
-    // Debug: Fetch recently created rows regardless of status
-    const { data: rawData, error: rawError } = await supabase
-      .from('delegation_done')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(5);
-
-    if (rawError) console.error('Raw fetch error:', rawError);
-    console.log('Last 5 delegation_done entries:', rawData);
-
-    // Fetch actual pending approvals
-    // Fetch actual pending approvals
     const { data: doneData, error } = await supabase
       .from('delegation_done')
       .select('*')
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Supabase error fetching pending approvals:', error);
-      throw error;
-    }
-
+    if (error) throw error;
     if (!doneData || doneData.length === 0) return [];
 
-    // Fetch related task details from 'delegation' table to get full info (name, description, etc.)
     const taskIds = doneData.map(d => d.task_id).filter(id => id);
-
     let taskDetails = [];
     if (taskIds.length > 0) {
-      // Use 'task_id' column to look up delegation tasks
-      const { data: details, error: detailsError } = await supabase
+      const { data: details } = await supabase
         .from('delegation')
         .select('*')
         .in('task_id', taskIds);
-
-      if (detailsError) {
-        console.error('Error fetching related delegation details:', detailsError);
-      } else {
-        taskDetails = details;
-      }
+      taskDetails = details || [];
     }
 
-    // Merge details
-    const mergedData = doneData.map(doneItem => {
-      // Search using task_id
+    return doneData.map(doneItem => {
       const detail = taskDetails.find(t => t.task_id === doneItem.task_id);
       return {
-        ...detail,      // properties from delegation (name, description, etc.)
-        ...doneItem,    // properties from delegation_done
-        // Ensure we have both IDs accessible if needed
+        ...detail,
+        ...doneItem,
         done_id: doneItem.id,
         original_task_id: doneItem.task_id
       };
     });
-
-    console.log(`Found ${mergedData.length} pending delegation approvals with details.`, mergedData);
-    return mergedData;
   } catch (error) {
-    console.error('Error fetching pending approvals:', error);
     return [];
   }
 };
 
 export const rejectDelegationTask = async (id, taskId, reason) => {
   try {
-    // 1. Mark delegation_done as rejected
-    const { error: doneError } = await supabase
+    // 1. Mark delegation_done as rejected and save the reason
+    await supabase
       .from('delegation_done')
-      .update({ status: 'rejected' })
+      .update({ status: 'rejected', reason: reason })
       .eq('id', id);
 
-    if (doneError) throw doneError;
-
     // 2. Reset delegation task to pending so user can see it again
-    const { error: mainError } = await supabase
+    await supabase
       .from('delegation')
       .update({
         status: 'pending',
@@ -435,49 +304,9 @@ export const rejectDelegationTask = async (id, taskId, reason) => {
       })
       .eq('task_id', taskId);
 
-    if (mainError) throw mainError;
-
     return { success: true };
   } catch (error) {
     console.error("Error rejecting delegation task:", error);
     throw error;
-  }
-};
-
-export const fetchDelegationHistory = async () => {
-  try {
-    // Fetch only approved tasks
-    const { data: doneData, error } = await supabase
-      .from('delegation_done')
-      .select('*')
-      .eq('status', 'done')
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-
-    if (!doneData || doneData.length === 0) return [];
-
-    const taskIds = doneData.map(d => d.task_id);
-    const { data: taskDetails, error: detailsError } = await supabase
-      .from('delegation')
-      .select('*')
-      .in('task_id', taskIds);
-
-    if (detailsError) throw detailsError;
-
-    const mergedData = doneData.map(doneItem => {
-      const detail = taskDetails.find(t => t.task_id === doneItem.task_id);
-      return {
-        ...detail,
-        ...doneItem,
-        id: doneItem.id, // delegation_done id
-        taskId: doneItem.task_id
-      };
-    });
-
-    return mergedData;
-  } catch (error) {
-    console.error("Error fetching delegation history:", error);
-    return [];
   }
 };

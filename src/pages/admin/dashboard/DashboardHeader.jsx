@@ -24,6 +24,7 @@ export default function DashboardHeader({
     const [endDate, setEndDate] = useState("")
     const normalizedRole = (userRole || "").toLowerCase();
     const isAdmin = normalizedRole === "admin";
+    const isHOD = normalizedRole === "hod";
 
     // Fetch total users count - UPDATED VERSION
     useEffect(() => {
@@ -187,22 +188,21 @@ export default function DashboardHeader({
                                 </div>
                             )}
 
-                            {/* Dashboard Staff Filter */}
-                            <div className="relative">
-                                {isAdmin ? (
-                                    <select
-                                        value={dashboardStaffFilter}
-                                        onChange={(e) => setDashboardStaffFilter(e.target.value)}
-                                        className="w-full appearance-none rounded-lg border border-purple-200 p-3 pr-8 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
-                                    >
-                                        <option value="all">All Staff</option>
-                                        {availableStaff.map((staffName) => (
-                                            <option key={staffName} value={staffName}>
-                                                {staffName}
-                                            </option>
-                                        ))}
-                                    </select>
-                                ) : (
+                             <div className="relative">
+                                 {isAdmin || isHOD ? (
+                                     <select
+                                         value={dashboardStaffFilter}
+                                         onChange={(e) => setDashboardStaffFilter(e.target.value)}
+                                         className="w-full appearance-none rounded-lg border border-purple-200 p-3 pr-8 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
+                                     >
+                                         <option value="all"> {isHOD ? "My Group" : "All Staff"} </option>
+                                         {availableStaff.map((staffName) => (
+                                             <option key={staffName} value={staffName}>
+                                                 {staffName}
+                                             </option>
+                                         ))}
+                                     </select>
+                                 ) : (
                                     <select
                                         value={username || ""}
                                         disabled={true}
@@ -308,13 +308,13 @@ export default function DashboardHeader({
                         )}
 
                         {/* Dashboard Staff Filter */}
-                        {isAdmin ? (
+                        {isAdmin || isHOD ? (
                             <select
                                 value={dashboardStaffFilter}
                                 onChange={(e) => setDashboardStaffFilter(e.target.value)}
                                 className="w-[140px] sm:w-[180px] rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
                             >
-                                <option value="all">All Staff Members</option>
+                                <option value="all">{isHOD ? "My Group" : "All Staff Members"}</option>
                                 {availableStaff.map((staffName) => (
                                     <option key={staffName} value={staffName}>
                                         {staffName}

@@ -119,7 +119,7 @@ export default function AdminDashboard() {
             return taskDate && taskDate >= start && taskDate <= end;
           });
 
-          processFilteredData(filteredData, null);
+          await processFilteredData(filteredData, null);
         } else if (mainTab === 'repair' || departmentFilter === 'Repair') {
           const result = await fetchAllRepairTasks(1, batchSize);
           const data = result.data || [];
@@ -131,7 +131,7 @@ export default function AdminDashboard() {
             const taskDate = parseTaskStartDate(task.planned_date || task.task_start_date);
             return taskDate && taskDate >= start && taskDate <= end;
           });
-          processFilteredData(filteredData, null);
+          await processFilteredData(filteredData, null);
         } else if (dashboardType === "checklist") {
           // Use the new date range API for checklist
           const filteredData = await fetchChecklistDataByDateRangeApi(
@@ -153,7 +153,7 @@ export default function AdminDashboard() {
           );
 
           // Process the filtered data
-          processFilteredData(filteredData, stats);
+          await processFilteredData(filteredData, stats);
         } else {
           // For delegation, use the existing logic with date filtering
           await fetchDepartmentDataWithDateRange(startDate, endDate);
@@ -184,16 +184,32 @@ export default function AdminDashboard() {
   };
 
 
-  const processFilteredData = (data, stats) => {
-    const username = localStorage.getItem("user-name");
+  const processFilteredData = async (data, stats) => {
     const userRole = (localStorage.getItem("role") || "").toLowerCase();
+    const username = localStorage.getItem("user-name");
     const today = new Date();
     today.setHours(23, 59, 59, 999);
+
+    let reportingUsers = [username?.toLowerCase()];
+    if (userRole === "hod") {
+        const { data: reports } = await supabase
+            .from("users")
+            .select("user_name")
+            .eq("reported_by", username);
+        if (reports) {
+            reportingUsers = [username.toLowerCase(), ...reports.map(r => r.user_name.toLowerCase())];
+        }
+    }
 
     let totalTasks = 0;
     let completedTasks = 0;
     let pendingTasks = 0;
     let overdueTasks = 0;
+
+    const process = (dataStream, statsObject) => {
+        // ... nested processing logic or just call it after getReportees
+    };
+
 
     const monthlyData = {
       Jan: { completed: 0, pending: 0 },
@@ -210,15 +226,18 @@ export default function AdminDashboard() {
       Dec: { completed: 0, pending: 0 },
     };
 
-    // Process tasks
+    // Filter tasks based on role and reported hierarchy
     const processedTasks = data
       .map((task) => {
-        // Skip if not involved (assigned to OR created by) for non-admin
-        if (userRole !== "admin") {
-          const currentUserName = (username || "").toLowerCase();
-          const assignedUser = (task.name || task.assigned_person || task.doer_name || "").toLowerCase();
-          const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
+        const currentUserName = (username || "").toLowerCase();
+        const assignedUser = (task.name || task.assigned_person || task.doer_name || "").toLowerCase();
+        const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
 
+        if (userRole === "hod") {
+            if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
+                return null;
+            }
+        } else if (userRole !== "admin") {
           if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
             return null;
           }
@@ -546,7 +565,7 @@ export default function AdminDashboard() {
       console.log(`✅ Fetched ${data.length} TOTAL records for ${mainTab || dashboardType}`);
 
       const username = localStorage.getItem("user-name")
-      const userRole = (localStorage.getItem("role") || "").toLowerCase()
+      const userRoleLower = (localStorage.getItem("role") || "").toLowerCase()
       // Reference point for all date comparisons
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
@@ -618,17 +637,36 @@ export default function AdminDashboard() {
         )
       }
 
+      // Fetch reporting users for HOD role check
+      let reportingUsers = [username?.toLowerCase()];
+      if (userRole === "hod") {
+          const { data: reports } = await supabase
+              .from("users")
+              .select("user_name")
+              .eq("reported_by", username);
+          if (reports) {
+              reportingUsers = [username.toLowerCase(), ...reports.map(r => (r.user_name || "").toLowerCase())];
+          }
+      }
+
       // Process tasks with your field names
       const processedTasks = filteredData
         .map((task) => {
           // Skip if not involved (assigned to OR created by) for non-admin
-          if ((userRole || "").toLowerCase() !== "admin") {
-            const currentUserName = (username || "").toLowerCase();
-            const assignedUser = (task.name || task.assigned_person || task.doer_name || "").toLowerCase();
-            const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
+          const currentUserName = (username || "").toLowerCase();
+          const roleNormalized = (userRole || "").toLowerCase();
+          const assignedUser = (task.name || task.assigned_person || task.doer_name || "").toLowerCase();
+          const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
 
-            if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
-              return null;
+          if (roleNormalized !== "admin") {
+            if (roleNormalized === 'hod') {
+                if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
+                    return null;
+                }
+            } else {
+                if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
+                    return null;
+                }
             }
           }
 

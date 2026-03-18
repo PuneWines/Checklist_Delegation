@@ -26,7 +26,6 @@ import AllTasks from "./pages/admin/AllTasks"
 import HolidayListPage from "./pages/admin/HolidayListPage"         // New
 import WorkingDayCalendarPage from "./pages/admin/WorkingDayCalendarPage" // New
 import AdminApprovalPage from "./pages/admin/AdminApprovalPage" // New
-import TaskRecovery from "./pages/admin/TaskRecovery" // Temporary Recovery Tool
 
 // --- Components ---
 import RealtimeLogoutListener from "./components/RealtimeLogoutListener"
@@ -37,14 +36,22 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     const username = localStorage.getItem("user-name")
     const role = localStorage.getItem("role")
 
-    // 1. Check if user is logged in
     if (!username) {
         return <Navigate to="/login" replace />
     }
 
-    // 2. Check if user has permission (if roles are defined)
     if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
-        // Redirect unauthorized users to the safe dashboard view
+        return <Navigate to="/dashboard/admin" replace />
+    }
+
+    return children
+}
+
+const SuperAdminRoute = ({ children }) => {
+    const username = localStorage.getItem("user-name")
+    const role = localStorage.getItem("role")
+
+    if (!username || username !== "admin" || role !== "admin") {
         return <Navigate to="/dashboard/admin" replace />
     }
 
@@ -90,7 +97,7 @@ function App() {
                     <Route
                         path="/dashboard/assign-task"
                         element={
-                            <ProtectedRoute allowedRoles={["admin"]}>
+                            <ProtectedRoute allowedRoles={["admin", "HOD"]}>
                                 <AdminAssignTask />
                             </ProtectedRoute>
                         }
@@ -159,9 +166,9 @@ function App() {
                     <Route
                         path="/dashboard/holiday-list"
                         element={
-                            <ProtectedRoute allowedRoles={["admin"]}>
+                            <SuperAdminRoute>
                                 <HolidayListPage />
-                            </ProtectedRoute>
+                            </SuperAdminRoute>
                         }
                     />
 
@@ -178,7 +185,7 @@ function App() {
                     <Route
                         path="/dashboard/data"
                         element={
-                            <ProtectedRoute allowedRoles={["admin"]}>
+                            <ProtectedRoute allowedRoles={["admin", "HOD"]}>
                                 <DataPage />
                             </ProtectedRoute>
                         }
@@ -194,7 +201,7 @@ function App() {
                     <Route
                         path="/dashboard/admin-data"
                         element={
-                            <ProtectedRoute allowedRoles={["admin"]}>
+                            <ProtectedRoute allowedRoles={["admin", "HOD"]}>
                                 <AdminDataPage />
                             </ProtectedRoute>
                         }
@@ -210,7 +217,7 @@ function App() {
                     <Route
                         path="/dashboard/delegation-data"
                         element={
-                            <ProtectedRoute allowedRoles={["admin"]}>
+                            <ProtectedRoute allowedRoles={["admin", "HOD"]}>
                                 <AdminDelegationTask />
                             </ProtectedRoute>
                         }
@@ -218,7 +225,7 @@ function App() {
                     <Route
                         path="/dashboard/admin-approval"
                         element={
-                            <ProtectedRoute allowedRoles={["admin"]}>
+                            <ProtectedRoute allowedRoles={["admin", "HOD"]}>
                                 <AdminApprovalPage />
                             </ProtectedRoute>
                         }
@@ -232,22 +239,14 @@ function App() {
                         }
                     />
 
-                    <Route
-                        path="/dashboard/fix-my-blunder"
-                        element={
-                            <ProtectedRoute allowedRoles={["admin"]}>
-                                <TaskRecovery />
-                            </ProtectedRoute>
-                        }
-                    />
 
                     {/* --- Settings (Admin Only) --- */}
                     <Route
                         path="/dashboard/setting"
                         element={
-                            <ProtectedRoute allowedRoles={["admin"]}>
+                            <SuperAdminRoute>
                                 <Setting />
-                            </ProtectedRoute>
+                            </SuperAdminRoute>
                         }
                     />
 

@@ -35,6 +35,13 @@ export const fetchDashboardDataApi = async (
     // Apply role-based filtering first
     if (role === 'user' && username) {
       query = query.eq('name', username);
+    } else if (role === 'HOD' && username) {
+      const { data: reports } = await supabase
+        .from("users")
+        .select("user_name")
+        .eq("reported_by", username);
+      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+      query = query.in('name', reportingUsers);
     }
 
     // Apply department filter if provided (for checklist and delegation)
@@ -44,8 +51,8 @@ export const fetchDashboardDataApi = async (
 
 
 
-    // Apply staff filter if provided and not "all" (for admin users)
-    if (staffFilter && staffFilter !== 'all' && role === 'admin') {
+    // Apply staff filter if provided and not "all" (for admin/HOD users)
+    if (staffFilter && staffFilter !== 'all' && (role === 'admin' || role === 'HOD')) {
       query = query.eq('name', staffFilter);
     }
 
@@ -143,10 +150,17 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     // Apply role-based filtering
     if (role === 'user' && username) {
       query = query.eq('name', username);
+    } else if (role === 'HOD' && username) {
+      const { data: reports } = await supabase
+        .from("users")
+        .select("user_name")
+        .eq("reported_by", username);
+      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+      query = query.in('name', reportingUsers);
     }
 
     // Apply staff filter
-    if (staffFilter && staffFilter !== 'all' && role === 'admin') {
+    if (staffFilter && staffFilter !== 'all' && (role === 'admin' || role === 'HOD')) {
       query = query.eq('name', staffFilter);
     }
 
@@ -235,6 +249,13 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
     // Apply filters
     if (role === 'user' && username) {
       query = query.eq('name', username);
+    } else if (role === 'HOD' && username) {
+      const { data: reports } = await supabase
+        .from("users")
+        .select("user_name")
+        .eq("reported_by", username);
+      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+      query = query.in('name', reportingUsers);
     } else if (staffFilter && staffFilter !== 'all') {
       query = query.eq('name', staffFilter);
     }
@@ -580,7 +601,17 @@ export const getUniqueDepartmentsApi = async () => {
       throw error;
     }
 
-    return (data || []).map(d => d.name.trim()).filter(Boolean);
+    const role = localStorage.getItem('role');
+    const userAccess = localStorage.getItem('user_access');
+
+    let departments = (data || []).map(d => d.name.trim()).filter(Boolean);
+
+    if (role === 'HOD' && userAccess && userAccess !== 'all') {
+      const allowedDepts = userAccess.split(',').map(d => d.trim().toLowerCase());
+      departments = departments.filter(d => allowedDepts.includes(d.toLowerCase()));
+    }
+
+    return departments;
   } catch (error) {
     console.error("Error from Supabase:", error);
     throw error;
@@ -591,12 +622,15 @@ export const getUniqueDepartmentsApi = async () => {
 
 export const getStaffNamesByDepartmentApi = async (departmentFilter = null) => {
   try {
+    const role = localStorage.getItem('role');
+    const username = localStorage.getItem('user-name');
+
     let query = supabase
       .from('users')
-      .select('user_name, user_access, status')
+      .select('user_name, user_access, status, reported_by')
       .not('user_name', 'is', null)
       .not('user_name', 'eq', '')
-      .eq('status', 'active'); // Only active users
+      .eq('status', 'active'); 
 
     const { data, error } = await query;
 
@@ -607,6 +641,11 @@ export const getStaffNamesByDepartmentApi = async (departmentFilter = null) => {
 
     // Exclude admins (user_access === 'admin')
     let staff = data.filter(user => (user.user_access || '').toLowerCase() !== 'admin');
+
+    // Filter by HOD reports if applicable
+    if (role === 'HOD' && username) {
+      staff = staff.filter(user => user.reported_by === username || user.user_name === username);
+    }
 
     // Filter by department if provided
     if (departmentFilter && departmentFilter !== 'all') {
@@ -1051,6 +1090,13 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, depar
     // Apply filters
     if (role === 'user' && username) {
       query = query.eq('name', username);
+    } else if (role === 'HOD' && username) {
+      const { data: reports } = await supabase
+        .from("users")
+        .select("user_name")
+        .eq("reported_by", username);
+      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+      query = query.in('name', reportingUsers);
     } else if (staffFilter && staffFilter !== 'all') {
       query = query.eq('name', staffFilter);
     }
@@ -1105,6 +1151,13 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, de
     // Apply filters
     if (role === 'user' && username) {
       query = query.eq('name', username);
+    } else if (role === 'HOD' && username) {
+      const { data: reports } = await supabase
+        .from("users")
+        .select("user_name")
+        .eq("reported_by", username);
+      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+      query = query.in('name', reportingUsers);
     } else if (staffFilter && staffFilter !== 'all') {
       query = query.eq('name', staffFilter);
     }
@@ -1158,6 +1211,13 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     // Apply filters
     if (role === 'user' && username) {
       query = query.eq('name', username);
+    } else if (role === 'HOD' && username) {
+      const { data: reports } = await supabase
+        .from("users")
+        .select("user_name")
+        .eq("reported_by", username);
+      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+      query = query.in('name', reportingUsers);
     } else if (staffFilter && staffFilter !== 'all') {
       query = query.eq('name', staffFilter);
     }

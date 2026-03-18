@@ -129,10 +129,11 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
         taskD.setHours(0, 0, 0, 0);
 
         return doerName.filter(user => {
-            if (typeof user === 'string') return true; // Fallback for old data format
+            if (typeof user === 'string') return true;
 
             if (user.status === 'inactive') return false;
 
+            // Leave filter
             if ((user.status === 'on leave' || user.status === 'on_leave') && user.leave_date && user.leave_end_date) {
                 const leaveS = new Date(user.leave_date);
                 const leaveE = new Date(user.leave_end_date);
@@ -140,9 +141,19 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                 leaveE.setHours(0, 0, 0, 0);
 
                 if (taskD >= leaveS && taskD <= leaveE) {
-                    return false; // User is on leave during this task date
+                    return false;
                 }
             }
+
+            // HOD Restriction
+            const currentU = localStorage.getItem("user-name");
+            const currentR = localStorage.getItem("role");
+            if (currentR === "HOD" || (currentR === "admin" && currentU !== "admin")) {
+                const dName = user.user_name || user.name;
+                const reportedBy = user.reported_by;
+                if (dName !== currentU && reportedBy !== currentU) return false;
+            }
+
             return true;
         });
     };
@@ -197,7 +208,8 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                             name="givenBy"
                             value={task.givenBy}
                             onChange={handleChange}
-                            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
+                            disabled={localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")}
+                            className={`w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm ${(localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? 'opacity-70 cursor-not-allowed' : ''}`}
                         >
                             <option value="">Select Assign From</option>
                             {givenBy.map((g, i) => <option key={i} value={g}>{g}</option>)}
@@ -377,7 +389,12 @@ export default function ChecklistTask() {
     const [holidays, setHolidays] = useState([]);
 
     // Per-task list
-    const [tasks, setTasks] = useState([defaultTask()]);
+    const [tasks, setTasks] = useState([
+        { 
+            ...defaultTask(), 
+            givenBy: (localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? localStorage.getItem("user-name") : "" 
+        }
+    ]);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [allGeneratedTasks, setAllGeneratedTasks] = useState([]);
 
@@ -398,7 +415,7 @@ export default function ChecklistTask() {
         return [...prev, {
             ...defaultTask(),
             department: lastTask?.department || "",
-            givenBy: lastTask?.givenBy || "",
+            givenBy: (localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? localStorage.getItem("user-name") : (lastTask?.givenBy || ""),
             doer: lastTask?.doer || ""
         }];
     });

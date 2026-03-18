@@ -63,6 +63,14 @@ function TaskCard({ task, index, total, allDoers, onUpdate, onRemove }) {
 
             if (d.status === 'inactive') return false;
 
+            // HOD Restriction
+            const currentU = localStorage.getItem("user-name");
+            const currentR = localStorage.getItem("role");
+            if (currentR === "HOD" || (currentR === "admin" && currentU !== "admin")) {
+                // HOD can see themselves and their reports
+                if (d.user_name !== currentU && d.reported_by !== currentU) return false;
+            }
+
             // Leave filter
             if ((d.status === 'on leave' || d.status === 'on_leave') && d.leave_date && d.leave_end_date) {
                 const leaveS = new Date(d.leave_date);
@@ -306,7 +314,8 @@ export default function EATask() {
                         phone: user.phone || user.number ? String(user.phone || user.number) : "",
                         status: user.status,
                         leave_date: user.leave_date,
-                        leave_end_date: user.leave_end_date
+                        leave_end_date: user.leave_end_date,
+                        reported_by: user.reported_by
                     });
                     existingNames.add(user.user_name);
                 }

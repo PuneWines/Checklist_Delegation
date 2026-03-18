@@ -40,7 +40,14 @@ export const fetchMaintenanceDataSortByDate = async (page = 1, limit = 50, searc
             query = query.or(`name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
         }
 
-        if (role === 'user' && username) {
+        if (role === 'hod' && username) {
+            const { data: reports } = await supabase
+                .from("users")
+                .select("user_name")
+                .eq("reported_by", username);
+            const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+            query = query.in('name', reportingUsers);
+        } else if (role === 'user' && username) {
             console.log(`DEBUG: Applying user filter for ${username}`);
             query = query.eq('name', username);
         }
@@ -119,7 +126,14 @@ export const fetchMaintenanceDataForHistory = async (page = 1, searchTerm = '') 
             query = query.or(`name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
         }
 
-        if (role === 'user' && username) {
+        if (role === 'HOD' && username) {
+            const { data: reports } = await supabase
+                .from("users")
+                .select("user_name")
+                .eq("reported_by", username);
+            const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+            query = query.in('name', reportingUsers);
+        } else if (role === 'user' && username) {
             query = query.eq('name', username);
         }
 
