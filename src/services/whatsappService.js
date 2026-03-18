@@ -5,6 +5,7 @@ import supabase from "../SupabaseClient";
  * Sends task notifications to users via WhatsApp
  */
 
+
 // WhatsApp API Configuration
 // WhatsApp API Configuration
 // WhatsApp API Configuration (Maytapi)
