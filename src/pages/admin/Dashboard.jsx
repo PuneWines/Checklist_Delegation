@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useDispatch, useSelector } from "react-redux"
+import supabase from "../../SupabaseClient"
 import AdminLayout from "../../components/layout/AdminLayout.jsx"
 import DashboardHeader from "./dashboard/DashboardHeader.jsx"
 import StatisticsCards from "./dashboard/StaticsCard.jsx"

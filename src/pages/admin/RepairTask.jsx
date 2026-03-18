@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Loader2, Mic, Square, Trash2, Play, Pause, Plus, Save, CheckCircle2, Clock } from "lucide-react";
+import { X, Loader2, Mic, Square, Trash2, Plus, Save, CheckCircle2, Clock } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { useDispatch, useSelector } from "react-redux";
 import { createRepair } from "../../redux/slice/repairSlice";

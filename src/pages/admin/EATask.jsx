@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { Users, Phone, Calendar, Save, ArrowLeft, Loader2, Mic, Square, Trash2, Plus, CheckCircle2, X, Clock } from "lucide-react";
+import { Users, Calendar, Save, ArrowLeft, Loader2, Mic, Square, Trash2, Plus, CheckCircle2, X, Clock } from "lucide-react";
 import { ReactMediaRecorder } from "react-media-recorder";
 import supabase from "../../SupabaseClient";
 import { useDispatch, useSelector } from "react-redux";
@@ -27,6 +27,7 @@ const defaultTask = () => ({
     id: Date.now() + Math.random(),
     doer_name: DEFAULT_DOER_NAME,
     phone_number: "",
+    given_by: (localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? localStorage.getItem("user-name") : "",
     planned_date: "",
     planned_time: "09:00",
     task_description: "",
@@ -121,6 +122,20 @@ function TaskCard({ task, index, total, allDoers, onUpdate, onRemove }) {
             </div>
 
             <div className="p-5 space-y-4">
+                {/* Assign From */}
+                <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Assign From (Given By) <span className="text-red-500">*</span></label>
+                    <input
+                        type="text"
+                        name="given_by"
+                        value={task.given_by}
+                        onChange={(e) => onUpdate(task.id, { given_by: e.target.value })}
+                        disabled={localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")}
+                        className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${(localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        placeholder="Enter assigner name"
+                    />
+                </div>
+
                 {/* Doer Name with Autocomplete */}
                 <div className="relative">
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
@@ -368,6 +383,10 @@ export default function EATask() {
     const handleSubmitAll = async () => {
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i];
+            if (!t.given_by) {
+                showToast(`Task ${i + 1}: Please specify 'Assign From' (Given By).`, 'error');
+                return;
+            }
             if (!t.doer_name || !t.planned_date || (!t.task_description && !t.recordedAudio)) {
                 showToast(`Task ${i + 1}: Please fill in all required fields.`, 'error');
                 return;
@@ -396,7 +415,6 @@ export default function EATask() {
 
         setIsSubmitting(true);
         try {
-            const givenBy = localStorage.getItem("user-name") || "Admin";
 
             // 1. Parallelize Audio Uploads
             const audioUploadPromises = tasks.map(async (task) => {
@@ -435,7 +453,7 @@ export default function EATask() {
                     audio_url: audioUrlMap[task.id],
                     duration: task.duration || null,
                     status: 'pending',
-                    given_by: givenBy
+                    given_by: task.given_by
                 };
             });
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-    ClipboardList, Calendar, X, Mic, Square, Trash2, Plus, Save, Loader2, CheckCircle2, Clock, Play, Pause, FileCheck
+    ClipboardList, Calendar, X, Mic, Square, Trash2, Plus, Save, Loader2, CheckCircle2, Clock, FileCheck
 } from "lucide-react";
 import { ReactMediaRecorder } from "react-media-recorder";
 import AdminLayout from "../../components/layout/AdminLayout";
