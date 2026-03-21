@@ -45,12 +45,14 @@ const getTimeStatus = (dateString, taskStatus) => {
   if (taskDate.getTime() === today.getTime()) return "Today";
   return "Upcoming";
 };
-
-const RenderDescription = ({ text, audioUrl }) => {
-  if (!text && !audioUrl) return "—";
+const RenderDescription = ({ text, audioUrl, instructionUrl, instructionType }) => {
+  if (!text && !audioUrl && !instructionUrl) return "—";
 
   const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|wav|ogg|webm|m4a|aac)(\?.*)?)/i;
-  const match = text && typeof text === 'string' && text.match(urlRegex);
+  let match = null;
+  if (text && typeof text === 'string') {
+      match = text.match(urlRegex);
+  }
 
   let url = audioUrl || (match ? match[0] : null);
   let cleanText = text || '';
@@ -59,16 +61,28 @@ const RenderDescription = ({ text, audioUrl }) => {
     cleanText = text.replace(match[0], '').replace(/Voice Note Link:/i, '').replace(/Voice Note:/i, '').trim();
   }
 
-  if (url) {
-    return (
-      <div className="flex flex-col gap-2 min-w-[200px]">
-        {cleanText && <span className="whitespace-pre-wrap text-[11px] font-bold text-gray-700">{cleanText}</span>}
-        <AudioPlayer url={url} />
-      </div>
-    );
-  }
+  const renderInstruction = () => {
+    if (!instructionUrl || !instructionType || instructionType === 'none') return null;
+    let iconLabel = "View Reference";
+    if (instructionType === 'video') iconLabel = "Play Video Reference";
+    if (instructionType === 'image') iconLabel = "View Image Reference";
+    if (instructionType === 'pdf') iconLabel = "Open PDF Reference";
+    if (instructionType === 'link') iconLabel = "Visit Reference Link";
 
-  return <span className="whitespace-pre-wrap text-[11px] font-bold text-gray-700" title={cleanText}>{cleanText || "—"}</span>;
+    return (
+      <a href={instructionUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 mt-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1.5 rounded-md hover:bg-blue-100 transition-colors w-fit shadow-sm">
+        🔗 {iconLabel}
+      </a>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 min-w-[200px]">
+      {cleanText && <span className="whitespace-pre-wrap text-sm" title={cleanText}>{cleanText}</span>}
+      {url && <AudioPlayer url={url} />}
+      {renderInstruction()}
+    </div>
+  );
 };
 
 export default function QuickTask() {
@@ -878,7 +892,7 @@ export default function QuickTask() {
                               />
                             ) : (
                               <div className="whitespace-normal break-words">
-                                <RenderDescription text={task.task_description} audioUrl={task.audio_url} />
+                                <RenderDescription text={task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
                               </div>
                             )}
                           </td>
@@ -1132,7 +1146,7 @@ export default function QuickTask() {
                             ) : (
                               <>
                                 <div className="text-sm font-bold text-gray-800 leading-tight mb-2">
-                                  <RenderDescription text={task.task_description} />
+                                  <RenderDescription text={task.task_description} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
                                   {task.audio_url && (
                                     <div className="mt-2">
                                       <AudioPlayer url={task.audio_url} />
@@ -1375,6 +1389,8 @@ export default function QuickTask() {
                                 <RenderDescription
                                   text={task.task_description || task.work_description}
                                   audioUrl={task.audio_url}
+                                  instructionUrl={task.instruction_attachment_url}
+                                  instructionType={task.instruction_attachment_type}
                                 />
                               </>
                             )}
@@ -1619,6 +1635,8 @@ export default function QuickTask() {
                                   <RenderDescription
                                     text={task.task_description || task.work_description}
                                     audioUrl={task.audio_url}
+                                    instructionUrl={task.instruction_attachment_url}
+                                    instructionType={task.instruction_attachment_type}
                                   />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">

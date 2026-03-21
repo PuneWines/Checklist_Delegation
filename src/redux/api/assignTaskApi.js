@@ -159,6 +159,8 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
       enable_reminder: task.enableReminders ? "yes" : "no",
       require_attachment: task.requireAttachment ? "yes" : "no",
       audio_url: task.audio_url || null,
+      instruction_attachment_url: task.instruction_attachment_url || null,
+      instruction_attachment_type: task.instruction_attachment_type || null,
       status: targetTable === 'checklist' ? null : (task.status || 'pending')
     }));
 
@@ -195,6 +197,8 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
       enable_reminder: task.enableReminders ? "yes" : "no",
       require_attachment: task.requireAttachment ? "yes" : "no",
       audio_url: task.audio_url || null,
+      instruction_attachment_url: task.instruction_attachment_url || null,
+      instruction_attachment_type: task.instruction_attachment_type || null,
     };
 
     if (isOneTime) {

@@ -42,6 +42,9 @@ const defaultTask = () => ({
     time: "09:00",
     recordedAudio: null,
     showCalendar: false,
+    instructionType: "none",
+    instructionFile: null,
+    instructionLink: "",
 });
 
 // --- AUDIO UTILITIES ---
@@ -178,11 +181,49 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                     </select>
                 </div>
 
-                {/* Description & Voice Note */}
-                <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-                        Task Description <span className="text-red-500">*</span>
-                    </label>
+                {/* Description, Reference & Voice Note */}
+                <div className="space-y-3">
+                    <div className="flex justify-between items-center -mb-1">
+                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide flex items-center gap-2">
+                            Task Description <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                            value={task.instructionType}
+                            onChange={(e) => onUpdate(task.id, { instructionType: e.target.value, instructionFile: null, instructionLink: "" })}
+                            className="text-[10px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded px-2 py-1 outline-none cursor-pointer transition-colors"
+                        >
+                            <option value="none">+ Add Reference</option>
+                            <option value="image">Image</option>
+                            <option value="video">Video</option>
+                            <option value="pdf">PDF Docs</option>
+                            <option value="link">Web Link</option>
+                        </select>
+                    </div>
+                    {task.instructionType !== 'none' && (
+                        <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg flex flex-col sm:flex-row gap-2 sm:items-center">
+                            <span className="text-xs font-bold text-blue-700 flex-shrink-0 uppercase tracking-wider">
+                                {task.instructionType} Reference:
+                            </span>
+                            {task.instructionType === 'link' ? (
+                                <input
+                                    type="url"
+                                    placeholder="https://"
+                                    value={task.instructionLink}
+                                    onChange={(e) => onUpdate(task.id, { instructionLink: e.target.value })}
+                                    className="flex-1 w-full px-2 py-1.5 text-xs text-blue-800 bg-white border border-blue-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                                />
+                            ) : (
+                                <div className="flex-1 flex items-center gap-2">
+                                    <input
+                                        type="file"
+                                        accept={task.instructionType === 'pdf' ? 'application/pdf' : `${task.instructionType}/*`}
+                                        onChange={(e) => onUpdate(task.id, { instructionFile: e.target.files[0] })}
+                                        className="text-xs w-full text-blue-700 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <ReactMediaRecorder
                         audio
                         onStop={(blobUrl, blob) => onUpdate(task.id, { recordedAudio: { blobUrl, blob } })}
@@ -279,7 +320,7 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> Duration
+                            <Clock className="w-3 h-3" /> Duration <span className="text-red-500">*</span>
                         </label>
                         <input
                             type="text"
@@ -465,8 +506,17 @@ export default function ChecklistTask() {
                 if (!t.department || !t.givenBy) {
                     return { success: false, message: `Task ${i + 1}: Please select Department and Assign From.` };
                 }
-                if (!t.doer || !t.date || (!t.description && !t.recordedAudio)) {
-                    return { success: false, message: `Task ${i + 1}: Please fill in Doer, Date, and Description or Voice Note.` };
+                if (!t.doer || !t.date || (!t.description && !t.recordedAudio && t.instructionType === 'none')) {
+                    return { success: false, message: `Task ${i + 1}: Please fill in Doer, Date, and at least one instructional detail (Desc, Voice Note, or Reference).` };
+                }
+                if (!t.duration) {
+                    return { success: false, message: `Task ${i + 1}: Please specify the task duration.` };
+                }
+                if (t.instructionType === 'link' && !t.instructionLink) {
+                    return { success: false, message: `Task ${i + 1}: Please provide a valid web link for the Reference Attachment.` };
+                }
+                if (t.instructionType !== 'none' && t.instructionType !== 'link' && !t.instructionFile) {
+                    return { success: false, message: `Task ${i + 1}: Please upload the ${t.instructionType.toUpperCase()} file for the Reference Attachment.` };
                 }
 
                 if (t.frequency === "One Time (No Recurrence)") {
@@ -523,8 +573,20 @@ export default function ChecklistTask() {
                 alert(`Task ${i + 1}: Please select Department and Assign From.`);
                 return;
             }
-            if (!t.doer || !t.date || (!t.description && !t.recordedAudio)) {
-                alert(`Task ${i + 1}: Please fill in Doer, Date, and Description or Voice Note.`);
+            if (!t.doer || !t.date || (!t.description && !t.recordedAudio && t.instructionType === 'none')) {
+                alert(`Task ${i + 1}: Please fill in Doer, Date, and at least one instructional detail (Desc, Voice Note, or Reference).`);
+                return;
+            }
+            if (!t.duration) {
+                alert(`Task ${i + 1}: Please specify the task duration.`);
+                return;
+            }
+            if (t.instructionType === 'link' && !t.instructionLink) {
+                alert(`Task ${i + 1}: Please provide a valid web link for the Reference Attachment.`);
+                return;
+            }
+            if (t.instructionType !== 'none' && t.instructionType !== 'link' && !t.instructionFile) {
+                alert(`Task ${i + 1}: Please upload the ${t.instructionType.toUpperCase()} file for the Reference Attachment.`);
                 return;
             }
 
@@ -575,12 +637,36 @@ export default function ChecklistTask() {
                 return map;
             }, {});
 
+            // 1.5 Parallelize Instruction Uploads
+            const instructionUploadPromises = tasks.map(async (task) => {
+                if (task.instructionType !== 'none' && task.instructionType !== 'link' && task.instructionFile) {
+                    const ext = task.instructionFile.name.split('.').pop();
+                    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+                    const { error: uploadError } = await supabase.storage
+                        .from('task-instructions')
+                        .upload(fileName, task.instructionFile, { upsert: false });
+                    if (uploadError) throw new Error(`Reference Upload Error: ${uploadError.message}`);
+                    const { data: publicUrlData } = supabase.storage.from('task-instructions').getPublicUrl(fileName);
+                    return { id: task.id, instructionUrl: publicUrlData.publicUrl, instructionType: task.instructionType };
+                } else if (task.instructionType === 'link' && task.instructionLink) {
+                    return { id: task.id, instructionUrl: task.instructionLink, instructionType: 'link' };
+                }
+                return { id: task.id, instructionUrl: null, instructionType: null };
+            });
+
+            const uploadedInstructionResults = await Promise.all(instructionUploadPromises);
+            const instructionUrlMap = uploadedInstructionResults.reduce((map, item) => {
+                map[item.id] = item;
+                return map;
+            }, {});
+
             // 2. Generate all occurrences
             const allTasksToSubmit = [];
             for (const task of tasks) {
                 const dates = await generateDatesForTask(task);
                 const freqKey = freqMap[task.frequency] || "one-time";
                 const audioUrl = audioUrlMap[task.id];
+                const instructionData = instructionUrlMap[task.id] || {};
 
                 for (const dueDate of dates) {
                     allTasksToSubmit.push({
@@ -589,6 +675,8 @@ export default function ChecklistTask() {
                         doer: task.doer,
                         task_description: task.description,
                         audio_url: audioUrl,
+                        instruction_attachment_url: instructionData.instructionUrl || null,
+                        instruction_attachment_type: instructionData.instructionType || null,
                         frequency: freqKey,
                         duration: task.duration || null,
                         enableReminders: task.enableReminders,
@@ -628,9 +716,9 @@ export default function ChecklistTask() {
                     for (const uiTask of tasks) {
                         const freqKey = freqMap[uiTask.frequency]?.toLowerCase();
                         const t = insertedTasks.find(it =>
-                            it.name === uiTask.doer &&
-                            it.frequency?.toLowerCase() === freqKey &&
-                            (it.task_description === uiTask.description || (audioUrlMap[uiTask.id] && it.audio_url === audioUrlMap[uiTask.id]))
+                            (it.name === uiTask.doer) &&
+                            (!it.frequency || it.frequency?.toLowerCase() === freqKey || freqKey === "one-time") &&
+                            ((it.task_description || "") === (uiTask.description || "") || (audioUrlMap[uiTask.id] && it.audio_url === audioUrlMap[uiTask.id]))
                         );
 
                         if (t) {
@@ -641,11 +729,12 @@ export default function ChecklistTask() {
                             await sendTaskAssignmentNotification({
                                 doerName: t.name,
                                 taskId: t.task_id || t.id,
-                                description: t.task_description,
+                                description: t.task_description || (t.instruction_attachment_url ? `📎 ${t.instruction_attachment_type?.toUpperCase()} Reference Provided` : ''),
                                 audioUrl: t.audio_url,
                                 startDate: new Date(t.task_start_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
                                 givenBy: t.given_by,
                                 department: t.department,
+                                duration: t.duration,
                                 taskType: isOneTime ? 'delegation' : 'checklist'
                             });
                         }
@@ -798,7 +887,12 @@ export default function ChecklistTask() {
                                                 )}
                                                 {task.recordedAudio && (
                                                     <span className="inline-flex items-center gap-1 text-[10px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded">
-                                                        <Mic className="w-2 h-2" /> Voice
+                                                        <Mic className="h-3 w-3" /> Voice
+                                                    </span>
+                                                )}
+                                                {task.instructionType !== 'none' && (
+                                                    <span className="inline-flex items-center gap-1 text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded">
+                                                        <FileCheck className="h-3 w-3" /> Refer
                                                     </span>
                                                 )}
                                             </div>

@@ -523,7 +523,12 @@ function DelegationPage({
                             {(task.audio_url || isAudioUrl(task.task_description)) && (
                               <AudioPlayer url={task.audio_url || task.task_description} />
                             )}
-                            {!task.task_description && !task.audio_url && "—"}
+                            {!task.task_description && !task.audio_url && !task.instruction_attachment_url && "—"}
+                            {task.instruction_attachment_url && task.instruction_attachment_type && task.instruction_attachment_type !== 'none' && (
+                              <a href={task.instruction_attachment_url} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 mt-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1.5 rounded-md hover:bg-blue-100 transition-colors w-fit shadow-sm">
+                                🔗 {task.instruction_attachment_type === 'video' ? 'Play Video Reference' : task.instruction_attachment_type === 'image' ? 'View Image Reference' : task.instruction_attachment_type === 'pdf' ? 'Open PDF Reference' : 'Visit Reference Link'}
+                              </a>
+                            )}
                           </div>
                         )}
                       </td>
@@ -762,7 +767,12 @@ function DelegationPage({
                               {(task.audio_url || isAudioUrl(task.task_description)) && (
                                 <AudioPlayer url={task.audio_url || task.task_description} />
                               )}
-                              {!task.task_description && !task.audio_url && "—"}
+                              {!task.task_description && !task.audio_url && !task.instruction_attachment_url && "—"}
+                              {task.instruction_attachment_url && task.instruction_attachment_type && task.instruction_attachment_type !== 'none' && (
+                                <a href={task.instruction_attachment_url} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 mt-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1.5 rounded-md hover:bg-blue-100 transition-colors w-fit shadow-sm">
+                                  🔗 {task.instruction_attachment_type === 'video' ? 'Play Video Reference' : task.instruction_attachment_type === 'image' ? 'View Image Reference' : task.instruction_attachment_type === 'pdf' ? 'Open PDF Reference' : 'Visit Reference Link'}
+                                </a>
+                              )}
                             </div>
                             <div className="grid grid-cols-2 gap-4 border-t border-gray-50 pt-4">
                               <div className="space-y-1">

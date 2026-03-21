@@ -41,11 +41,14 @@ const isAudioUrl = (url) => {
   );
 };
 
-const RenderDescription = ({ text, audioUrl }) => {
-  if (!text && !audioUrl) return "—";
+const RenderDescription = ({ text, audioUrl, instructionUrl, instructionType }) => {
+  if (!text && !audioUrl && !instructionUrl) return "—";
 
   const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|wav|ogg|webm|m4a|aac)(\?.*)?)/i;
-  const match = text?.match(urlRegex);
+  let match = null;
+  if (text && typeof text === 'string') {
+      match = text.match(urlRegex);
+  }
 
   let url = audioUrl || (match ? match[0] : null);
   let cleanText = text || '';
@@ -54,16 +57,28 @@ const RenderDescription = ({ text, audioUrl }) => {
     cleanText = text.replace(match[0], '').replace(/Voice Note Link:/i, '').replace(/Voice Note:/i, '').trim();
   }
 
-  if (url) {
-    return (
-      <div className="flex flex-col gap-2 min-w-[200px]">
-        {cleanText && <span className="whitespace-pre-wrap text-sm">{cleanText}</span>}
-        <AudioPlayer url={url} />
-      </div>
-    );
-  }
+  const renderInstruction = () => {
+    if (!instructionUrl || !instructionType || instructionType === 'none') return null;
+    let iconLabel = "View Reference";
+    if (instructionType === 'video') iconLabel = "Play Video Reference";
+    if (instructionType === 'image') iconLabel = "View Image Reference";
+    if (instructionType === 'pdf') iconLabel = "Open PDF Reference";
+    if (instructionType === 'link') iconLabel = "Visit Reference Link";
 
-  return <span className="whitespace-pre-wrap">{cleanText || "—"}</span>;
+    return (
+      <a href={instructionUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 mt-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1.5 rounded-md hover:bg-blue-100 transition-colors w-fit shadow-sm">
+        🔗 {iconLabel}
+      </a>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 min-w-[200px]">
+      {cleanText && <span className="whitespace-pre-wrap text-sm" title={cleanText}>{cleanText}</span>}
+      {url && <AudioPlayer url={url} />}
+      {renderInstruction()}
+    </div>
+  );
 };
 
 const AllTasks = () => {
@@ -1270,7 +1285,7 @@ const AllTasks = () => {
                                       </span>
                                     </td>
                                     <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
-                                      <RenderDescription text={task.issue_description} audioUrl={task.audio_url} />
+                                      <RenderDescription text={task.issue_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
                                     </td>
                                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.filled_by}</td>
                                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
@@ -1292,7 +1307,7 @@ const AllTasks = () => {
                                   <>
                                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{task.id}</td>
                                     <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
-                                      <RenderDescription text={task.issue_description} audioUrl={task.audio_url} />
+                                      <RenderDescription text={task.issue_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
                                     </td>
                                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
                                       {task.submission_date ? new Date(task.submission_date).toLocaleString() : "—"}
@@ -1428,7 +1443,7 @@ const AllTasks = () => {
                                                       </div>
                                                     )
                                                     : (header.id === 'task_description' || header.id === 'issue_description' || header.id === 'remarks')
-                                                      ? <RenderDescription text={task[header.id]} audioUrl={task.audio_url} />
+                                                      ? <RenderDescription text={task[header.id]} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
                                                       : isAudioUrl(task[header.id])
                                                         ? <AudioPlayer url={task[header.id]} />
                                                         : header.id === 'work_photo_url' || header.id === 'bill_copy_url'
@@ -1489,7 +1504,7 @@ const AllTasks = () => {
                                 {showHistory && (
                                   <>
                                     <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">
-                                      <RenderDescription text={task.remark || task.remarks} audioUrl={task.audio_url} />
+                                      <RenderDescription text={task.remark || task.remarks} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
                                     </td>
                                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
                                       {task.image || task.uploaded_image_url || task.image_url ? (
@@ -1548,7 +1563,7 @@ const AllTasks = () => {
                           <div className="space-y-1">
                             <p className="text-[10px] text-gray-400 uppercase font-semibold">Description</p>
                             <div className="text-sm text-gray-800">
-                              <RenderDescription text={task.issue_description || task.task_description} audioUrl={task.audio_url} />
+                              <RenderDescription text={task.issue_description || task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
                             </div>
                           </div>
 
