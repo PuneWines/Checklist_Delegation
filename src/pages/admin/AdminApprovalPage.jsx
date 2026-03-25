@@ -387,29 +387,29 @@ export default function AdminApprovalPage() {
         <AdminLayout>
             <div className="space-y-4 sm:space-y-6">
                 {/* Sticky Header and Controls */}
-                <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl -mx-4 px-4 sm:mx-0 sm:px-0 py-6 mb-6 border-b border-gray-100/50 shadow-sm transition-all duration-300">
-                    <div className="max-w-7xl mx-auto space-y-6">
-                        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 px-2 sm:px-0">
-                            <div className="space-y-1">
+                <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-6 mb-3 sm:mb-6 border-b border-gray-100/50 shadow-sm transition-all duration-300">
+                    <div className="max-w-7xl mx-auto space-y-3 sm:space-y-6">
+                        <div className="flex flex-row items-center justify-between gap-2 px-2 sm:px-0">
+                            <div className="flex flex-col sm:space-y-1">
                                 <motion.div
                                     initial={{ y: 10, opacity: 0 }}
                                     animate={{ y: 0, opacity: 1 }}
-                                    className="flex items-center gap-4"
+                                    className="flex items-center gap-2 sm:gap-4"
                                 >
-                                    <div className="w-1.5 h-8 bg-purple-600 rounded-full hidden sm:block" />
-                                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                                    <div className="w-1 h-6 sm:w-1.5 sm:h-8 bg-purple-600 rounded-full" />
+                                    <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
                                         Admin <span className="text-purple-600">Approval</span>
                                     </h1>
                                 </motion.div>
-                                <p className="text-sm font-medium text-gray-400 ml-0 sm:ml-5 flex items-center gap-2">
-                                    <Clock size={14} className="text-gray-300" />
+                                <p className="text-[10px] sm:text-sm font-medium text-gray-400 ml-3 sm:ml-5 hidden sm:flex items-center gap-2">
+                                    <Clock size={12} className="text-gray-300" />
                                     Review and manage user task submissions
                                 </p>
                             </div>
 
                             <div className="flex items-center gap-4">
                                 {viewMode === 'pending' && selectedTaskIds.length > 0 && (
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
                                         {/* Show Approve button only for non-extended tasks or non-delegation tabs */}
                                         {(activeTab !== 'delegation' || pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status !== 'extend').length > 0) && (
                                             <motion.button
@@ -417,14 +417,14 @@ export default function AdminApprovalPage() {
                                                 animate={{ scale: 1, opacity: 1 }}
                                                 onClick={handleBulkApprove}
                                                 disabled={bulkProcessing}
-                                                className="px-4 py-2 bg-green-600 text-white rounded-xl shadow-lg shadow-green-200 flex items-center gap-2 text-xs font-black hover:bg-green-700 disabled:opacity-50 transition-all font-inter"
+                                                className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg sm:rounded-xl shadow-lg shadow-green-200 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black hover:bg-green-700 disabled:opacity-50 transition-all font-inter"
                                             >
                                                 {bulkProcessing ? (
-                                                    <Loader2 size={14} className="animate-spin" />
+                                                    <Loader2 size={12} className="animate-spin" />
                                                 ) : (
-                                                    <CheckCircle2 size={14} />
+                                                    <CheckCircle2 size={12} className="sm:w-[14px] sm:h-[14px]" />
                                                 )}
-                                                Approve Selected ({pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status !== 'extend').length})
+                                                <span className="hidden xs:inline">Approve</span> ({pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status !== 'extend').length})
                                             </motion.button>
                                         )}
                                         
@@ -435,10 +435,10 @@ export default function AdminApprovalPage() {
                                                 animate={{ scale: 1, opacity: 1 }}
                                                 onClick={() => setShowBulkRemarkModal(true)}
                                                 disabled={bulkProcessing}
-                                                className="px-4 py-2 bg-purple-600 text-white rounded-xl shadow-lg shadow-purple-200 flex items-center gap-2 text-xs font-black hover:bg-purple-700 disabled:opacity-50 transition-all font-inter"
+                                                className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-purple-600 text-white rounded-lg sm:rounded-xl shadow-lg shadow-purple-200 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black hover:bg-purple-700 disabled:opacity-50 transition-all font-inter"
                                             >
-                                                <MessageSquare size={14} />
-                                                Remark to Extended ({pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status === 'extend').length})
+                                                <MessageSquare size={12} className="sm:w-[14px] sm:h-[14px]" />
+                                                <span className="hidden xs:inline">Remark</span> ({pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status === 'extend').length})
                                             </motion.button>
                                         )}
                                     </div>
@@ -452,9 +452,9 @@ export default function AdminApprovalPage() {
                             </div>
                         </div>
 
-                        <div className="bg-white/40 backdrop-blur-md rounded-2xl p-2 sm:p-3 border border-gray-100/80 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div className="bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-1.5 sm:p-3 border border-gray-100/80 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
                             {/* Tabs */}
-                            <div className="flex bg-gray-100/80 p-1 rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-max">
+                            <div className="flex bg-gray-100/80 p-0.5 sm:p-1 rounded-lg sm:rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-full">
                                 {[
                                     { id: 'checklist', label: 'Checklist', icon: BookCheck, color: 'bg-purple-600' },
                                     { id: 'delegation', label: 'Delegation', icon: BookCheck, color: 'bg-indigo-600' },
@@ -466,55 +466,55 @@ export default function AdminApprovalPage() {
                                         key={tab.id}
                                         onClick={() => setActiveTab(tab.id)}
                                         className={`
-                                            relative flex items-center justify-center gap-2 py-2 px-6 rounded-lg text-xs font-bold transition-all duration-500 whitespace-nowrap min-w-[110px] z-10
+                                            relative flex items-center justify-center gap-1.5 py-1.5 px-3 sm:px-6 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold transition-all duration-300 whitespace-nowrap min-w-[85px] sm:min-w-[110px] z-10
                                             ${activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-purple-600'}
                                         `}
                                     >
                                         {activeTab === tab.id && (
                                             <motion.div
                                                 layoutId="approvalTabPillMinimal"
-                                                className={`absolute inset-0 rounded-lg shadow-md z-[-1] ${tab.color}`}
+                                                className={`absolute inset-0 rounded-md sm:rounded-lg shadow-md z-[-1] ${tab.color}`}
                                                 transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                                             />
                                         )}
-                                        <tab.icon size={15} />
+                                        <tab.icon size={12} className="sm:w-[15px] sm:h-[15px]" />
                                         <span>{tab.label}</span>
                                     </button>
                                 ))}
                             </div>
 
                             {/* View Mode & Search */}
-                            <div className="flex flex-col sm:flex-row items-center gap-3">
-                                <div className="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200 shrink-0 w-full sm:w-auto">
+                            <div className="flex flex-row items-center gap-2 sm:gap-3 w-full lg:w-auto">
+                                <div className="flex items-center bg-gray-100 rounded-lg p-0.5 sm:p-1 border border-gray-200 shrink-0">
                                     <button
                                         onClick={() => setViewMode("pending")}
-                                        className={`flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${viewMode === "pending"
+                                        className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${viewMode === "pending"
                                             ? "bg-white text-gray-800 shadow-sm"
                                             : "text-gray-500 hover:text-gray-700"
                                             }`}
                                     >
-                                        <Clock size={14} />
+                                        <Clock size={12} className="sm:w-[14px] sm:h-[14px]" />
                                         Pending
                                     </button>
                                     <button
                                         onClick={() => setViewMode("history")}
-                                        className={`flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${viewMode === "history"
+                                        className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${viewMode === "history"
                                             ? "bg-white text-gray-800 shadow-sm"
                                             : "text-gray-500 hover:text-gray-700"
                                             }`}
                                     >
-                                        <History size={14} />
+                                        <History size={12} className="sm:w-[14px] sm:h-[14px]" />
                                         History
                                     </button>
                                 </div>
-                                <div className="relative w-full sm:w-64">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                                <div className="relative flex-1 lg:w-64">
+                                    <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" size={14} />
                                     <input
                                         type="text"
-                                        placeholder="Search records..."
+                                        placeholder="Search..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium shadow-sm"
+                                        className="w-full pl-8 pr-3 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 text-[11px] sm:text-sm font-medium shadow-none"
                                     />
                                 </div>
                             </div>
