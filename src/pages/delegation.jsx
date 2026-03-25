@@ -572,24 +572,51 @@ function DelegationDataPage() {
     (e) => {
       e.stopPropagation();
       const checked = e.target.checked;
+      
+      const selectableIds = paginatedTasks
+        .filter(item => item.timeStatus !== "Upcoming")
+        .map((item) => item.id);
 
       if (checked) {
-        const visibleIds = paginatedTasks
-          .filter(item => item.timeStatus !== "Upcoming")
-          .map((item) => item.id);
-        setSelectedItems(new Set(visibleIds));
-
-        const newStatusData = {};
-        visibleIds.forEach((id) => {
-          newStatusData[id] = "Done";
+        // SELECT ALL on current page
+        setSelectedItems((prev) => {
+          const next = new Set(prev);
+          selectableIds.forEach(id => {
+            next.add(id);
+            setStatusData((prevStatus) => ({ ...prevStatus, [id]: "Done" }));
+          });
+          return next;
         });
-        setStatusData((prev) => ({ ...prev, ...newStatusData }));
       } else {
-        setSelectedItems(new Set());
-        setAdditionalData({});
-        setRemarksData({});
-        setStatusData({});
-        setNextTargetDate({});
+        // UNSELECT ALL on current page
+        setSelectedItems((prev) => {
+          const next = new Set(prev);
+          selectableIds.forEach(id => {
+            next.delete(id);
+            // Optionally clear associated data for these specific IDs
+            setAdditionalData((prevData) => {
+              const nextData = { ...prevData };
+              delete nextData[id];
+              return nextData;
+            });
+            setRemarksData((prevRemarks) => {
+              const nextRemarks = { ...prevRemarks };
+              delete nextRemarks[id];
+              return nextRemarks;
+            });
+            setStatusData((prevStatus) => {
+              const nextStatus = { ...prevStatus };
+              delete nextStatus[id];
+              return nextStatus;
+            });
+            setNextTargetDate((prevDate) => {
+              const nextDates = { ...prevDate };
+              delete nextDates[id];
+              return nextDates;
+            });
+          });
+          return next;
+        });
       }
     },
     [paginatedTasks]
@@ -1260,8 +1287,10 @@ function DelegationDataPage() {
                           type="checkbox"
                           className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                           checked={
-                            paginatedTasks.length > 0 &&
-                            paginatedTasks.every(t => selectedItems.has(t.id))
+                            (() => {
+                              const selectableTasks = paginatedTasks.filter(t => t.timeStatus !== "Upcoming");
+                              return selectableTasks.length > 0 && selectableTasks.every(t => selectedItems.has(t.id));
+                            })()
                           }
                           onChange={handleSelectAllItems}
                         />

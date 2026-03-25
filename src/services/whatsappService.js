@@ -749,6 +749,32 @@ export const sendPasswordResetOTP = async (username, otp) => {
     }
 };
 
+/**
+ * Send admin remark notification for task extension
+ */
+export const sendAdminExtensionRemarkNotification = async (taskDetails) => {
+    try {
+        const { doerName, taskId, description, remark } = taskDetails;
+        const phoneNumber = await getUserPhoneNumber(doerName);
+
+        if (!phoneNumber) return false;
+
+        const message = `📝 *ADMIN REMARK ON EXTENSION*\n` +
+            `Dear ${doerName},\n\n` +
+            `Admin has added a remark regarding your task extension request.\n\n` +
+            `📌 Task ID: ${taskId}\n` +
+            `📋 Task: ${description || 'N/A'}\n` +
+            `💬 Remark: *${remark}*\n\n` +
+            `🔗 App Link: https://checklist-delegation-supabase-five.vercel.app/login\n\n` +
+            `Best regards,\nAcemark Stationers.`;
+
+        return await sendWhatsAppMessage(phoneNumber, message);
+    } catch (error) {
+        console.error('Error sending extension remark notification:', error);
+        return false;
+    }
+};
+
 export default {
     sendUrgentTaskNotification,
     sendTaskExtensionNotification,
@@ -762,5 +788,6 @@ export default {
     sendTaskCompletionNotification,
     sendTaskRejectionNotification,
     sendTaskReassignmentNotification,
-    sendPasswordResetOTP
+    sendPasswordResetOTP,
+    sendAdminExtensionRemarkNotification
 };

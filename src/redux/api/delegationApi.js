@@ -255,7 +255,7 @@ export const fetchPendingApprovals = async () => {
     const { data: doneData, error } = await supabase
       .from('delegation_done')
       .select('*')
-      .eq('status', 'pending')
+      .in('status', ['pending', 'extend'])
       .order('created_at', { ascending: false });
 
     if (error) throw error;

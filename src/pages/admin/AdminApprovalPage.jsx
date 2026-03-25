@@ -7,8 +7,8 @@ import { fetchPendingMaintenanceApprovals, approveMaintenanceTask, rejectMainten
 import { fetchPendingRepairApprovals, approveRepairTask, rejectRepairTask, fetchApprovedRepairs } from "../../redux/api/repairApi";
 import { fetchPendingEAApprovals, approveEATaskV2, rejectEATask, fetchApprovedEA } from "../../redux/api/eaApi";
 import { fetchPendingChecklistApprovals, approveChecklistTask, rejectChecklistTask, fetchChecklistHistory } from "../../redux/api/quickTaskApi";
-import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase, XCircle, History, Clock, User, Loader2 } from "lucide-react";
-import { sendTaskRejectionNotification } from "../../services/whatsappService";
+import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase, XCircle, History, Clock, User, Loader2, MessageSquare } from "lucide-react";
+import { sendTaskRejectionNotification, sendAdminExtensionRemarkNotification } from "../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../context/MagicToastContext";
 import supabase from "../../SupabaseClient";
@@ -33,11 +33,48 @@ export default function AdminApprovalPage() {
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [taskToReject, setTaskToReject] = useState(null);
     const [rejectionReason, setRejectionReason] = useState("");
+    const [adminRemarks, setAdminRemarks] = useState({}); // For extension remarks
+    const [showBulkRemarkModal, setShowBulkRemarkModal] = useState(false);
+    const [bulkRemark, setBulkRemark] = useState("");
     const [selectedTaskIds, setSelectedTaskIds] = useState([]);
     const [bulkProcessing, setBulkProcessing] = useState(false);
     const [selectedImage, setSelectedImage] = useState(null); // Full-screen image URL
     const loadingRef = useRef(null);
     const dispatch = useDispatch();
+
+    const handleExtensionRemark = async (task) => {
+        const remark = adminRemarks[task.id];
+        if (!remark || !remark.trim()) {
+            showToast("Please enter a remark.", "error");
+            return;
+        }
+
+        setProcessingId(task.id);
+        try {
+            // we dont need to store the remark only send to the user via whatsapp 
+            
+            // Send notification
+            await sendAdminExtensionRemarkNotification({
+                doerName: task.doer_name || task.name || task.filled_by,
+                taskId: task.original_task_id || task.task_id || task.id,
+                description: task.task_description || task.issue_description,
+                remark: remark
+            });
+
+            showToast("Remark sent successfully!", "success");
+            // Clear remark for this task
+            setAdminRemarks(prev => {
+                const next = { ...prev };
+                delete next[task.id];
+                return next;
+            });
+        } catch (error) {
+            console.error("Error sending remark:", error);
+            showToast("Failed to send remark: " + (error.message || "Unknown error"), "error");
+        } finally {
+            setProcessingId(null);
+        }
+    };
 
     const loadTasks = useCallback(async () => {
         setLoading(true);
@@ -194,8 +231,9 @@ export default function AdminApprovalPage() {
         setBulkProcessing(true);
         let successCount = 0;
         let failCount = 0;
-
-        const tasksToApprove = pendingTasks.filter(t => selectedTaskIds.includes(t.id));
+        
+        // Only approve tasks that are NOT in 'extend' status (already filtered in UI button, but double check here)
+        const tasksToApprove = pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status !== 'extend');
 
         for (const task of tasksToApprove) {
             try {
@@ -230,6 +268,38 @@ export default function AdminApprovalPage() {
         } else {
             showToast(`Approved ${successCount} tasks, ${failCount} failed.`, "warning");
         }
+    };
+
+    const handleBulkRemark = async () => {
+        if (!bulkRemark.trim()) {
+            showToast("Please enter a remark.", "error");
+            return;
+        }
+
+        setBulkProcessing(true);
+        setShowBulkRemarkModal(false);
+
+        const tasksToRemark = pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status === 'extend');
+        let count = 0;
+
+        for (const task of tasksToRemark) {
+            try {
+                await sendAdminExtensionRemarkNotification({
+                    doerName: task.doer_name || task.name || task.filled_by,
+                    taskId: task.original_task_id || task.task_id || task.id,
+                    description: task.task_description || task.issue_description,
+                    remark: bulkRemark
+                });
+                count++;
+            } catch (err) {
+                console.error("Bulk remark failed for task:", task.id, err);
+            }
+        }
+
+        setBulkProcessing(false);
+        setBulkRemark("");
+        setSelectedTaskIds([]);
+        showToast(`Sent remarks to ${count} users.`, "success");
     };
 
     const confirmReject = async () => {
@@ -339,20 +409,39 @@ export default function AdminApprovalPage() {
 
                             <div className="flex items-center gap-4">
                                 {viewMode === 'pending' && selectedTaskIds.length > 0 && (
-                                    <motion.button
-                                        initial={{ scale: 0.9, opacity: 0 }}
-                                        animate={{ scale: 1, opacity: 1 }}
-                                        onClick={handleBulkApprove}
-                                        disabled={bulkProcessing}
-                                        className="px-4 py-2 bg-green-600 text-white rounded-xl shadow-lg shadow-green-200 flex items-center gap-2 text-xs font-black hover:bg-green-700 disabled:opacity-50 transition-all"
-                                    >
-                                        {bulkProcessing ? (
-                                            <Loader2 size={14} className="animate-spin" />
-                                        ) : (
-                                            <CheckCircle2 size={14} />
+                                    <div className="flex items-center gap-2">
+                                        {/* Show Approve button only for non-extended tasks or non-delegation tabs */}
+                                        {(activeTab !== 'delegation' || pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status !== 'extend').length > 0) && (
+                                            <motion.button
+                                                initial={{ scale: 0.9, opacity: 0 }}
+                                                animate={{ scale: 1, opacity: 1 }}
+                                                onClick={handleBulkApprove}
+                                                disabled={bulkProcessing}
+                                                className="px-4 py-2 bg-green-600 text-white rounded-xl shadow-lg shadow-green-200 flex items-center gap-2 text-xs font-black hover:bg-green-700 disabled:opacity-50 transition-all font-inter"
+                                            >
+                                                {bulkProcessing ? (
+                                                    <Loader2 size={14} className="animate-spin" />
+                                                ) : (
+                                                    <CheckCircle2 size={14} />
+                                                )}
+                                                Approve Selected ({pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status !== 'extend').length})
+                                            </motion.button>
                                         )}
-                                        Approve Selected ({selectedTaskIds.length})
-                                    </motion.button>
+                                        
+                                        {/* Show Remark button for extended tasks in delegation tab */}
+                                        {activeTab === 'delegation' && pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status === 'extend').length > 0 && (
+                                            <motion.button
+                                                initial={{ scale: 0.9, opacity: 0 }}
+                                                animate={{ scale: 1, opacity: 1 }}
+                                                onClick={() => setShowBulkRemarkModal(true)}
+                                                disabled={bulkProcessing}
+                                                className="px-4 py-2 bg-purple-600 text-white rounded-xl shadow-lg shadow-purple-200 flex items-center gap-2 text-xs font-black hover:bg-purple-700 disabled:opacity-50 transition-all font-inter"
+                                            >
+                                                <MessageSquare size={14} />
+                                                Remark to Extended ({pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status === 'extend').length})
+                                            </motion.button>
+                                        )}
+                                    </div>
                                 )}
                                 <div className="px-4 py-2 bg-purple-50 rounded-xl border border-purple-100 flex items-center gap-2.5">
                                     <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
@@ -533,7 +622,12 @@ export default function AdminApprovalPage() {
                                                         Remark: {task.remarks || task.remark}
                                                     </div>
                                                 )}
-                                                {task.status && (
+                                                {task.status === 'extend' && task.next_extend_date && (
+                                                    <div className="text-[10px] font-bold text-amber-600 mt-2 uppercase bg-amber-50 px-2 py-0.5 rounded-sm inline-block tracking-widest">
+                                                        Extended To: {formatDate(task.next_extend_date)}
+                                                    </div>
+                                                )}
+                                                {task.status && task.status !== 'extend' && (
                                                     <div className="text-[10px] font-bold text-blue-600 mt-2 uppercase bg-blue-50 px-2 py-0.5 rounded-sm inline-block tracking-widest">
                                                         Status: {task.status}
                                                     </div>
@@ -588,28 +682,51 @@ export default function AdminApprovalPage() {
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                 {viewMode === 'pending' ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => handleApprove(task)}
-                                                            disabled={processingId === task.id}
-                                                            className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md shadow-green-100 text-xs font-bold border-none"
-                                                        >
-                                                            {processingId === task.id ? (
-                                                                <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                                            ) : (
-                                                                <CheckCircle2 size={14} />
-                                                            )}
-                                                            Approve
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleReject(task)}
-                                                            disabled={processingId === task.id}
-                                                            className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-100 disabled:opacity-50 transition-all text-xs font-bold"
-                                                        >
-                                                            <XCircle size={14} />
-                                                            Reject
-                                                        </button>
-                                                    </div>
+                                                    task.status === 'extend' ? (
+                                                        <div className="flex flex-col gap-2 min-w-[200px]">
+                                                            <textarea
+                                                                placeholder="Add administrative remark..."
+                                                                className="text-xs p-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-purple-500 min-h-[60px]"
+                                                                value={adminRemarks[task.id] || ""}
+                                                                onChange={(e) => setAdminRemarks(prev => ({ ...prev, [task.id]: e.target.value }))}
+                                                            />
+                                                            <button
+                                                                onClick={() => handleExtensionRemark(task)}
+                                                                disabled={processingId === task.id}
+                                                                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-all text-[11px] font-bold"
+                                                            >
+                                                                {processingId === task.id ? (
+                                                                    <Loader2 size={12} className="animate-spin" />
+                                                                ) : (
+                                                                    <MessageSquare size={12} />
+                                                                )}
+                                                                Send Remark
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => handleApprove(task)}
+                                                                disabled={processingId === task.id}
+                                                                className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md shadow-green-100 text-xs font-bold border-none"
+                                                            >
+                                                                {processingId === task.id ? (
+                                                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                                                ) : (
+                                                                    <CheckCircle2 size={14} />
+                                                                )}
+                                                                Approve
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleReject(task)}
+                                                                disabled={processingId === task.id}
+                                                                className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-100 disabled:opacity-50 transition-all text-xs font-bold"
+                                                            >
+                                                                <XCircle size={14} />
+                                                                Reject
+                                                            </button>
+                                                        </div>
+                                                    )
                                                 ) : (
                                                     task.status === 'rejected' || task.rejection_reason ? (
                                                         <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-800" title={task.rejection_reason || task.reason}>
@@ -671,9 +788,14 @@ export default function AdminApprovalPage() {
                                                     <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1">
                                                         <Clock size={10} /> {viewMode === 'pending' ? 'Submitted' : 'Approved'}: {formatDate(viewMode === 'pending' ? (task.submission_date || task.submission_timestamp || task.created_at) : (task.admin_approval_date || task.updated_at || task.submission_date))}
                                                     </p>
-                                                    {viewMode === 'history' && (
+                                                     {viewMode === 'history' && (
                                                         <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
                                                             <User size={10} /> By: {task.admin_approved_by || "Admin"}
+                                                        </p>
+                                                    )}
+                                                    {task.status === 'extend' && (
+                                                        <p className="text-[10px] text-amber-600 font-black uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                            <Clock size={10} /> Extended To: {formatDate(task.next_extend_date)}
                                                         </p>
                                                     )}
                                                 </div>
@@ -764,28 +886,51 @@ export default function AdminApprovalPage() {
                                     {/* Actions */}
                                     <div className="pt-2">
                                         {viewMode === 'pending' ? (
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <button
-                                                    onClick={() => handleApprove(task)}
-                                                    disabled={processingId === task.id}
-                                                    className="flex items-center justify-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black shadow-lg shadow-green-100 disabled:opacity-50 active:scale-95 transition-all"
-                                                >
-                                                    {processingId === task.id ? (
-                                                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                                    ) : (
-                                                        <CheckCircle2 size={16} />
-                                                    )}
-                                                    Approve
-                                                </button>
-                                                <button
-                                                    onClick={() => handleReject(task)}
-                                                    disabled={processingId === task.id}
-                                                    className="flex items-center justify-center gap-2 py-2.5 bg-red-100 text-red-600 rounded-xl text-xs font-black active:scale-95 transition-all"
-                                                >
-                                                    <XCircle size={16} />
-                                                    Reject
-                                                </button>
-                                            </div>
+                                            task.status === 'extend' ? (
+                                                <div className="flex flex-col gap-3 p-3 bg-purple-50/50 rounded-xl border border-purple-100">
+                                                    <textarea
+                                                        placeholder="Add administrative remark..."
+                                                        className="w-full text-xs p-3 border border-gray-200 rounded-xl focus:ring-1 focus:ring-purple-500 min-h-[80px] bg-white shadow-sm"
+                                                        value={adminRemarks[task.id] || ""}
+                                                        onChange={(e) => setAdminRemarks(prev => ({ ...prev, [task.id]: e.target.value }))}
+                                                    />
+                                                    <button
+                                                        onClick={() => handleExtensionRemark(task)}
+                                                        disabled={processingId === task.id}
+                                                        className="flex items-center justify-center gap-2 py-3 bg-purple-600 text-white rounded-xl text-xs font-black shadow-lg shadow-purple-100 disabled:opacity-50 active:scale-95 transition-all w-full"
+                                                    >
+                                                        {processingId === task.id ? (
+                                                            <Loader2 size={16} className="animate-spin" />
+                                                        ) : (
+                                                            <MessageSquare size={16} />
+                                                        )}
+                                                        Send Remark to User
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <button
+                                                        onClick={() => handleApprove(task)}
+                                                        disabled={processingId === task.id}
+                                                        className="flex items-center justify-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black shadow-lg shadow-green-100 disabled:opacity-50 active:scale-95 transition-all"
+                                                    >
+                                                        {processingId === task.id ? (
+                                                            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                                        ) : (
+                                                            <CheckCircle2 size={16} />
+                                                        )}
+                                                        Approve
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleReject(task)}
+                                                        disabled={processingId === task.id}
+                                                        className="flex items-center justify-center gap-2 py-2.5 bg-red-100 text-red-600 rounded-xl text-xs font-black active:scale-95 transition-all"
+                                                    >
+                                                        <XCircle size={16} />
+                                                        Reject
+                                                    </button>
+                                                </div>
+                                            )
                                         ) : (
                                             <div className="text-center">
                                                 {task.rejection_reason ? (
@@ -869,6 +1014,66 @@ export default function AdminApprovalPage() {
                                             className="flex-[2] py-3 text-sm font-black text-white bg-red-600 shadow-lg shadow-red-200 hover:bg-red-700 active:scale-95 transition-all rounded-2xl"
                                         >
                                             Confirm Rejection
+                                        </button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
+                {/* Bulk Remark Modal */}
+                <AnimatePresence>
+                    {showBulkRemarkModal && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                                className="bg-white rounded-[32px] shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100 ring-4 ring-white/50"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="p-6 space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center">
+                                            <MessageSquare className="w-6 h-6 text-purple-600" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-black text-gray-900 leading-tight">Bulk Remark</h3>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Extended Delegation Tasks</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Universal Remark</label>
+                                        <textarea
+                                            value={bulkRemark}
+                                            onChange={(e) => setBulkRemark(e.target.value)}
+                                            placeholder="Example: Keep up the good work, Please complete by today evening..."
+                                            className="w-full h-32 p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500/50 transition-all resize-none shadow-inner"
+                                            autoFocus
+                                        />
+                                        <p className="text-[10px] text-gray-400 italic px-1 flex items-center gap-1.5 font-medium">
+                                            <AlertCircle size={10} />
+                                            Notification will be sent to {pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status === 'extend').length} users.
+                                        </p>
+                                    </div>
+
+                                    <div className="flex gap-3 pt-2">
+                                        <button
+                                            onClick={() => {
+                                                setShowBulkRemarkModal(false);
+                                                setBulkRemark("");
+                                            }}
+                                            className="flex-1 py-3.5 text-xs font-black text-gray-500 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-all border border-gray-100"
+                                        >
+                                            CANCEL
+                                        </button>
+                                        <button
+                                            onClick={handleBulkRemark}
+                                            disabled={!bulkRemark.trim()}
+                                            className="flex-[2] py-3.5 text-xs font-black text-white bg-purple-600 shadow-xl shadow-purple-100 hover:bg-purple-700 active:scale-95 transition-all rounded-2xl disabled:opacity-50 disabled:grayscale disabled:scale-100"
+                                        >
+                                            SEND REMARKS
                                         </button>
                                     </div>
                                 </div>
