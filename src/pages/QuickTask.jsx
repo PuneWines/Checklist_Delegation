@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { format } from 'date-fns';
-import { Search, ChevronDown, Filter, Trash2, Edit, Save, X, Play, Pause, Mic, Square } from "lucide-react";
+import { Search, ChevronDown, Filter, Trash2, Edit, Save, X, Play, Pause, Mic, Square, Loader2, Plus } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import DelegationPage from "./delegation-data";
 import { useDispatch, useSelector } from "react-redux";
@@ -12,10 +12,12 @@ import { fetchCustomDropdownsApi } from "../redux/api/settingApi";
 import { ReactMediaRecorder } from "react-media-recorder";
 import supabase from "../SupabaseClient";
 import AudioPlayer from "../components/AudioPlayer";
+import RenderDescription from "../components/RenderDescription";
 import { useMagicToast } from "../context/MagicToastContext";
+import { motion, AnimatePresence } from "framer-motion";
 
 const isAudioUrl = (url) => {
-  if (typeof url !== 'string') return false;
+  if (!url || typeof url !== 'string') return false;
   return url.startsWith('http') && (
     url.includes('audio-recordings') ||
     url.includes('voice-notes') ||
@@ -45,45 +47,7 @@ const getTimeStatus = (dateString, taskStatus) => {
   if (taskDate.getTime() === today.getTime()) return "Today";
   return "Upcoming";
 };
-const RenderDescription = ({ text, audioUrl, instructionUrl, instructionType }) => {
-  if (!text && !audioUrl && !instructionUrl) return "—";
 
-  const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|wav|ogg|webm|m4a|aac)(\?.*)?)/i;
-  let match = null;
-  if (text && typeof text === 'string') {
-      match = text.match(urlRegex);
-  }
-
-  let url = audioUrl || (match ? match[0] : null);
-  let cleanText = text || '';
-
-  if (match && !audioUrl) {
-    cleanText = text.replace(match[0], '').replace(/Voice Note Link:/i, '').replace(/Voice Note:/i, '').trim();
-  }
-
-  const renderInstruction = () => {
-    if (!instructionUrl || !instructionType || instructionType === 'none') return null;
-    let iconLabel = "View Reference";
-    if (instructionType === 'video') iconLabel = "Play Video Reference";
-    if (instructionType === 'image') iconLabel = "View Image Reference";
-    if (instructionType === 'pdf') iconLabel = "Open PDF Reference";
-    if (instructionType === 'link') iconLabel = "Visit Reference Link";
-
-    return (
-      <a href={instructionUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 mt-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1.5 rounded-md hover:bg-blue-100 transition-colors w-fit shadow-sm">
-        🔗 {iconLabel}
-      </a>
-    );
-  };
-
-  return (
-    <div className="flex flex-col gap-1.5 min-w-[200px]">
-      {cleanText && <span className="whitespace-pre-wrap text-sm" title={cleanText}>{cleanText}</span>}
-      {url && <AudioPlayer url={url} />}
-      {renderInstruction()}
-    </div>
-  );
-};
 
 export default function QuickTask() {
   const { showToast } = useMagicToast();
@@ -97,6 +61,9 @@ export default function QuickTask() {
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [isSaving, setIsSaving] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [recordedAudio, setRecordedAudio] = useState(null);
 
   // Dropdown lists
   const [departments, setDepartments] = useState([]);
@@ -235,6 +202,21 @@ export default function QuickTask() {
   // Edit functionality
   const handleEditClick = (task) => {
     setEditingTaskId(task.id);
+    // Parse instruction attachments if they exist
+    let instructionUrls = [];
+    let instructionTypes = [];
+    try {
+      instructionUrls = task.instruction_attachment_url ? JSON.parse(task.instruction_attachment_url) : [];
+      instructionTypes = task.instruction_attachment_type ? JSON.parse(task.instruction_attachment_type) : [];
+      if (!Array.isArray(instructionUrls)) {
+        instructionUrls = task.instruction_attachment_url ? [task.instruction_attachment_url] : [];
+        instructionTypes = task.instruction_attachment_type ? [task.instruction_attachment_type] : [];
+      }
+    } catch (e) {
+      instructionUrls = task.instruction_attachment_url ? [task.instruction_attachment_url] : [];
+      instructionTypes = task.instruction_attachment_type ? [task.instruction_attachment_type] : [];
+    }
+
     if (activeTab === 'maintenance') {
       setEditFormData({
         id: task.id,
@@ -250,6 +232,8 @@ export default function QuickTask() {
         duration: task.duration || '',
         status: task.status || '',
         remarks: task.remarks || '',
+        instruction_attachment_url: instructionUrls,
+        instruction_attachment_type: instructionTypes,
         originalAudioUrl: task.audio_url || (isAudioUrl(task.task_description) ? task.task_description : null),
       });
     } else {
@@ -259,25 +243,26 @@ export default function QuickTask() {
         given_by: task.given_by || '',
         name: task.name || '',
         task_description: task.task_description || '',
-        audio_url: task.audio_url || null, // Added audio_url
+        audio_url: task.audio_url || null,
         task_start_date: task.task_start_date || '',
         frequency: task.frequency || '',
         duration: task.duration || '',
         enable_reminder: task.enable_reminder || '',
         require_attachment: task.require_attachment || '',
+        instruction_attachment_url: instructionUrls,
+        instruction_attachment_type: instructionTypes,
         remark: task.remark || '',
         originalAudioUrl: task.audio_url || (isAudioUrl(task.task_description) ? task.task_description : null),
       });
     }
+    setIsEditModalOpen(true);
   };
-
-  const [recordedAudio, setRecordedAudio] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
 
   const handleCancelEdit = () => {
     setEditingTaskId(null);
     setEditFormData({});
     setRecordedAudio(null);
+    setIsEditModalOpen(false);
   };
 
   const handleSaveEdit = async () => {
@@ -286,6 +271,34 @@ export default function QuickTask() {
     setIsSaving(true);
     try {
       let finalEditData = { ...editFormData };
+      
+      // Handle reference image uploads first
+      const referenceUploadPromises = (editFormData.instruction_attachment_url || []).map(async (urlOrFile, idx) => {
+        if (urlOrFile instanceof File) {
+          const extension = urlOrFile.name.split('.').pop();
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('task-instructions')
+            .upload(fileName, urlOrFile, { upsert: false });
+          
+          if (uploadError) throw uploadError;
+          
+          const { data: publicUrlData } = supabase.storage
+            .from('task-instructions')
+            .getPublicUrl(fileName);
+          
+          return publicUrlData.publicUrl;
+        }
+        return urlOrFile;
+      });
+
+      const finalReferenceUrls = await Promise.all(referenceUploadPromises);
+      
+      // JSON stringify the arrays for database
+      finalEditData.instruction_attachment_url = JSON.stringify(finalReferenceUrls);
+      finalEditData.instruction_attachment_type = JSON.stringify(editFormData.instruction_attachment_type || []);
+
       let audioToCleanup = null;
 
       // Handle Audio Upload
@@ -413,6 +426,42 @@ export default function QuickTask() {
       const doers = await fetchUniqueDoerNameDataApi(value);
       setDoersList(doers);
     }
+  };
+
+  const handleAttachmentChange = (index, field, value) => {
+    setEditFormData(prev => {
+      const urls = [...(prev.instruction_attachment_url || [])];
+      const types = [...(prev.instruction_attachment_type || [])];
+      
+      if (field === 'url') urls[index] = value;
+      else if (field === 'type') types[index] = value;
+      
+      return {
+        ...prev,
+        instruction_attachment_url: urls,
+        instruction_attachment_type: types
+      };
+    });
+  };
+
+  const addAttachment = () => {
+    setEditFormData(prev => ({
+      ...prev,
+      instruction_attachment_url: [...(prev.instruction_attachment_url || []), ''],
+      instruction_attachment_type: [...(prev.instruction_attachment_type || []), 'link']
+    }));
+  };
+
+  const removeAttachment = (index) => {
+    setEditFormData(prev => {
+      const urls = (prev.instruction_attachment_url || []).filter((_, i) => i !== index);
+      const types = (prev.instruction_attachment_type || []).filter((_, i) => i !== index);
+      return {
+        ...prev,
+        instruction_attachment_url: urls,
+        instruction_attachment_type: types
+      };
+    });
   };
 
   // Change your checkbox to store whole row instead of only id
@@ -599,7 +648,8 @@ export default function QuickTask() {
   }
 
   return (
-    <AdminLayout>
+    <>
+      <AdminLayout>
       <div className="sticky top-0 z-30 bg-white pb-4 border-b border-gray-200">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -771,34 +821,13 @@ export default function QuickTask() {
 
                           {/* Actions */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={handleSaveEdit}
-                                  disabled={isSaving}
-                                  className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                                >
-                                  <Save size={14} />
-                                  {isSaving ? 'Saving...' : 'Save'}
-                                </button>
-                                <button
-                                  onClick={handleCancelEdit}
-                                  className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
-                                >
-                                  <X size={14} />
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              // REMOVED THE submission_date CHECK - ALWAYS SHOW EDIT BUTTON
-                              <button
-                                onClick={() => handleEditClick(task)}
-                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                              >
-                                <Edit size={14} />
-                                Edit
-                              </button>
-                            )}
+                             <button
+                               onClick={() => handleEditClick(task)}
+                               className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                             >
+                               <Edit size={14} />
+                               Edit
+                             </button>
                           </td>
 
                           {/* Task ID */}
@@ -808,262 +837,65 @@ export default function QuickTask() {
 
                           {/* Task Description */}
                           <td className="px-6 py-4 text-sm text-gray-500 min-w-[300px] max-w-[400px]">
-                            {editingTaskId === task.id ? (
-                              <ReactMediaRecorder
-                                audio
-                                onStop={(blobUrl, blob) => setRecordedAudio({ blobUrl, blob })}
-                                render={({ status, startRecording, stopRecording, clearBlobUrl }) => (
-                                  <div className="space-y-2">
-                                    {status !== 'recording' && !recordedAudio && (
-                                      <div className="space-y-2">
-                                        <div className="relative">
-                                          <textarea
-                                            value={editFormData.task_description || ''}
-                                            onChange={(e) => handleInputChange('task_description', e.target.value)}
-                                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm pr-10 focus:ring-1 focus:ring-purple-500 outline-none"
-                                            rows="2"
-                                            placeholder="Enter task text..."
-                                          />
-                                          <button
-                                            type="button"
-                                            onClick={startRecording}
-                                            className="absolute bottom-2 right-2 p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200"
-                                            title="Record Audio"
-                                          >
-                                            <Mic size={14} />
-                                          </button>
-                                        </div>
-                                        {(editFormData.audio_url || isAudioUrl(editFormData.task_description)) && (
-                                          <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2">
-                                            <div className="flex items-center justify-between mb-1">
-                                              <span className="text-[10px] font-bold text-indigo-600 uppercase">Existing Voice Note</span>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  handleInputChange('audio_url', null);
-                                                  if (isAudioUrl(editFormData.task_description)) {
-                                                    handleInputChange('task_description', '');
-                                                  }
-                                                }}
-                                                className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
-                                              >
-                                                <Trash2 size={10} /> Remove
-                                              </button>
-                                            </div>
-                                            <AudioPlayer url={editFormData.audio_url || editFormData.task_description} />
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {status === 'recording' && (
-                                      <div className="flex flex-col items-center justify-center p-4 bg-red-50 border border-red-100 rounded-lg space-y-2 animate-pulse">
-                                        <Mic size={20} className="text-red-600" />
-                                        <button
-                                          type="button"
-                                          onClick={stopRecording}
-                                          className="flex items-center gap-2 px-3 py-1 bg-red-600 text-white rounded-full hover:bg-red-700 text-xs font-bold"
-                                        >
-                                          <Square size={10} /> Stop
-                                        </button>
-                                      </div>
-                                    )}
-
-                                    {recordedAudio && status !== 'recording' && (
-                                      <div className="bg-purple-50 border border-purple-100 rounded-lg p-2">
-                                        <div className="flex items-center justify-between mb-1">
-                                          <span className="text-[10px] font-bold text-purple-600 uppercase">New Voice Note Attached</span>
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              clearBlobUrl();
-                                              setRecordedAudio(null);
-                                            }}
-                                            className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
-                                          >
-                                            <Trash2 size={10} /> Remove
-                                          </button>
-                                        </div>
-                                        <AudioPlayer url={recordedAudio.blobUrl} />
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              />
-                            ) : (
-                              <div className="whitespace-normal break-words">
-                                <RenderDescription text={task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
-                              </div>
-                            )}
+                            <div className="whitespace-normal break-words">
+                              <RenderDescription text={task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                            </div>
                           </td>
 
                           {/* Department */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.department || ''}
-                                onChange={(e) => handleInputChange('department', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              >
-                                <option value="">Select Department</option>
-                                {departments.map(dept => (
-                                  <option key={dept} value={dept}>{dept}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              task.department
-                            )}
+                            {task.department}
                           </td>
 
                           {/* Given By */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.given_by || ''}
-                                onChange={(e) => handleInputChange('given_by', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              >
-                                <option value="">Select AssignBy</option>
-                                {givenByList.map(name => (
-                                  <option key={name} value={name}>{name}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              task.given_by
-                            )}
+                            {task.given_by}
                           </td>
 
                           {/* Name */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.name || ''}
-                                onChange={(e) => handleInputChange('name', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              >
-                                <option value="">Select Name</option>
-                                {doersList.map(user => (
-                                  <option key={user.user_name || user} value={user.user_name || user}>
-                                    {user.user_name || user}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              task.name
-                            )}
+                            {task.name}
                           </td>
 
                           {/* Task Start Date */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-yellow-50">
-                            {editingTaskId === task.id ? (
-                              <input
-                                type="datetime-local"
-                                value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
-                                onChange={(e) => handleInputChange('task_start_date', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
-                                disabled
-                              />
-                            ) : (
-                              formatTimestampToDDMMYYYY(task.task_start_date)
-                            )}
+                            {formatTimestampToDDMMYYYY(task.task_start_date)}
                           </td>
-
-
 
                           {/* Frequency */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.frequency || ''}
-                                onChange={(e) => handleInputChange('frequency', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
-                                disabled
-                              >
-                                <option value="">Select Frequency</option>
-                                <option value="daily">Daily</option>
-                                <option value="weekly">Weekly</option>
-                                <option value="monthly">Monthly</option>
-                                <option value="yearly">Yearly</option>
-                              </select>
-                            ) : (
-                              <span className={`px-2 py-1 rounded-full text-xs ${task.frequency?.toLowerCase() === 'daily' ? 'bg-blue-100 text-blue-800' :
-                                task.frequency?.toLowerCase() === 'weekly' ? 'bg-green-100 text-green-800' :
-                                  task.frequency?.toLowerCase() === 'monthly' ? 'bg-purple-100 text-purple-800' :
-                                    'bg-gray-100 text-gray-800'
-                                }`}>
-                                {task.frequency}
-                              </span>
-                            )}
+                            <span className={`px-2 py-1 rounded-full text-xs ${task.frequency?.toLowerCase() === 'daily' ? 'bg-blue-100 text-blue-800' :
+                              task.frequency?.toLowerCase() === 'weekly' ? 'bg-green-100 text-green-800' :
+                                task.frequency?.toLowerCase() === 'monthly' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-gray-100 text-gray-800'
+                              }`}>
+                              {task.frequency}
+                            </span>
                           </td>
 
                           {/* Duration */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-blue-50">
-                            {editingTaskId === task.id ? (
-                              <input
-                                type="text"
-                                value={editFormData.duration || ''}
-                                onChange={(e) => handleInputChange('duration', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                placeholder="e.g. 15 mins"
-                              />
-                            ) : (
-                              task.duration ? (
-                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                  ⏱ {task.duration}
-                                </span>
-                              ) : "—"
-                            )}
+                            {task.duration ? (
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                ⏱ {task.duration}
+                              </span>
+                            ) : "—"}
                           </td>
 
                           {/* Enable Reminders */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.enable_reminder || ''}
-                                onChange={(e) => handleInputChange('enable_reminder', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              >
-                                <option value="">Select</option>
-                                <option value="yes">Yes</option>
-                                <option value="no">No</option>
-                              </select>
-                            ) : (
-                              <span className="capitalize">{task.enable_reminder || "—"}</span>
-                            )}
+                            <span className="capitalize">{task.enable_reminder || "—"}</span>
                           </td>
 
                           {/* Require Attachment */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.require_attachment || ''}
-                                onChange={(e) => handleInputChange('require_attachment', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              >
-                                <option value="">Select</option>
-                                <option value="yes">Yes</option>
-                                <option value="no">No</option>
-                              </select>
-                            ) : (
-                              <span className="capitalize">{task.require_attachment || "—"}</span>
-                            )}
+                            <span className="capitalize">{task.require_attachment || "—"}</span>
                           </td>
 
                           {/* Remarks */}
                           <td className="px-6 py-4 text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <input
-                                type="text"
-                                value={editFormData.remark || ''}
-                                onChange={(e) => handleInputChange('remark', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              />
-                            ) : (
-                              task.remark || "—"
-                            )}
+                            {task.remark || "—"}
                           </td>
-
-
                         </tr>
                       ))
                     ) : (
@@ -1100,81 +932,34 @@ export default function QuickTask() {
                                 {task.frequency || 'Manual'}
                               </span>
                             </div>
-                            {editingTaskId === task.id ? (
-                              <div className="space-y-4 py-2">
-                                {/* Mobile Edit Form */}
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-black text-gray-400 uppercase">Description</label>
-                                  <textarea
-                                    value={editFormData.task_description || ''}
-                                    onChange={(e) => handleInputChange('task_description', e.target.value)}
-                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold"
-                                    rows="3"
-                                  />
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase">Department</label>
-                                    <select
-                                      value={editFormData.department || ''}
-                                      onChange={(e) => handleInputChange('department', e.target.value)}
-                                      className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold"
-                                    >
-                                      {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                                    </select>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase">Assign From</label>
-                                    <select
-                                      value={editFormData.given_by || ''}
-                                      onChange={(e) => handleInputChange('given_by', e.target.value)}
-                                      className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold"
-                                    >
-                                      {givenByList.map(g => <option key={g} value={g}>{g}</option>)}
-                                    </select>
-                                  </div>
-                                </div>
-                                <div className="flex gap-2 pt-2">
-                                  <button onClick={handleSaveEdit} className="flex-1 flex justify-center items-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-green-100">
-                                    <Save size={14} /> Save
-                                  </button>
-                                  <button onClick={handleCancelEdit} className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-xs font-black uppercase tracking-widest">
-                                    Cancel
-                                  </button>
-                                </div>
+                            <>
+                              <div className="mb-2">
+                                <RenderDescription
+                                  text={task.task_description}
+                                  audioUrl={task.audio_url}
+                                  instructionUrl={task.instruction_attachment_url}
+                                  instructionType={task.instruction_attachment_type}
+                                />
                               </div>
-                            ) : (
-                              <>
-                                <div className="text-sm font-bold text-gray-800 leading-tight mb-2">
-                                  <RenderDescription text={task.task_description} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
-                                  {task.audio_url && (
-                                    <div className="mt-2">
-                                      <AudioPlayer url={task.audio_url} />
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold text-gray-500">
-                                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>{task.department}</span>
-                                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>{task.name}</span>
-                                  <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>{formatTimestampToDDMMYYYY(task.task_start_date)}</span>
-                                  {task.duration && (
-                                    <span className="flex items-center gap-1.5 text-blue-600">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
-                                      ⏱ {task.duration}
-                                    </span>
-                                  )}
-                                </div>
-                              </>
-                            )}
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold text-gray-500">
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>{task.department}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>{task.name}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>{formatTimestampToDDMMYYYY(task.task_start_date)}</span>
+                                {task.duration && (
+                                  <span className="flex items-center gap-1.5 text-blue-600">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                                    ⏱ {task.duration}
+                                  </span>
+                                )}
+                              </div>
+                            </>
                           </div>
-                          {!editingTaskId && (
-                            <button
-                              onClick={() => handleEditClick(task)}
-                              className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95"
-                            >
-                              <Edit size={16} />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleEditClick(task)}
+                            className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95"
+                          >
+                            <Edit size={16} />
+                          </button>
                         </div>
                       </div>
                     ))
@@ -1250,289 +1035,59 @@ export default function QuickTask() {
                             />
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={handleSaveEdit}
-                                  disabled={isSaving}
-                                  className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                                >
-                                  <Save size={14} />
-                                  {isSaving ? 'Saving...' : 'Save'}
-                                </button>
-                                <button
-                                  onClick={handleCancelEdit}
-                                  className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
-                                >
-                                  <X size={14} />
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => handleEditClick(task)}
-                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                              >
-                                <Edit size={14} />
-                                Edit
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleEditClick(task)}
+                              className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                            >
+                              <Edit size={14} />
+                              Edit
+                            </button>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.id}</td>
                           <td className="px-6 py-4 text-sm text-gray-500 min-w-[200px] max-w-[400px]">
-                            {editingTaskId === task.id ? (
-                              <ReactMediaRecorder
-                                audio
-                                onStop={(blobUrl, blob) => setRecordedAudio({ blobUrl, blob })}
-                                render={({ status, startRecording, stopRecording, clearBlobUrl }) => (
-                                  <div className="space-y-2">
-                                    {status !== 'recording' && !recordedAudio && (
-                                      <div className="relative">
-                                        {editFormData.audio_url ? (
-                                          <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2">
-                                            <div className="flex items-center justify-between mb-2">
-                                              <AudioPlayer url={editFormData.audio_url} />
-                                              <button
-                                                type="button"
-                                                onClick={() => handleInputChange('audio_url', null)}
-                                                className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
-                                              >
-                                                <Trash2 size={10} /> Remove
-                                              </button>
-                                            </div>
-                                            <button
-                                              type="button"
-                                              onClick={startRecording}
-                                              className="mt-2 w-full flex items-center justify-center gap-2 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 transition-all"
-                                            >
-                                              <Mic size={12} /> Replace with Recording
-                                            </button>
-                                          </div>
-                                        ) : isAudioUrl(editFormData.task_description) ? (
-                                          <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2">
-                                            <div className="flex items-center justify-between mb-2">
-                                              <AudioPlayer url={editFormData.task_description} />
-                                              <button
-                                                type="button"
-                                                onClick={() => handleInputChange('task_description', '')}
-                                                className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
-                                              >
-                                                <Trash2 size={10} /> Remove
-                                              </button>
-                                            </div>
-                                            <button
-                                              type="button"
-                                              onClick={startRecording}
-                                              className="mt-2 w-full flex items-center justify-center gap-2 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 transition-all"
-                                            >
-                                              <Mic size={12} /> Replace with Recording
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          <div className="relative">
-                                            <textarea
-                                              value={editFormData.task_description || ''}
-                                              onChange={(e) => handleInputChange('task_description', e.target.value)}
-                                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm pr-10"
-                                              rows="3"
-                                              placeholder="Enter task text..."
-                                            />
-                                            <button
-                                              type="button"
-                                              onClick={startRecording}
-                                              className="absolute bottom-2 right-2 p-1.5 bg-purple-100 text-purple-600 rounded-full hover:bg-purple-200"
-                                              title="Record Audio"
-                                            >
-                                              <Mic size={16} />
-                                            </button>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {status === 'recording' && (
-                                      <div className="flex flex-col items-center justify-center p-4 bg-red-50 border border-red-100 rounded-lg space-y-2 animate-pulse">
-                                        <Mic size={20} className="text-red-600" />
-                                        <button
-                                          type="button"
-                                          onClick={stopRecording}
-                                          className="flex items-center gap-2 px-3 py-1 bg-red-600 text-white rounded-full hover:bg-red-700 text-xs font-bold"
-                                        >
-                                          <Square size={10} /> Stop
-                                        </button>
-                                      </div>
-                                    )}
-
-                                    {recordedAudio && status !== 'recording' && (
-                                      <div className="bg-purple-50 border border-purple-100 rounded-lg p-2">
-                                        <div className="flex items-center justify-between mb-1">
-                                          <span className="text-[10px] font-bold text-purple-600 uppercase">New Voice Note Attached</span>
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              clearBlobUrl();
-                                              setRecordedAudio(null);
-                                            }}
-                                            className="text-[10px] text-red-500 hover:text-red-700 font-bold flex items-center gap-1"
-                                          >
-                                            <Trash2 size={10} /> Remove
-                                          </button>
-                                        </div>
-                                        <AudioPlayer url={recordedAudio.blobUrl} />
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              />
-                            ) : (
-                              <>
-                                <RenderDescription
-                                  text={task.task_description || task.work_description}
-                                  audioUrl={task.audio_url}
-                                  instructionUrl={task.instruction_attachment_url}
-                                  instructionType={task.instruction_attachment_type}
-                                />
-                              </>
-                            )}
+                            <RenderDescription
+                              text={task.task_description || task.work_description}
+                              audioUrl={task.audio_url}
+                              instructionUrl={task.instruction_attachment_url}
+                              instructionType={task.instruction_attachment_type}
+                            />
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.machine_name || ''}
-                                onChange={(e) => handleInputChange('machine_name', e.target.value)}
-                                className="w-full px-2 py-1 border border-purple-200 rounded text-[11px] font-bold focus:ring-1 focus:ring-purple-500 outline-none"
-                              >
-                                <option value="">Select Machine</option>
-                                {machineOptions.map((opt, idx) => (
-                                  <option key={`m-${idx}`} value={opt}>{opt}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              task.machine_name
-                            )}
+                            {task.machine_name}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.part_name || ''}
-                                onChange={(e) => handleInputChange('part_name', e.target.value)}
-                                className="w-full px-2 py-1 border border-purple-200 rounded text-[11px] font-bold focus:ring-1 focus:ring-purple-500 outline-none"
-                              >
-                                <option value="">Select Part</option>
-                                {partOptions.map((opt, idx) => (
-                                  <option key={`p-${idx}`} value={opt}>{opt}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              task.part_name
-                            )}
+                            {task.part_name}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.part_area || ''}
-                                onChange={(e) => handleInputChange('part_area', e.target.value)}
-                                className="w-full px-2 py-1 border border-purple-200 rounded text-[11px] font-bold focus:ring-1 focus:ring-purple-500 outline-none"
-                              >
-                                <option value="">Select Area</option>
-                                {areaOptions.map((opt, idx) => (
-                                  <option key={`a-${idx}`} value={opt}>{opt}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              task.part_area
-                            )}
+                            {task.part_area}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.given_by || ''}
-                                onChange={(e) => handleInputChange('given_by', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              >
-                                <option value="">Select AssignBy</option>
-                                {givenByList.map(name => (
-                                  <option key={name} value={name}>{name}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              task.given_by
-                            )}
+                            {task.given_by}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.name || ''}
-                                onChange={(e) => handleInputChange('name', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              >
-                                <option value="">Select Name</option>
-                                {doersList.map(user => (
-                                  <option key={user.user_name || user} value={user.user_name || user}>
-                                    {user.user_name || user}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              task.name
-                            )}
+                            {task.name}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-yellow-50">
-                            {editingTaskId === task.id ? (
-                              <input
-                                type="datetime-local"
-                                value={editFormData.task_start_date ? new Date(editFormData.task_start_date).toISOString().slice(0, 16) : ''}
-                                onChange={(e) => handleInputChange('task_start_date', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
-                                disabled
-                              />
-                            ) : (
-                              formatTimestampToDDMMYYYY(task.task_start_date)
-                            )}
+                            {formatTimestampToDDMMYYYY(task.task_start_date)}
                           </td>
 
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.freq || ''}
-                                onChange={(e) => handleInputChange('freq', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm bg-gray-100 italic"
-                                disabled
-                              >
-                                <option value="">Select Frequency</option>
-                                <option value="daily">Daily</option>
-                                <option value="weekly">Weekly</option>
-                                <option value="monthly">Monthly</option>
-                                <option value="yearly">Yearly</option>
-                              </select>
-                            ) : (
-                              <span className={`px-2 py-1 rounded-full text-xs ${task.freq?.toLowerCase() === 'daily' ? 'bg-blue-100 text-blue-800' :
-                                task.freq?.toLowerCase() === 'weekly' ? 'bg-green-100 text-green-800' :
-                                  task.freq?.toLowerCase() === 'monthly' ? 'bg-purple-100 text-purple-800' :
-                                    'bg-gray-100 text-gray-800'
-                                }`}>
-                                <span className="capitalize">{task.freq}</span>
-                              </span>
-                            )}
+                            <span className={`px-2 py-1 rounded-full text-xs ${task.freq?.toLowerCase() === 'daily' ? 'bg-blue-100 text-blue-800' :
+                              task.freq?.toLowerCase() === 'weekly' ? 'bg-green-100 text-green-800' :
+                                task.freq?.toLowerCase() === 'monthly' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-gray-100 text-gray-800'
+                              }`}>
+                              <span className="capitalize">{task.freq}</span>
+                            </span>
                           </td>
 
                           {/* Duration */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-blue-50">
-                            {editingTaskId === task.id ? (
-                              <input
-                                type="text"
-                                value={editFormData.duration || ''}
-                                onChange={(e) => handleInputChange('duration', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                placeholder="e.g. 1 hour"
-                              />
-                            ) : (
-                              task.duration ? (
-                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                  ⏱ {task.duration}
-                                </span>
-                              ) : "—"
-                            )}
+                            {task.duration ? (
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                ⏱ {task.duration}
+                              </span>
+                            ) : "—"}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             <span className={`px-2 py-1 rounded-full text-xs ${task.status === 'Done' ? 'bg-green-100 text-green-800' :
@@ -1541,16 +1096,7 @@ export default function QuickTask() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500">
-                            {editingTaskId === task.id ? (
-                              <input
-                                type="text"
-                                value={editFormData.remarks || ''}
-                                onChange={(e) => handleInputChange('remarks', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              />
-                            ) : (
-                              task.remarks || '—'
-                            )}
+                            {task.remarks || '—'}
                           </td>
 
                         </tr>
@@ -1586,85 +1132,38 @@ export default function QuickTask() {
                                 {task.status || 'Pending'}
                               </span>
                             </div>
-
-                            {editingTaskId === task.id ? (
-                              <div className="space-y-4 py-2">
+                            <>
+                              <div className="text-sm font-bold text-gray-800 leading-tight mb-3">
+                                <RenderDescription
+                                  text={task.task_description || task.work_description}
+                                  audioUrl={task.audio_url}
+                                  instructionUrl={task.instruction_attachment_url}
+                                  instructionType={task.instruction_attachment_type}
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                  <label className="text-[10px] font-black text-gray-400 uppercase">Description</label>
-                                  <textarea
-                                    value={editFormData.task_description || ''}
-                                    onChange={(e) => handleInputChange('task_description', e.target.value)}
-                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold"
-                                    rows="3"
-                                  />
+                                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Resource</span>
+                                  <div className="text-xs font-bold text-gray-700">{task.machine_name || '—'}</div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase">Machine</label>
-                                    <select
-                                      value={editFormData.machine_name || ''}
-                                      onChange={(e) => handleInputChange('machine_name', e.target.value)}
-                                      className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold"
-                                    >
-                                      {machineOptions.map(m => <option key={m} value={m}>{m}</option>)}
-                                    </select>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase">Part</label>
-                                    <select
-                                      value={editFormData.part_name || ''}
-                                      onChange={(e) => handleInputChange('part_name', e.target.value)}
-                                      className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold"
-                                    >
-                                      {partOptions.map(p => <option key={p} value={p}>{p}</option>)}
-                                    </select>
-                                  </div>
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Component</span>
+                                  <div className="text-xs font-bold text-gray-700">{task.part_name || '—'}</div>
                                 </div>
-                                <div className="flex gap-2 pt-2">
-                                  <button onClick={handleSaveEdit} className="flex-1 flex justify-center items-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-green-100">
-                                    <Save size={14} /> Save
-                                  </button>
-                                  <button onClick={handleCancelEdit} className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-xs font-black uppercase tracking-widest">
-                                    Cancel
-                                  </button>
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Assignee</span>
+                                  <div className="text-xs font-bold text-gray-700">{task.name || '—'}</div>
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Schedule</span>
+                                  <div className="text-xs font-bold text-gray-700">{formatTimestampToDDMMYYYY(task.task_start_date)}</div>
                                 </div>
                               </div>
-                            ) : (
-                              <>
-                                <div className="text-sm font-bold text-gray-800 leading-tight mb-3">
-                                  <RenderDescription
-                                    text={task.task_description || task.work_description}
-                                    audioUrl={task.audio_url}
-                                    instructionUrl={task.instruction_attachment_url}
-                                    instructionType={task.instruction_attachment_type}
-                                  />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div className="space-y-1">
-                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Resource</span>
-                                    <div className="text-xs font-bold text-gray-700">{task.machine_name || '—'}</div>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Component</span>
-                                    <div className="text-xs font-bold text-gray-700">{task.part_name || '—'}</div>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Assignee</span>
-                                    <div className="text-xs font-bold text-gray-700">{task.name || '—'}</div>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Schedule</span>
-                                    <div className="text-xs font-bold text-gray-700">{formatTimestampToDDMMYYYY(task.task_start_date)}</div>
-                                  </div>
-                                </div>
-                              </>
-                            )}
+                            </>
                           </div>
-                          {!editingTaskId && (
-                            <button onClick={() => handleEditClick(task)} className="p-2 bg-blue-50 text-blue-600 rounded-xl">
-                              <Edit size={16} />
-                            </button>
-                          )}
+                          <button onClick={() => handleEditClick(task)} className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                            <Edit size={16} />
+                          </button>
                         </div>
                       </div>
                     ))
@@ -1693,10 +1192,349 @@ export default function QuickTask() {
               }}
               onDelete={handleDeleteSelected}
               isExternalDeleting={isDeleting}
+              onEdit={handleEditClick}
             />
           )}
         </>
       )}
     </AdminLayout>
+
+      {/* Task Edit Modal Popup */}
+      <AnimatePresence>
+        {isEditModalOpen && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: 10 }}
+              className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-gray-100"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
+                    <Edit size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-800 uppercase tracking-tight">Edit Task Details</h3>
+                    <p className="text-[10px] font-medium text-gray-500 uppercase tracking-widest">ID: #{editFormData.id}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCancelEdit}
+                  className="p-1.5 hover:bg-gray-200 text-gray-400 rounded-lg transition-all"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-grow overflow-y-auto p-6 space-y-6">
+                {/* Description & Audio Section */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Task Description</label>
+                  <div className="relative group">
+                    <textarea
+                      value={editFormData.task_description || ''}
+                      onChange={(e) => handleInputChange('task_description', e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm font-medium focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-50 outline-none transition-all min-h-[100px] resize-none"
+                      placeholder="Describe the task..."
+                    />
+                    
+                    {/* Audio Recording Feature inside Modal */}
+                    <div className="absolute bottom-3 right-3 flex gap-2">
+                       <ReactMediaRecorder
+                        audio
+                        onStop={(blobUrl, blob) => setRecordedAudio({ blobUrl, blob })}
+                        render={({ status, startRecording, stopRecording, clearBlobUrl }) => (
+                          <div className="flex items-center gap-2">
+                            {status === 'recording' ? (
+                              <button
+                                type="button"
+                                onClick={stopRecording}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest animate-pulse"
+                              >
+                                <Square size={12} fill="currentColor" /> Stop
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={startRecording}
+                                className="p-2.5 bg-purple-100 text-purple-600 rounded-xl hover:bg-purple-600 hover:text-white transition-all shadow-sm shadow-purple-100"
+                                title="Record Voice Note"
+                              >
+                                <Mic size={18} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Audio Players Section */}
+                  {(editFormData.audio_url || recordedAudio) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                      {editFormData.audio_url && (
+                        <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-[9px] font-bold text-blue-600 uppercase tracking-wider">Original Audio</span>
+                            <button
+                              type="button"
+                              onClick={() => handleInputChange('audio_url', null)}
+                              className="text-red-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                          <AudioPlayer url={editFormData.audio_url} />
+                        </div>
+                      )}
+                      {recordedAudio && (
+                        <div className="p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider">New Recording</span>
+                            <button
+                              type="button"
+                              onClick={() => setRecordedAudio(null)}
+                              className="text-red-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                          <AudioPlayer url={recordedAudio.blobUrl} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Specific Fields based on Tab */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  {activeTab === 'maintenance' ? (
+                    <>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Machine / Resource</label>
+                        <select
+                          value={editFormData.machine_name || ''}
+                          onChange={(e) => handleInputChange('machine_name', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                        >
+                          <option value="">Select Machine</option>
+                          {machineOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Part / Component</label>
+                        <select
+                          value={editFormData.part_name || ''}
+                          onChange={(e) => handleInputChange('part_name', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                        >
+                          <option value="">Select Part</option>
+                          {partOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5 text-gray-400">
+                        <label className="text-[10px] font-bold uppercase tracking-wider">Frequency (Read-only)</label>
+                        <select
+                          value={editFormData.freq || ''}
+                          onChange={(e) => handleInputChange('freq', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+                          disabled
+                        >
+                          <option value="Daily">Daily</option>
+                          <option value="Weekly">Weekly</option>
+                          <option value="Monthly">Monthly</option>
+                          <option value="Manual">Manual</option>
+                        </select>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Department</label>
+                        <select
+                          value={editFormData.department || ''}
+                          onChange={(e) => handleInputChange('department', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                        >
+                          <option value="">Select Dept</option>
+                          {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Assignee (Doer)</label>
+                        <select
+                          value={editFormData.name || ''}
+                          onChange={(e) => handleInputChange('name', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                        >
+                          <option value="">Select User</option>
+                          {doersList.map(u => <option key={u.user_name || u} value={u.user_name || u}>{u.user_name || u}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5 text-gray-400">
+                        <label className="text-[10px] font-bold uppercase tracking-wider">Frequency (Read-only)</label>
+                        <select
+                          value={editFormData.frequency || ''}
+                          onChange={(e) => handleInputChange('frequency', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+                          disabled
+                        >
+                          <option value="Daily">Daily</option>
+                          <option value="Weekly">Weekly</option>
+                          <option value="Monthly">Monthly</option>
+                          <option value="Manual">Manual</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5 text-gray-400">
+                        <label className="text-[10px] font-bold uppercase tracking-wider">Start Date (Read-only)</label>
+                        <input
+                          type="date"
+                          value={editFormData.task_start_date ? editFormData.task_start_date.split('T')[0] : ''}
+                          className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+                          disabled
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Duration (HH:MM)</label>
+                        <input
+                          type="text"
+                          value={editFormData.duration || ''}
+                          onChange={(e) => handleInputChange('duration', e.target.value)}
+                          placeholder="e.g., 01:30"
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Reminder</label>
+                          <select
+                            value={editFormData.enable_reminder || ''}
+                            onChange={(e) => handleInputChange('enable_reminder', e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-xs font-semibold"
+                          >
+                            <option value="yes">Yes</option>
+                            <option value="no">No</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Req. Proof</label>
+                          <select
+                            value={editFormData.require_attachment || ''}
+                            onChange={(e) => handleInputChange('require_attachment', e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-xs font-semibold"
+                          >
+                            <option value="yes">Yes</option>
+                            <option value="no">No</option>
+                          </select>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* References / Attachments Section */}
+                <div className="pt-4 border-t border-gray-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Additional References</h4>
+                    <button
+                      type="button"
+                      onClick={addAttachment}
+                      className="px-3 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-[9px] font-bold uppercase tracking-wider hover:bg-gray-50 transition-all flex items-center gap-1.5"
+                    >
+                      <Plus size={10} /> Add Reference
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {(editFormData.instruction_attachment_url || []).map((url, idx) => (
+                      <div key={idx} className="flex gap-2 items-center bg-gray-50/50 p-2 rounded-xl border border-gray-200">
+                        <select
+                          value={editFormData.instruction_attachment_type?.[idx] || 'link'}
+                          onChange={(e) => handleAttachmentChange(idx, 'type', e.target.value)}
+                          className="px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-bold uppercase outline-none w-20"
+                        >
+                          <option value="link">Link</option>
+                          <option value="video">Video</option>
+                          <option value="image">Image</option>
+                          <option value="pdf">PDF</option>
+                        </select>
+                        {editFormData.instruction_attachment_type?.[idx] === 'image' ? (
+                          <div className="flex-grow flex items-center gap-2">
+                             <input
+                              type="text"
+                              value={url instanceof File ? `📄 ${url.name}` : (url || '')}
+                              readOnly
+                              placeholder="Choose an image..."
+                              className="flex-grow px-3 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-medium outline-none truncate"
+                            />
+                            <input
+                              type="file"
+                              id={`ref-file-${idx}`}
+                              accept="image/*"
+                              hidden
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) handleAttachmentChange(idx, 'url', file);
+                              }}
+                            />
+                            <label
+                              htmlFor={`ref-file-${idx}`}
+                              className="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-bold uppercase cursor-pointer hover:bg-purple-600 hover:text-white transition-all whitespace-nowrap"
+                            >
+                              Choose
+                            </label>
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            value={url instanceof File ? '' : (url || '')}
+                            onChange={(e) => handleAttachmentChange(idx, 'url', e.target.value)}
+                            placeholder="https://..."
+                            className="flex-grow px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-medium outline-none focus:ring-4 focus:ring-purple-50"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(idx)}
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    {(!editFormData.instruction_attachment_url || editFormData.instruction_attachment_url.length === 0) && (
+                      <div className="text-center py-4 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">No additional references</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex gap-3">
+                <button
+                  onClick={handleCancelEdit}
+                  className="px-5 py-2 text-gray-500 hover:text-gray-700 text-xs font-bold uppercase tracking-wider transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={isSaving || isUploading}
+                  className="flex-grow flex justify-center items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-purple-700 disabled:opacity-50 transition-all shadow-lg shadow-purple-100"
+                >
+                  {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

@@ -5,6 +5,8 @@ import { useDispatch } from "react-redux"
 import AudioPlayer from "../../../../components/AudioPlayer"
 import { updateRepair } from "../../../../redux/slice/repairSlice"
 
+import RenderDescription from "../../../../components/RenderDescription"
+
 const isAudioUrl = (url) => {
     if (!url || typeof url !== 'string') return false;
     return url.startsWith('http') && (
@@ -13,7 +15,6 @@ const isAudioUrl = (url) => {
         url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
     );
 };
-
 
 const StatCard = ({ icon: Icon, label, value, color }) => (
     <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col gap-1 relative overflow-hidden min-w-0">
@@ -337,11 +338,12 @@ export default function RepairView({ tasks = [] }) {
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.filled_by}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.assigned_person || '-'}</td>
                                         <td className="px-4 py-3 text-sm text-gray-600">
-                                            {isAudioUrl(task.issue_description) ? (
-                                                <AudioPlayer url={task.issue_description} />
-                                            ) : (
-                                                <div className="line-clamp-2" title={task.issue_description}>{task.issue_description}</div>
-                                            )}
+                                            <RenderDescription
+                                                text={task.issue_description}
+                                                audioUrl={task.audio_url}
+                                                instructionUrl={task.instruction_attachment_url}
+                                                instructionType={task.instruction_attachment_type}
+                                            />
                                         </td>
                                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                                             {task.created_at ? new Date(task.created_at).toLocaleDateString() : '-'}

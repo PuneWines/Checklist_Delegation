@@ -7,16 +7,16 @@ import { updateMaintenanceTask } from "../../../../redux/slice/maintenanceSlice"
 import { fetchUniqueDepartmentDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../../../../redux/api/assignTaskApi"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
 
+import RenderDescription, { MediaViewer } from "../../../../components/RenderDescription"
+
 const isAudioUrl = (url) => {
-    if (typeof url !== 'string') return false;
-    return url.startsWith('http') && (
-        url.includes('audio-recordings') ||
-        url.includes('voice-notes') ||
-        url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
-    );
+  if (!url || typeof url !== 'string') return false;
+  return url.startsWith('http') && (
+    url.includes('audio-recordings') ||
+    url.includes('voice-notes') ||
+    url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
+  );
 };
-
-
 
 const StatCard = ({ icon: Icon, label, value, color }) => (
     <div className="bg-white rounded-xl p-2 shadow-sm border border-gray-100 flex items-center gap-2 w-full min-w-0">
@@ -33,7 +33,8 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
 export default function MaintenanceView({ stats: originalStats, chartData, tasks = [] }) {
     const [maintFilter, setMaintFilter] = useState('all');
     const [isSaving, setIsSaving] = useState(false);
-    const [lightboxImage, setLightboxImage] = useState(null); // { url, name }
+    const [viewerOpen, setViewerOpen] = useState(false);
+    const [viewerMedia, setViewerMedia] = useState({ url: '', type: 'image' });
 
     // Dropdown lists
     const [givenByList, setGivenByList] = useState([]);
@@ -463,13 +464,12 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                                     {editingTaskId === task.id ? (
                                                         <textarea value={editFormData.task_description} onChange={e => handleInputChange('task_description', e.target.value)} className="w-full px-2 py-1 border rounded text-xs" rows="2" />
                                                     ) : (
-                                                        isAudioUrl(task.task_description || task.title) ? (
-                                                            <AudioPlayer url={task.task_description || task.title} />
-                                                        ) : (
-                                                            <div className="line-clamp-2" title={task.task_description || task.title}>
-                                                                {task.task_description || task.title}
-                                                            </div>
-                                                        )
+                                                        <RenderDescription
+                                                            text={task.task_description || task.title}
+                                                            audioUrl={task.audio_url}
+                                                            instructionUrl={task.instruction_attachment_url}
+                                                            instructionType={task.instruction_attachment_type}
+                                                        />
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
@@ -535,7 +535,10 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                                     ) : (
                                                         task.uploaded_image_url ? (
                                                             <button
-                                                                onClick={() => setLightboxImage({ url: task.uploaded_image_url, name: `Task #${task.id} Proof` })}
+                                                                onClick={() => {
+                                                                    setViewerMedia({ url: task.uploaded_image_url, type: 'image' });
+                                                                    setViewerOpen(true);
+                                                                }}
                                                                 className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium text-xs hover:underline transition-colors"
                                                             >
                                                                 <CheckCircle className="h-3 w-3" /> View
@@ -559,46 +562,11 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                 </div>
             </div>
 
-            {/* Image Lightbox */}
-            {lightboxImage && (
-                <div
-                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-                    onClick={() => setLightboxImage(null)}
-                >
-                    <div
-                        className="relative max-w-3xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="flex items-center justify-between px-5 py-3.5 bg-gray-50 border-b border-gray-100">
-                            <span className="text-sm font-bold text-gray-800 truncate">{lightboxImage.name}</span>
-                            <button
-                                onClick={() => setLightboxImage(null)}
-                                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-all"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="bg-gray-900 flex items-center justify-center" style={{ minHeight: '360px' }}>
-                            <img
-                                src={lightboxImage.url}
-                                alt={lightboxImage.name}
-                                className="max-w-full max-h-[75vh] object-contain"
-                            />
-                        </div>
-                        <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-                            <p className="text-xs text-gray-400">Click outside or ✕ to close</p>
-                            <a
-                                href={lightboxImage.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-xs font-bold text-purple-600 hover:text-purple-800 transition-colors"
-                            >
-                                Open full size ↗
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <MediaViewer 
+                isOpen={viewerOpen} 
+                onClose={() => setViewerOpen(false)} 
+                media={viewerMedia} 
+            />
         </>
     );
 }

@@ -5,6 +5,7 @@ import { motion } from "framer-motion"
 import { Filter, ChevronDown, ChevronUp, Play, Pause, Edit, Save, X, Mic, Square, Trash2, Loader2 } from "lucide-react"
 import { ReactMediaRecorder } from "react-media-recorder"
 import AudioPlayer from "../../../components/AudioPlayer"
+import RenderDescription from "../../../components/RenderDescription"
 import supabase from "../../../SupabaseClient"
 import { fetchDashboardDataApi, getDashboardDataCount } from "../../../redux/api/dashboardApi"
 import { useDispatch } from "react-redux"
@@ -12,7 +13,6 @@ import { updateChecklistTask, updateDelegationTask } from "../../../redux/slice/
 import { updateMaintenanceTask } from "../../../redux/slice/maintenanceSlice"
 import { fetchUniqueDepartmentDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../../../redux/api/assignTaskApi"
 
-// --- AUDIO UTILITIES ---
 const isAudioUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
   return url.startsWith('http') && (
@@ -21,7 +21,6 @@ const isAudioUrl = (url) => {
     url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
   );
 };
-
 
 export default function TaskNavigationTabs({
   dashboardType,
@@ -739,8 +738,12 @@ export default function TaskNavigationTabs({
                               )}
                             />
                           ) : (
-                            isAudioUrl(task.title) ? <AudioPlayer url={task.title} /> :
-                              <div className="whitespace-normal break-words">{task.title}</div>
+                            <RenderDescription
+                              text={task.title || task.task_description}
+                              audioUrl={task.audio_url}
+                              instructionUrl={task.instruction_attachment_url}
+                              instructionType={task.instruction_attachment_type}
+                            />
                           )}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 font-medium">

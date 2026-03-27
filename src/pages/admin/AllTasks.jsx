@@ -32,52 +32,14 @@ import { updateRepairData } from "../../redux/api/repairApi";
 import { sendTaskExtensionNotification, sendUrgentTaskNotification } from "../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../context/MagicToastContext";
+import RenderDescription from "../../components/RenderDescription";
+
 const isAudioUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
   return url.startsWith('http') && (
     url.includes('audio-recordings') ||
     url.includes('voice-notes') ||
     url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
-  );
-};
-
-const RenderDescription = ({ text, audioUrl, instructionUrl, instructionType }) => {
-  if (!text && !audioUrl && !instructionUrl) return "—";
-
-  const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|wav|ogg|webm|m4a|aac)(\?.*)?)/i;
-  let match = null;
-  if (text && typeof text === 'string') {
-      match = text.match(urlRegex);
-  }
-
-  let url = audioUrl || (match ? match[0] : null);
-  let cleanText = text || '';
-
-  if (match && !audioUrl) {
-    cleanText = text.replace(match[0], '').replace(/Voice Note Link:/i, '').replace(/Voice Note:/i, '').trim();
-  }
-
-  const renderInstruction = () => {
-    if (!instructionUrl || !instructionType || instructionType === 'none') return null;
-    let iconLabel = "View Reference";
-    if (instructionType === 'video') iconLabel = "Play Video Reference";
-    if (instructionType === 'image') iconLabel = "View Image Reference";
-    if (instructionType === 'pdf') iconLabel = "Open PDF Reference";
-    if (instructionType === 'link') iconLabel = "Visit Reference Link";
-
-    return (
-      <a href={instructionUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 mt-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1.5 rounded-md hover:bg-blue-100 transition-colors w-fit shadow-sm">
-        🔗 {iconLabel}
-      </a>
-    );
-  };
-
-  return (
-    <div className="flex flex-col gap-1.5 min-w-[200px]">
-      {cleanText && <span className="whitespace-pre-wrap text-sm" title={cleanText}>{cleanText}</span>}
-      {url && <AudioPlayer url={url} />}
-      {renderInstruction()}
-    </div>
   );
 };
 

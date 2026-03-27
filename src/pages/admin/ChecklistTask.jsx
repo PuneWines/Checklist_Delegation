@@ -42,9 +42,7 @@ const defaultTask = () => ({
     time: "09:00",
     recordedAudio: null,
     showCalendar: false,
-    instructionType: "none",
-    instructionFile: null,
-    instructionLink: "",
+    references: [],
 });
 
 // --- AUDIO UTILITIES ---
@@ -188,42 +186,65 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                             Task Description <span className="text-red-500">*</span>
                         </label>
                         <select
-                            value={task.instructionType}
-                            onChange={(e) => onUpdate(task.id, { instructionType: e.target.value, instructionFile: null, instructionLink: "" })}
+                            value="none"
+                            onChange={(e) => {
+                                if(e.target.value === 'none') return;
+                                const newRefs = [...(task.references || []), { id: Date.now() + Math.random(), type: e.target.value, link: "", file: null }];
+                                onUpdate(task.id, { references: newRefs });
+                            }}
                             className="text-[10px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded px-2 py-1 outline-none cursor-pointer transition-colors"
                         >
                             <option value="none">+ Add Reference</option>
-                            <option value="image">Image</option>
-                            <option value="video">Video</option>
-                            <option value="pdf">PDF Docs</option>
+                            <option value="image">Image (Upload)</option>
+                            <option value="video">Video (Link)</option>
+                            <option value="pdf">PDF (Link)</option>
                             <option value="link">Web Link</option>
                         </select>
                     </div>
-                    {task.instructionType !== 'none' && (
-                        <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg flex flex-col sm:flex-row gap-2 sm:items-center">
-                            <span className="text-xs font-bold text-blue-700 flex-shrink-0 uppercase tracking-wider">
-                                {task.instructionType} Reference:
+                    {task.references && task.references.map((ref, i) => (
+                        <div key={ref.id} className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg flex flex-col sm:flex-row gap-2 sm:items-center mt-2 group relative">
+                            <span className="text-[10px] font-bold text-blue-700 flex-shrink-0 uppercase tracking-wider w-16">
+                                {ref.type}:
                             </span>
-                            {task.instructionType === 'link' ? (
-                                <input
-                                    type="url"
-                                    placeholder="https://"
-                                    value={task.instructionLink}
-                                    onChange={(e) => onUpdate(task.id, { instructionLink: e.target.value })}
-                                    className="flex-1 w-full px-2 py-1.5 text-xs text-blue-800 bg-white border border-blue-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
-                                />
-                            ) : (
+                            {ref.type === 'image' ? (
                                 <div className="flex-1 flex items-center gap-2">
                                     <input
                                         type="file"
-                                        accept={task.instructionType === 'pdf' ? 'application/pdf' : `${task.instructionType}/*`}
-                                        onChange={(e) => onUpdate(task.id, { instructionFile: e.target.files[0] })}
-                                        className="text-xs w-full text-blue-700 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            const newRefs = [...task.references];
+                                            newRefs[i].file = e.target.files[0];
+                                            onUpdate(task.id, { references: newRefs });
+                                        }}
+                                        className="text-[10px] w-full text-blue-700 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-bold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer"
                                     />
                                 </div>
+                            ) : (
+                                <input
+                                    type="url"
+                                    placeholder="https://"
+                                    value={ref.link}
+                                    onChange={(e) => {
+                                        const newRefs = [...task.references];
+                                        newRefs[i].link = e.target.value;
+                                        onUpdate(task.id, { references: newRefs });
+                                    }}
+                                    className="flex-1 w-full px-2 py-1 text-xs text-blue-800 bg-white border border-blue-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                                />
                             )}
+                            <button 
+                                type="button" 
+                                onClick={() => {
+                                    const newRefs = task.references.filter(r => r.id !== ref.id);
+                                    onUpdate(task.id, { references: newRefs });
+                                }}
+                                className="text-red-400 hover:text-red-600 p-1 rounded-md transition-colors"
+                                title="Remove Reference"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
                         </div>
-                    )}
+                    ))}
                     <ReactMediaRecorder
                         audio
                         onStop={(blobUrl, blob) => onUpdate(task.id, { recordedAudio: { blobUrl, blob } })}
@@ -531,17 +552,21 @@ export default function ChecklistTask() {
                 if (!t.department || !t.givenBy) {
                     return { success: false, message: `Task ${i + 1}: Please select Department and Assign From.` };
                 }
-                if (!t.doer || !t.date || (!t.description && !t.recordedAudio && t.instructionType === 'none')) {
+                if (!t.doer || !t.date || (!t.description && !t.recordedAudio && (!t.references || t.references.length === 0))) {
                     return { success: false, message: `Task ${i + 1}: Please fill in Doer, Date, and at least one instructional detail (Desc, Voice Note, or Reference).` };
                 }
                 if (!t.duration) {
                     return { success: false, message: `Task ${i + 1}: Please specify the task duration.` };
                 }
-                if (t.instructionType === 'link' && !t.instructionLink) {
-                    return { success: false, message: `Task ${i + 1}: Please provide a valid web link for the Reference Attachment.` };
-                }
-                if (t.instructionType !== 'none' && t.instructionType !== 'link' && !t.instructionFile) {
-                    return { success: false, message: `Task ${i + 1}: Please upload the ${t.instructionType.toUpperCase()} file for the Reference Attachment.` };
+                if (t.references && t.references.length > 0) {
+                    for (const ref of t.references) {
+                        if (ref.type === 'image' && !ref.file) {
+                            return { success: false, message: `Task ${i + 1}: Please upload the Image file for the Reference.` };
+                        }
+                        if (['video', 'pdf', 'link'].includes(ref.type) && !ref.link) {
+                            return { success: false, message: `Task ${i + 1}: Please provide a valid web link for the ${ref.type.toUpperCase()} Reference.` };
+                        }
+                    }
                 }
 
                 if (t.frequency === "One Time (No Recurrence)") {
@@ -598,7 +623,7 @@ export default function ChecklistTask() {
                 alert(`Task ${i + 1}: Please select Department and Assign From.`);
                 return;
             }
-            if (!t.doer || !t.date || (!t.description && !t.recordedAudio && t.instructionType === 'none')) {
+            if (!t.doer || !t.date || (!t.description && !t.recordedAudio && (!t.references || t.references.length === 0))) {
                 alert(`Task ${i + 1}: Please fill in Doer, Date, and at least one instructional detail (Desc, Voice Note, or Reference).`);
                 return;
             }
@@ -606,13 +631,17 @@ export default function ChecklistTask() {
                 alert(`Task ${i + 1}: Please specify the task duration.`);
                 return;
             }
-            if (t.instructionType === 'link' && !t.instructionLink) {
-                alert(`Task ${i + 1}: Please provide a valid web link for the Reference Attachment.`);
-                return;
-            }
-            if (t.instructionType !== 'none' && t.instructionType !== 'link' && !t.instructionFile) {
-                alert(`Task ${i + 1}: Please upload the ${t.instructionType.toUpperCase()} file for the Reference Attachment.`);
-                return;
+            if (t.references && t.references.length > 0) {
+                for (const ref of t.references) {
+                    if (ref.type === 'image' && !ref.file) {
+                        alert(`Task ${i + 1}: Please upload the Image file for the Reference.`);
+                        return;
+                    }
+                    if (['video', 'pdf', 'link'].includes(ref.type) && !ref.link) {
+                        alert(`Task ${i + 1}: Please provide a valid web link for the ${ref.type.toUpperCase()} Reference.`);
+                        return;
+                    }
+                }
             }
 
             // Holiday & Working Day check for one-time tasks (matches handlePreview validation)
@@ -664,19 +693,37 @@ export default function ChecklistTask() {
 
             // 1.5 Parallelize Instruction Uploads
             const instructionUploadPromises = tasks.map(async (task) => {
-                if (task.instructionType !== 'none' && task.instructionType !== 'link' && task.instructionFile) {
-                    const ext = task.instructionFile.name.split('.').pop();
-                    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
-                    const { error: uploadError } = await supabase.storage
-                        .from('task-instructions')
-                        .upload(fileName, task.instructionFile, { upsert: false });
-                    if (uploadError) throw new Error(`Reference Upload Error: ${uploadError.message}`);
-                    const { data: publicUrlData } = supabase.storage.from('task-instructions').getPublicUrl(fileName);
-                    return { id: task.id, instructionUrl: publicUrlData.publicUrl, instructionType: task.instructionType };
-                } else if (task.instructionType === 'link' && task.instructionLink) {
-                    return { id: task.id, instructionUrl: task.instructionLink, instructionType: 'link' };
+                const resultsUrls = [];
+                const resultsTypes = [];
+
+                if (task.references && task.references.length > 0) {
+                    for (const ref of task.references) {
+                        if (ref.type === 'image' && ref.file) {
+                            const ext = ref.file.name.split('.').pop();
+                            const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+                            const { error: uploadError } = await supabase.storage
+                                .from('task-instructions')
+                                .upload(fileName, ref.file, { upsert: false });
+                            if (uploadError) throw new Error(`Reference Upload Error: ${uploadError.message}`);
+                            const { data: publicUrlData } = supabase.storage.from('task-instructions').getPublicUrl(fileName);
+                            
+                            resultsUrls.push(publicUrlData.publicUrl);
+                            resultsTypes.push(ref.type);
+                        } else if (['video', 'pdf', 'link'].includes(ref.type) && ref.link) {
+                            resultsUrls.push(ref.link);
+                            resultsTypes.push(ref.type);
+                        }
+                    }
                 }
-                return { id: task.id, instructionUrl: null, instructionType: null };
+
+                let finalUrl = null;
+                let finalType = null;
+                if (resultsUrls.length > 0) {
+                    finalUrl = JSON.stringify(resultsUrls);
+                    finalType = JSON.stringify(resultsTypes);
+                }
+
+                return { id: task.id, instructionUrl: finalUrl, instructionType: finalType };
             });
 
             const uploadedInstructionResults = await Promise.all(instructionUploadPromises);
@@ -754,7 +801,7 @@ export default function ChecklistTask() {
                             await sendTaskAssignmentNotification({
                                 doerName: t.name,
                                 taskId: t.task_id || t.id,
-                                description: t.task_description || (t.instruction_attachment_url ? `📎 ${t.instruction_attachment_type?.toUpperCase()} Reference Provided` : ''),
+                                description: t.task_description || (t.instruction_attachment_url ? `📎 Reference(s) Provided` : ''),
                                 audioUrl: t.audio_url,
                                 startDate: new Date(t.task_start_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
                                 givenBy: t.given_by,

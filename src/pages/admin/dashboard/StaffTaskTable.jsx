@@ -294,15 +294,21 @@ export default function StaffTasksTable({
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-3">
-                          <div className={`px-3 py-1 rounded-full text-xs font-black border shadow-sm min-w-[55px] text-center ${scoreColor}`}>
-                            {score}%
-                          </div>
-                          {/* Mini Progress Bar */}
-                          <div className="hidden sm:block w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-1000 ${score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}
-                              style={{ width: `${score}%` }}
-                            ></div>
+                          <div className="flex flex-col gap-1 items-start min-w-[90px]">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border shadow-sm ${scoreColor}`}>
+                                {score}%
+                              </span>
+                              <span className="text-[10px] font-black text-gray-500 tracking-wide">
+                                {staff.total_completed_tasks}/{staff.total_tasks}
+                              </span>
+                            </div>
+                            <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden mt-1">
+                              <div
+                                className={`h-full rounded-full transition-all duration-1000 ${score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                                style={{ width: `${score}%` }}
+                              ></div>
+                            </div>
                           </div>
                         </div>
                       </td>

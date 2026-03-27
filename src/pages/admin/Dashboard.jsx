@@ -504,7 +504,12 @@ export default function AdminDashboard() {
   const fetchDepartmentData = async (page = 1, append = false) => {
     try {
       setIsLoadingMore(true);
-      if (page === 1) setHasMoreData(true);
+      if (page === 1) {
+        setHasMoreData(true);
+        if (!append) {
+          setDepartmentData(prev => ({ ...prev, allTasks: [] }));
+        }
+      }
 
       // Fetch ALL pages of data for accurate stat counts
       let data = [];
@@ -946,7 +951,7 @@ export default function AdminDashboard() {
         departmentFilter,
       }),
     )
-  }, [dashboardType, dashboardStaffFilter, departmentFilter, dispatch])
+  }, [dashboardType, dashboardStaffFilter, departmentFilter, mainTab, dispatch])
 
   // Sync mainTab when departmentFilter changes from other sources (like DashboardHeader)
   useEffect(() => {
@@ -1137,6 +1142,9 @@ export default function AdminDashboard() {
             <TaskManagementTabs
               activeTab={mainTab === 'default' ? 'checklist' : mainTab}
               setActiveTab={(tabId) => {
+                // Clear current tasks immediately to prevent showing old data on new tab
+                setDepartmentData(prev => ({ ...prev, allTasks: [] }));
+                
                 if (tabId === 'checklist') {
                   setMainTab("default")
                   setDepartmentFilter("all")

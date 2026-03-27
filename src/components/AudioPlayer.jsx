@@ -62,7 +62,7 @@ const AudioPlayer = ({ url, className = "" }) => {
     }, [hasInteracted]);
 
     return (
-        <div className={`flex items-center gap-3 px-3 py-1.5 rounded-xl border transition-all duration-300 min-w-[140px] shadow-sm bg-white border-gray-100 hover:border-violet-100 hover:shadow-md ${isPlaying ? 'bg-violet-50/80 border-violet-200 scale-[1.02]' : ''} ${className}`}>
+        <div className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border transition-all duration-300 w-fit min-w-[120px] shadow-sm bg-white border-violet-100 hover:border-violet-200 hover:shadow-md ${isPlaying ? 'bg-violet-50/80 border-violet-300 scale-[1.02]' : ''} ${className}`}>
             <button
                 type="button"
                 onClick={togglePlay}

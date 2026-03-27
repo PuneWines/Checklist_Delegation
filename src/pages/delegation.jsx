@@ -25,6 +25,7 @@ import {
 import { insertDelegationDoneAndUpdate } from "../redux/api/delegationApi";
 import { sendUrgentTaskNotification, sendTaskExtensionNotification } from "../services/whatsappService";
 import { useMagicToast } from "../context/MagicToastContext";
+import RenderDescription, { MediaViewer } from "../components/RenderDescription";
 
 // Configuration object - Move all configurations here
 const CONFIG = {
@@ -40,56 +41,6 @@ const CONFIG = {
     historyDescription:
       "Read-only view of completed tasks with submission history",
   },
-};
-
-const isAudioUrl = (url) => {
-  if (!url || typeof url !== 'string') return false;
-  return url.startsWith('http') && (
-    url.includes('audio-recordings') ||
-    url.includes('voice-notes') ||
-    url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i)
-  );
-};
-
-// RenderDescription component to handle text and audio links
-const RenderDescription = ({ text, audioUrl, instructionUrl, instructionType }) => {
-  if (!text && !audioUrl && !instructionUrl) return "—";
-
-  const urlRegex = /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|wav|ogg|webm|m4a|aac)(\?.*)?)/i;
-  let match = null;
-  if (text && typeof text === 'string') {
-      match = text.match(urlRegex);
-  }
-
-  let url = audioUrl || (match ? match[0] : null);
-  let cleanText = text || '';
-
-  if (match && !audioUrl) {
-    cleanText = text.replace(match[0], '').replace(/Voice Note Link:/i, '').replace(/Voice Note:/i, '').trim();
-  }
-
-  const renderInstruction = () => {
-    if (!instructionUrl || !instructionType || instructionType === 'none') return null;
-    let iconLabel = "View Reference";
-    if (instructionType === 'video') iconLabel = "Play Video Reference";
-    if (instructionType === 'image') iconLabel = "View Image Reference";
-    if (instructionType === 'pdf') iconLabel = "Open PDF Reference";
-    if (instructionType === 'link') iconLabel = "Visit Reference Link";
-
-    return (
-      <a href={instructionUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 mt-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1.5 rounded-md hover:bg-blue-100 transition-colors w-fit shadow-sm">
-        🔗 {iconLabel}
-      </a>
-    );
-  };
-
-  return (
-    <div className="flex flex-col gap-1.5 min-w-[200px]">
-      {cleanText && <span className="whitespace-pre-wrap text-sm" title={cleanText}>{cleanText}</span>}
-      {url && <AudioPlayer url={url} />}
-      {renderInstruction()}
-    </div>
-  );
 };
 
 // Debounce hook for search optimization
@@ -130,6 +81,9 @@ function DelegationDataPage() {
   const [username, setUsername] = useState("");
   const [dateFilter, setDateFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerMedia, setViewerMedia] = useState({ url: '', type: 'image' });
+
   const itemsPerPage = 50;
   const filterOptions = [
     { value: "all", label: "All Tasks" },
@@ -872,6 +826,7 @@ function DelegationDataPage() {
 
   return (
     <AdminLayout>
+      <>
       <div className="space-y-4 sm:space-y-6">
         {/* Sticky Header and Controls */}
         <div className="sticky top-0 z-40 bg-gray-50/95 backdrop-blur-md pt-2 pb-4 space-y-4 -mx-2 px-2 sm:mx-0 sm:px-0">
@@ -1504,9 +1459,10 @@ function DelegationDataPage() {
                                     alt="preview"
                                   />
                                   <button
-                                    onClick={() =>
-                                      window.open(task.image, "_blank")
-                                    }
+                                    onClick={() => {
+                                      setViewerMedia({ url: task.image, type: 'image' });
+                                      setViewerOpen(true);
+                                    }}
                                     className="text-purple-600 text-xs font-bold underline"
                                   >
                                     View
@@ -1681,7 +1637,10 @@ function DelegationDataPage() {
                                 <div className="flex items-center gap-2 p-2 bg-purple-50 rounded border border-purple-100">
                                   <img src={task.image} className="w-8 h-8 rounded object-cover" alt="preview" />
                                   <span className="text-[10px] text-purple-700 font-bold">Uploaded</span>
-                                  <button onClick={() => window.open(task.image, "_blank")} className="ml-auto text-purple-600 text-[10px] font-bold">View</button>
+                                  <button onClick={() => {
+                                    setViewerMedia({ url: task.image, type: 'image' });
+                                    setViewerOpen(true);
+                                  }} className="ml-auto text-purple-600 text-[10px] font-bold">View</button>
                                 </div>
                               ) : (
                                 <label className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-xl transition-all ${isSelected ? "border-purple-200 bg-purple-50 text-purple-600" : "border-gray-100 bg-gray-50 text-gray-300"}`}>
@@ -1709,7 +1668,13 @@ function DelegationDataPage() {
           )}
         </div>
       </div>
-    </AdminLayout>
+      <MediaViewer 
+        isOpen={viewerOpen} 
+        onClose={() => setViewerOpen(false)} 
+        media={viewerMedia} 
+      />
+      </>
+     </AdminLayout>
   );
 }
 
