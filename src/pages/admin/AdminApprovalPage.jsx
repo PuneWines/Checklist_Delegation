@@ -113,25 +113,32 @@ export default function AdminApprovalPage() {
         }
         const userRole = localStorage.getItem("role");
         const username = localStorage.getItem("user-name");
-        
-        // Filter tasks if not super admin
-        let filteredData = data || [];
         const currentUsername = (username || "").toLowerCase();
         const currentUserRole = (userRole || "").toLowerCase();
+        const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
+
+        // Filter tasks if not super admin
+        let filteredData = data || [];
         
-        if (currentUsername !== "admin") {
-            let reportingUsers = [currentUsername];
-            if (currentUserRole === "admin" || currentUserRole === "hod") {
+        if (!isSystemAdmin) {
+            // HOD and Users cannot approve their own tasks
+            filteredData = (data || []).filter(task => {
+                const doerName = (task.doer_name || task.name || task.filled_by || "").toLowerCase();
+                return doerName !== currentUsername;
+            });
+
+            let reportingUsers = [];
+            if (currentUserRole === "hod") {
                 const { data: reports } = await supabase
                     .from("users")
                     .select("user_name")
                     .eq("reported_by", username);
                 if (reports && reports.length > 0) {
-                    reportingUsers = [currentUsername, ...reports.map((r) => (r.user_name || "").toLowerCase())];
+                    reportingUsers = reports.map((r) => (r.user_name || "").toLowerCase());
                 }
             }
             
-            filteredData = (data || []).filter(task => {
+            filteredData = filteredData.filter(task => {
                 const doerName = (task.doer_name || task.name || task.filled_by || "").toLowerCase();
                 return reportingUsers.includes(doerName);
             });
@@ -168,6 +175,16 @@ export default function AdminApprovalPage() {
     }, [loading]);
 
     const handleApprove = async (task) => {
+        const doerName = (task.doer_name || task.name || task.filled_by || "").toLowerCase();
+        const currentUsername = (localStorage.getItem("user-name") || "").toLowerCase();
+        const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
+        const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
+        
+        if (!isSystemAdmin && doerName === currentUsername) {
+            showToast("You cannot approve your own submitted task.", "error");
+            return;
+        }
+
         setProcessingId(task.id);
         if (!task.id) {
             console.error("Task ID is missing!", task);
@@ -229,12 +246,29 @@ export default function AdminApprovalPage() {
     const handleBulkApprove = async () => {
         if (selectedTaskIds.length === 0) return;
 
+        const currentUsername = (localStorage.getItem("user-name") || "").toLowerCase();
+        
         setBulkProcessing(true);
         let successCount = 0;
         let failCount = 0;
         
-        // Only approve tasks that are NOT in 'extend' status (already filtered in UI button, but double check here)
-        const tasksToApprove = pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status !== 'extend');
+        // Only approve tasks that are NOT in 'extend' status AND (NOT submitted by current user OR user is system admin)
+        const tasksToApprove = pendingTasks.filter(t => {
+            const isSelected = selectedTaskIds.includes(t.id);
+            const isNotExtended = t.status !== 'extend';
+            const doerName = (t.doer_name || t.name || t.filled_by || "").toLowerCase();
+            const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
+            const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
+            const isNotSelf = isSystemAdmin || doerName !== currentUsername;
+            
+            return isSelected && isNotExtended && isNotSelf;
+        });
+
+        if (tasksToApprove.length === 0) {
+            showToast("No valid tasks found for approval.", "warning");
+            setBulkProcessing(false);
+            return;
+        }
 
         for (const task of tasksToApprove) {
             try {
@@ -739,8 +773,36 @@ export default function AdminApprovalPage() {
                         </table>
                     </div>
 
+                    {/* Mobile view Toolbar */}
+                    {viewMode === 'pending' && (
+                        <div className="md:hidden sticky top-[header_height] z-30 transition-all duration-300">
+                            <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between shadow-sm">
+                                <div className="flex items-center gap-3">
+                                    <div className="relative flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedTaskIds.length === paginatedTasks.length && paginatedTasks.length > 0}
+                                            onChange={toggleSelectAll}
+                                            className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition-all cursor-pointer"
+                                        />
+                                    </div>
+                                    <span className="text-sm font-black text-gray-700 uppercase tracking-tight">Select All Pending</span>
+                                </div>
+                                
+                                {selectedTaskIds.length > 0 && (
+                                    <button 
+                                        onClick={() => setSelectedTaskIds([])}
+                                        className="text-[10px] font-black text-red-500 uppercase tracking-widest hover:text-red-700 transition-colors"
+                                    >
+                                        Clear ({selectedTaskIds.length})
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Mobile Card View */}
-                    <div className="md:hidden divide-y divide-gray-100">
+                    <div className="md:hidden divide-y divide-gray-100 pb-24">
                         {loading ? (
                             <div className="p-10 text-center text-gray-500">
                                 <div className="flex justify-center mb-2">
@@ -917,6 +979,50 @@ export default function AdminApprovalPage() {
                         )}
                     </div>
                 </div>
+
+                {/* Mobile Floating Action Bar */}
+                {viewMode === 'pending' && selectedTaskIds.length > 0 && (
+                    <div className="md:hidden fixed bottom-6 left-4 right-4 z-40 animate-in slide-in-from-bottom-8 duration-500">
+                        <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-purple-100 p-2 overflow-hidden">
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="pl-4">
+                                    <p className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em] mb-0.5">Admin Action</p>
+                                    <p className="text-xs font-bold text-gray-500">{selectedTaskIds.length} items</p>
+                                </div>
+                                
+                                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                                    {/* Approve Button */}
+                                    {(activeTab !== 'delegation' || pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status !== 'extend').length > 0) && (
+                                        <button
+                                            onClick={handleBulkApprove}
+                                            disabled={bulkProcessing}
+                                            className="px-4 py-2.5 bg-green-600 text-white text-xs font-black rounded-xl shadow-lg shadow-green-100 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap"
+                                        >
+                                            {bulkProcessing ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                                <CheckCircle2 size={14} />
+                                            )}
+                                            Approve ({pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status !== 'extend').length})
+                                        </button>
+                                    )}
+
+                                    {/* Remark Button for Delegation */}
+                                    {activeTab === 'delegation' && pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status === 'extend').length > 0 && (
+                                        <button
+                                            onClick={() => setShowBulkRemarkModal(true)}
+                                            disabled={bulkProcessing}
+                                            className="px-4 py-2.5 bg-purple-600 text-white text-xs font-black rounded-xl shadow-lg shadow-purple-100 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap"
+                                        >
+                                            <MessageSquare size={14} />
+                                            Remark ({pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status === 'extend').length})
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Infinite Scroll Trigger */}
                 <div ref={loadingRef} className="py-8 flex justify-center">

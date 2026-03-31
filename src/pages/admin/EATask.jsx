@@ -85,6 +85,16 @@ function TaskCard({ task, index, total, allDoers, onUpdate, onRemove }) {
                     return false; // User is on leave during this task date
                 }
             }
+
+            // Self-Assignment Permission Check
+            const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
+            const isSuperAdmin = currentU === "admin";
+            
+            if (!isSuperAdmin && !canSelfAssign) {
+              const dName = (d.user_name || d.name || "").toLowerCase();
+              if (dName === currentU) return false;
+            }
+
             return true;
         });
     };

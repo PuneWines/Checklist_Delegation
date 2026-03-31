@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { format } from 'date-fns';
 import { Search, ChevronDown, Filter, Trash2, Edit, Save, X, Play, Pause, Mic, Square, Loader2, Plus } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
@@ -50,6 +51,7 @@ const getTimeStatus = (dateString, taskStatus) => {
 
 
 export default function QuickTask() {
+  const navigate = useNavigate();
   const { showToast } = useMagicToast();
   const [tasks, setTasks] = useState([]);
   const [delegationLoading, setDelegationLoading] = useState(false);
@@ -103,6 +105,15 @@ export default function QuickTask() {
     currentPage: maintenancePage
   } = useSelector((state) => state.maintenance);
   const dispatch = useDispatch();
+  
+  // HOD Access Restriction
+  useEffect(() => {
+    const role = localStorage.getItem("role")?.toLowerCase();
+    if (role === "hod") {
+      showToast("Access Denied: HODs cannot access Quick Task management.", "error");
+      navigate("/dashboard");
+    }
+  }, [navigate]);
 
   useEffect(() => {
     dispatch(fetchUsers());

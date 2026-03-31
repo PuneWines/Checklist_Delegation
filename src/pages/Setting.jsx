@@ -481,7 +481,8 @@ const Setting = () => {
     user_access: '',
     Designation: '',
     profile_image: '',
-    reported_by: ''
+    reported_by: '',
+    can_self_assign: false
   });
 
   const [deptForm, setDeptForm] = useState({
@@ -547,7 +548,8 @@ const Setting = () => {
       user_access: userForm.user_access || userForm.department,
       department: userForm.department,
       profile_image: imageUrl,
-      reported_by: userForm.reported_by
+      reported_by: userForm.reported_by,
+      can_self_assign: userForm.can_self_assign
     };
 
     try {
@@ -597,7 +599,8 @@ const Setting = () => {
       leave_date: userForm.leave_date || null,
       leave_end_date: userForm.leave_end_date || null,
       remark: userForm.remark || null,
-      reported_by: userForm.reported_by
+      reported_by: userForm.reported_by,
+      can_self_assign: userForm.can_self_assign
     };
 
     try {
@@ -849,7 +852,8 @@ const Setting = () => {
       leave_date: user.leave_date ? user.leave_date.split('T')[0] : '',
       leave_end_date: user.leave_end_date ? user.leave_end_date.split('T')[0] : '',
       remark: user.remark || '',
-      reported_by: user.reported_by || ''
+      reported_by: user.reported_by || '',
+      can_self_assign: user.can_self_assign || false
     });
     setProfilePreview(user.profile_image || null);
     setProfileFile(null);
@@ -916,7 +920,8 @@ const Setting = () => {
       leave_date: '',
       leave_end_date: '',
       remark: '',
-      reported_by: ''
+      reported_by: '',
+      can_self_assign: false
     });
     setProfileFile(null);
     setProfilePreview(null);
@@ -1514,9 +1519,17 @@ const Setting = () => {
                           </td>
 
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleColor(user?.role)}`}>
-                              {user?.role}
-                            </span>
+                            <div className="flex flex-col gap-1.5">
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleColor(user?.role)}`}>
+                                {user?.role}
+                              </span>
+                              {user?.can_self_assign && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-black uppercase tracking-tighter border border-indigo-100 shadow-sm animate-fade-in">
+                                  <div className="w-1 h-1 rounded-full bg-indigo-600 animate-pulse"></div>
+                                  Self-Assign
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className="text-xs font-medium text-gray-600">{user?.reported_by || 'Admin'}</span>
@@ -2278,6 +2291,28 @@ const Setting = () => {
                       </>
                     )}
 
+                  </div>
+                  
+                  <div className="mt-8 bg-gradient-to-br from-purple-50 to-indigo-50 p-6 rounded-[2rem] border border-purple-100/50 flex items-center justify-between group transition-all hover:shadow-xl hover:shadow-purple-100/30">
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center text-purple-600 shadow-sm border border-purple-100 group-hover:scale-110 transition-transform">
+                        <User size={20} strokeWidth={2.5} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-purple-900 uppercase tracking-widest mb-0.5 group-hover:text-indigo-600 transition-colors">Self-Assign Rights</h4>
+                        <p className="text-[10px] text-gray-400 font-bold max-w-[200px]">Allow this user to assign tasks to themselves</p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer scale-110">
+                      <input 
+                        type="checkbox" 
+                        name="can_self_assign"
+                        checked={userForm.can_self_assign}
+                        onChange={(e) => setUserForm(prev => ({ ...prev, can_self_assign: e.target.checked }))}
+                        className="sr-only peer" 
+                      />
+                      <div className="w-12 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
+                    </label>
                   </div>
 
                   <div className="flex justify-end gap-3 pt-6 border-t border-gray-50 mt-4">

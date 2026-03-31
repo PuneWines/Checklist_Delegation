@@ -103,6 +103,15 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                 if (dName !== currentU && reportedBy !== currentU) return false;
             }
 
+            // Self-Assignment Permission Check
+            const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
+            const isSuperAdmin = currentU === "admin";
+            
+            if (!isSuperAdmin && !canSelfAssign) {
+              const dName = (user.user_name || user.name || "").toLowerCase();
+              if (dName === currentU) return false;
+            }
+
             return true;
         });
     };

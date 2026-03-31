@@ -52,6 +52,7 @@ const LoginPage = () => {
       localStorage.setItem('email_id', userData.email_id || userData.email || "");
       localStorage.setItem('user_access', userData.user_access || "");
       localStorage.setItem('profile_image', userData.profile_image || "");
+      localStorage.setItem('can_self_assign', userData.can_self_assign === true ? "true" : "false");
 
       console.log("Stored email:", userData.email_id || userData.email); // Debug log
 

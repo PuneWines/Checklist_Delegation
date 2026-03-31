@@ -69,6 +69,15 @@ function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions,
                 if (dName !== currentU && reportedBy !== currentU) return false;
             }
 
+            // Self-Assignment Permission Check
+            const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
+            const isSuperAdmin = currentU === "admin";
+            
+            if (!isSuperAdmin && !canSelfAssign) {
+              const dName = (u.user_name || u.name || "").toLowerCase();
+              if (dName === currentU) return false;
+            }
+
             return true;
         });
     };

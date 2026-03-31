@@ -52,6 +52,27 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     setUsername(storedUsername);
     setUserRole(storedRole || "user");
     setUserEmail(storedEmail);
+    setIsSuperAdmin(storedUsername.toLowerCase() === "admin");
+
+    // Centralized Security Guard for User Role
+    const path = location.pathname;
+    const restrictedPages = [
+      "/dashboard/assign-task",
+      "/dashboard/admin-approval",
+      "/dashboard/checklist",
+      "/dashboard/maintenance",
+      "/dashboard/repair",
+      "/dashboard/ea-task",
+      "/dashboard/quick-task",
+      "/dashboard/holiday-list",
+      "/dashboard/working-day-calendar",
+      "/dashboard/setting"
+    ];
+
+    if ((storedRole || "user").toLowerCase() === "user" && restrictedPages.some(p => path.startsWith(p))) {
+      navigate("/dashboard/admin");
+      return;
+    }
 
     // Initial load from localStorage
     const cachedImage = localStorage.getItem("profile_image");
@@ -101,7 +122,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     // Check if this is the super admin (username = 'admin')
     const normalizedUsername = (storedUsername || "").toLowerCase();
     setIsSuperAdmin(normalizedUsername === "admin");
-  }, [navigate]);
+  }, [navigate, location.pathname]);
 
   // Set initial submenu state based on current location
   useEffect(() => {
@@ -136,8 +157,8 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Quick Task",
       icon: Zap,
       active: location.pathname === "/dashboard/quick-task",
-      // Show for super admin OR HOD
-      showFor: (isSuperAdmin || userRole.toLowerCase() === "hod") ? ["admin", "HOD"] : [],
+      // Show for super admin OR anyone with 'admin' role
+      showFor: (isSuperAdmin || userRole.toLowerCase() === "admin") ? ["admin"] : [],
     },
     {
       href: "/dashboard/assign-task",
@@ -170,7 +191,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     {
       label: "Holiday",
       icon: CalendarIcon, // Or a specific holiday icon
-      showFor: isSuperAdmin ? ["admin"] : [], // Restricted to Super Admin
+      showFor: (isSuperAdmin || userRole.toLowerCase() === "admin") ? ["admin"] : [], 
       isSubmenu: true,
       isOpen: isHolidaySubmenuOpen,
       setIsOpen: setIsHolidaySubmenuOpen,
@@ -229,9 +250,14 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
         const userRoleNormalized = (userRole || "user").toLowerCase();
         const usernameNormalized = (username || "").toLowerCase();
         
-        // If it's the Setting or Holiday page, only show for super admin (admin username)
-        if (route.label === "Settings" || route.label === "Holiday") {
+        // If it's the Setting page, only show for super admin (admin username)
+        if (route.label === "Settings") {
           return usernameNormalized === "admin";
+        }
+        
+        // Holiday submenu logic handled by showFor in routes
+        if (route.label === "Holiday") {
+            return isSuperAdmin || userRoleNormalized === "admin";
         }
         return route.showFor.some(role => role.toLowerCase() === userRoleNormalized);
       })

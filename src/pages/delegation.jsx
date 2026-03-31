@@ -1514,8 +1514,45 @@ function DelegationDataPage() {
                 </table>
               </div>
 
+              {/* Mobile view Toolbar */}
+              {!showHistory && (
+                <div className="md:hidden sticky top-[header_height] z-30 transition-all duration-300">
+                  <div className="bg-white border-b border-purple-100 px-4 py-3 flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={(() => {
+                            const submittableTasks = paginatedTasks.filter(t => t.timeStatus !== "Upcoming");
+                            return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
+                          })()}
+                          onChange={handleSelectAllItems}
+                          className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition-all cursor-pointer"
+                        />
+                      </div>
+                      <span className="text-sm font-black text-gray-700 uppercase tracking-tight">Select All Tasks</span>
+                    </div>
+                    
+                    {selectedItems.size > 0 && (
+                      <button 
+                        onClick={() => { 
+                          setSelectedItems(new Set()); 
+                          setRemarksData({}); 
+                          setUploadedImages({}); 
+                          setStatusData({}); 
+                          setNextTargetDate({});
+                        }}
+                        className="text-[10px] font-black text-red-500 uppercase tracking-widest hover:text-red-700 transition-colors"
+                      >
+                        Clear Selection
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Mobile Regular Task Cards */}
-              <div className="md:hidden space-y-4 p-4 bg-gray-50/50">
+              <div className="md:hidden space-y-4 p-4 bg-gray-50/50 pb-24">
                 {paginatedTasks.length > 0 ? (
                   paginatedTasks.map((task, index) => {
                     const isSelected = selectedItems.has(task.id);
@@ -1663,6 +1700,32 @@ function DelegationDataPage() {
                   </div>
                 )}
               </div>
+
+              {/* Mobile Floating Submit Bar */}
+              {!showHistory && selectedItems.size > 0 && (
+                <div className="md:hidden fixed bottom-6 left-4 right-4 z-40 animate-in slide-in-from-bottom-8 duration-500">
+                  <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-purple-100 p-2 overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <div className="pl-4">
+                        <p className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em] mb-0.5">Delegation</p>
+                        <p className="text-xs font-bold text-gray-500">{selectedItems.size} task{selectedItems.size !== 1 ? 's' : ''} selected</p>
+                      </div>
+                      <button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}
+                        className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-sm font-black rounded-xl shadow-lg shadow-purple-200 transition-all active:scale-95 flex items-center gap-2"
+                      >
+                        {isSubmitting ? (
+                          <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Submitting</>
+                        ) : (
+                          <><CheckCircle2 className="w-4 h-4" /> Submit Now</>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <PaginationUI />
             </>
           )}
