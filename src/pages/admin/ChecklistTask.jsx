@@ -72,7 +72,7 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
     // Filter doers based on task date and leave status
     const getFilteredDoers = () => {
         if (!doerName || !Array.isArray(doerName)) return [];
-        
+
         const taskD = task.date ? new Date(task.date) : new Date();
         taskD.setHours(0, 0, 0, 0);
 
@@ -96,14 +96,14 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
             // HOD Restriction & Reporting Group Filter
             const currentU = (localStorage.getItem("user-name") || "").toLowerCase().trim();
             const currentR = (localStorage.getItem("role") || "").toLowerCase().trim();
-            
+
             if (currentR === "hod") {
                 const dName = (user.user_name || user.name || "").toLowerCase().trim();
                 const reportedBy = (user.reported_by || "").toLowerCase().trim();
-                
+
                 // Only show themselves OR their direct reports
                 if (dName !== currentU && reportedBy !== currentU) return false;
-                
+
                 // If it's themselves, check for explicit self-assign rights
                 if (dName === currentU && !user.can_self_assign) return false;
             }
@@ -200,7 +200,7 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                         <select
                             value="none"
                             onChange={(e) => {
-                                if(e.target.value === 'none') return;
+                                if (e.target.value === 'none') return;
                                 const newRefs = [...(task.references || []), { id: Date.now() + Math.random(), type: e.target.value, link: "", file: null }];
                                 onUpdate(task.id, { references: newRefs });
                             }}
@@ -260,8 +260,8 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                                             <ExternalLink size={14} />
                                         </button>
                                     )}
-                                    <button 
-                                        type="button" 
+                                    <button
+                                        type="button"
                                         onClick={() => {
                                             const newRefs = task.references.filter(r => r.id !== ref.id);
                                             onUpdate(task.id, { references: newRefs });
@@ -425,9 +425,9 @@ export default function ChecklistTask() {
 
     // Per-task list
     const [tasks, setTasks] = useState([
-        { 
-            ...defaultTask(), 
-            givenBy: (localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? localStorage.getItem("user-name") : "" 
+        {
+            ...defaultTask(),
+            givenBy: (localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? localStorage.getItem("user-name") : ""
         }
     ]);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -736,7 +736,7 @@ export default function ChecklistTask() {
                                 .upload(fileName, ref.file, { upsert: false });
                             if (uploadError) throw new Error(`Reference Upload Error: ${uploadError.message}`);
                             const { data: publicUrlData } = supabase.storage.from('task-instructions').getPublicUrl(fileName);
-                            
+
                             resultsUrls.push(publicUrlData.publicUrl);
                             resultsTypes.push(ref.type);
                         } else if (['video', 'pdf', 'link'].includes(ref.type) && ref.link) {

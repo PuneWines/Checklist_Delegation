@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../SupabaseClient";
@@ -500,8 +500,18 @@ const AllTasks = () => {
 
   // Filtering Logic
   const filteredPendingTasks = useMemo(() => {
-    // Sort ascending by planned_date: oldest overdue first → today → upcoming
+    // Multi-level sort: Priority Group (Overdue > Today > Upcoming) → Date
     const sortedTasks = [...tasks].sort((a, b) => {
+      const statusA = getTimeStatus(a[statusDateColumn], a.status);
+      const statusB = getTimeStatus(b[statusDateColumn], b.status);
+
+      const rank = { "Overdue": 0, "Today": 1, "Upcoming": 2 };
+      const groupA = rank[statusA] !== undefined ? rank[statusA] : 3;
+      const groupB = rank[statusB] !== undefined ? rank[statusB] : 3;
+
+      if (groupA !== groupB) return groupA - groupB;
+
+      // Same group, sort by date
       const dateA = a[sortDateColumn] ? new Date(a[sortDateColumn]) : new Date(0);
       const dateB = b[sortDateColumn] ? new Date(b[sortDateColumn]) : new Date(0);
       return dateA - dateB;
@@ -1218,8 +1228,26 @@ const AllTasks = () => {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {paginatedTasks.length > 0 ? (
-                        paginatedTasks.map((task) => (
-                          <tr key={task.id} className="hover:bg-gray-50">
+                        paginatedTasks.map((task, index) => {
+                          const currentStatus = getTimeStatus(task[statusDateColumn], task.status);
+                          const prevStatus = index > 0 ? getTimeStatus(paginatedTasks[index - 1][statusDateColumn], paginatedTasks[index - 1].status) : null;
+                          const showGroupHeader = currentStatus !== prevStatus;
+
+                          return (
+                            <Fragment key={task.id}>
+                              {showGroupHeader && (
+                                <tr className="bg-gray-100/30">
+                                  <td colSpan={tableHeaders.length + 6} className="px-4 sm:px-6 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className={`w-1.5 h-1.5 rounded-full ${currentStatus === 'Overdue' ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                      <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-gray-500">
+                                        {currentStatus} {activeTab === "ea" && currentStatus === "Today" ? " & Extended" : ""}
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                              <tr className="hover:bg-gray-50">
                             {!showHistory && (
                               <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                                 <input
@@ -1326,6 +1354,15 @@ const AllTasks = () => {
                                             <span className="text-[11px] text-gray-400">{formatTimeOnly(task[header.id])}</span>
                                           </div>
                                         )
+                                        : (header.id === "id" || header.id === "task_id")
+                                          ? (
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-bold text-gray-900">{task[header.id]}</span>
+                                              {(task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend") && (
+                                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded uppercase tracking-tighter border border-amber-200 shadow-sm animate-pulse">Extended</span>
+                                              )}
+                                            </div>
+                                          )
                                         : header.id === "submission_date"
                                           ? (activeTab === "maintenance" && showHistory)
                                             ? (
@@ -1339,7 +1376,7 @@ const AllTasks = () => {
                                             ? !showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")
                                               ? (
                                                 <select
-                                                  value={statusData[task.id] || ""}
+                                                  value={statusData[task.id] || task.status || ""}
                                                   onChange={(e) => setStatusData(prev => ({ ...prev, [task.id]: e.target.value }))}
                                                   disabled={!selectedItems.has(task.id)}
                                                   className="block w-full py-1.5 pl-3 pr-8 text-xs sm:text-sm text-gray-700 bg-white border border-gray-200 rounded-md focus:border-purple-500 focus:outline-none disabled:bg-gray-50/50 disabled:text-gray-400 appearance-none shadow-sm cursor-pointer hover:border-gray-300 transition-colors"
@@ -1478,10 +1515,12 @@ const AllTasks = () => {
                               </>
                             )}
                           </tr>
-                        ))
-                      ) : (
+                        </Fragment>
+                      )
+                    })
+                  ) : (
                         <tr>
-                          <td colSpan={tableHeaders.length + 5} className="px-6 py-20 text-center text-gray-400">
+                          <td colSpan={tableHeaders.length + 6} className="px-6 py-20 text-center text-gray-400">
                             <div className="flex flex-col items-center gap-2">
                               <Search size={40} className="text-gray-200" />
                               <p>No {showHistory ? "history" : "pending tasks"} found.</p>
@@ -1528,8 +1567,22 @@ const AllTasks = () => {
                 {/* Mobile view Cards */}
                 <div className="md:hidden space-y-4 p-4 bg-gray-50/50 pb-24">
                   {paginatedTasks.length > 0 ? (
-                    paginatedTasks.map((task) => (
-                      <div key={task.id} className="bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden animate-fade-in">
+                    paginatedTasks.map((task, index) => {
+                      const currentStatus = getTimeStatus(task[statusDateColumn], task.status);
+                      const prevStatus = index > 0 ? getTimeStatus(paginatedTasks[index - 1][statusDateColumn], paginatedTasks[index - 1].status) : null;
+                      const showGroupHeader = currentStatus !== prevStatus;
+
+                      return (
+                        <Fragment key={task.id}>
+                          {showGroupHeader && (
+                            <div className="pt-2 pb-1 px-1">
+                              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
+                                <div className={`w-1 h-1 rounded-full ${currentStatus === 'Overdue' ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                {currentStatus} {activeTab === "ea" && currentStatus === "Today" ? " & Extended" : ""}
+                              </span>
+                            </div>
+                          )}
+                          <div className="bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden animate-fade-in">
                         {/* Card Header */}
                         <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
                           <div className="flex items-center gap-2">
@@ -1543,6 +1596,9 @@ const AllTasks = () => {
                               />
                             )}
                             <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">#{task.id}</span>
+                            {(task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend") && (
+                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded uppercase tracking-tighter border border-amber-200 animate-pulse">Extended</span>
+                            )}
                           </div>
                           <span className={`px-2 py-0.5 inline-flex text-[10px] leading-5 font-semibold rounded-full ${getTimeStatus(task[statusDateColumn] || task.created_at, task.status) === 'Overdue' ? 'bg-red-100 text-red-800' :
                             getTimeStatus(task[statusDateColumn] || task.created_at, task.status) === 'Today' ? 'bg-green-100 text-green-800' :
@@ -1571,7 +1627,7 @@ const AllTasks = () => {
                               <div className="text-sm">
                                 {(!showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")) ? (
                                   <select
-                                    value={statusData[task.id] || ""}
+                                    value={statusData[task.id] || task.status || ""}
                                     onChange={(e) => setStatusData(prev => ({ ...prev, [task.id]: e.target.value }))}
                                     disabled={!selectedItems.has(task.id)}
                                     className="w-full text-xs border-gray-200 rounded-md py-1 focus:ring-purple-400"
@@ -1592,18 +1648,33 @@ const AllTasks = () => {
                                 ) : (
                                   <span className={`px-2 inline-flex text-[10px] leading-5 font-semibold rounded-full ${(task.status === "Done" || task.status === "yes" || task.status === "done" || task.status === "approved" || task.status === "Completed")
                                     ? (task.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
-                                    : "bg-gray-100 text-gray-800"
+                                    : (task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend")
+                                      ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                      : "bg-gray-100 text-gray-800"
                                     }`}>
-                                    {(!task.admin_done && task.submission_date) ? "Pending Approval" : task.status}
+                                    {(!task.admin_done && task.submission_date) ? "Pending Approval" : (task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend") ? "Extended" : task.status}
                                   </span>
                                 )}
                               </div>
                             </div>
                           </div>
 
+                          <div className="grid grid-cols-2 gap-4 pt-1 border-t border-gray-50">
+                            <div className="space-y-1">
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Planned Date</p>
+                              <p className="text-sm font-bold text-purple-700">{formatDate(task.planned_date || task.task_start_date || task.created_at)}</p>
+                            </div>
+                            {task.department && (
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Department</p>
+                                <p className="text-sm text-gray-800 uppercase text-[11px] font-bold">{task.department}</p>
+                              </div>
+                            )}
+                          </div>
+
                           {/* Extra fields based on tab */}
                           {(activeTab === "repair" || task.machine_name) && (
-                            <div className="space-y-1">
+                            <div className="space-y-1 pt-1 border-t border-gray-50">
                               <p className="text-[10px] text-gray-400 uppercase font-semibold">Machine / Unit</p>
                               <p className="text-sm text-gray-800">{task.machine_name || "—"}</p>
                             </div>
@@ -1643,6 +1714,18 @@ const AllTasks = () => {
                           {/* Actions for Pending Tasks */}
                           {!showHistory && activeTab !== "repair" && (
                             <div className="pt-2 space-y-3 border-t border-gray-50">
+                              {activeTab === "ea" && statusData[task.id] === "extended" && (
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-red-500 uppercase font-bold">Extended Date *</p>
+                                  <input
+                                    type="date"
+                                    value={extendedDateData[task.id] || ""}
+                                    onChange={(e) => setExtendedDateData((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                                    disabled={!selectedItems.has(task.id)}
+                                    className="w-full text-xs border-red-200 rounded-md py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-red-400 bg-red-50/30"
+                                  />
+                                </div>
+                              )}
                               <div className="space-y-1">
                                 <p className="text-[10px] text-gray-400 uppercase font-semibold">Remarks</p>
                                 <input
@@ -1713,7 +1796,9 @@ const AllTasks = () => {
                           )}
                         </div>
                       </div>
-                    ))
+                        </Fragment>
+                      )
+                    })
                   ) : (
                     <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-200">
                       <Search size={40} className="text-gray-200 mx-auto mb-3" />

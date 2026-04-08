@@ -74,7 +74,7 @@ const MaintenanceTaskCard = ({
     // Filter doers based on user status, leave, and HOD permissions
     const getFilteredDoers = () => {
         if (!doerName || !Array.isArray(doerName)) return [];
-        
+
         const taskD = task.startDate ? new Date(task.startDate) : new Date();
         taskD.setHours(0, 0, 0, 0);
 
@@ -98,14 +98,14 @@ const MaintenanceTaskCard = ({
             // HOD Restriction & Reporting Group Filter
             const currentU = (localStorage.getItem("user-name") || "").toLowerCase().trim();
             const currentR = (localStorage.getItem("role") || "").toLowerCase().trim();
-            
+
             if (currentR === "hod") {
                 const dName = (user.user_name || user.name || "").toLowerCase().trim();
                 const reportedBy = (user.reported_by || "").toLowerCase().trim();
-                
+
                 // Only show themselves OR their direct reports
                 if (dName !== currentU && reportedBy !== currentU) return false;
-                
+
                 // If it's themselves, check for explicit self-assign rights
                 if (dName === currentU && !user.can_self_assign) return false;
             }
@@ -514,9 +514,9 @@ export default function MaintenanceTask() {
     const [successMessage, setSuccessMessage] = useState("");
     const [holidays, setHolidays] = useState([]);
     const [tasks, setTasks] = useState([
-        { 
-            ...defaultTask(), 
-            givenBy: (localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? localStorage.getItem("user-name") : "" 
+        {
+            ...defaultTask(),
+            givenBy: (localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? localStorage.getItem("user-name") : ""
         }
     ]);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
