@@ -265,8 +265,14 @@ export const postMaintenanceTaskApi = async (taskData) => {
         console.log("Attempting to insert maintenance task:", taskData);
         // Map any description/audio fields if they come from UI in different names
         const payload = Array.isArray(taskData)
-            ? taskData.map(t => ({ ...t, audio_url: t.audio_url || null }))
-            : { ...taskData, audio_url: taskData.audio_url || null };
+            ? taskData.map(t => {
+                const { instruction_attachment_type, instruction_attachment_url, ...rest } = t;
+                return { ...rest, audio_url: rest.audio_url || null };
+            })
+            : Object.fromEntries(
+                Object.entries({ ...taskData, audio_url: taskData.audio_url || null })
+                    .filter(([key]) => key !== 'instruction_attachment_type' && key !== 'instruction_attachment_url')
+            );
 
         const { data, error } = await supabase
             .from('maintenance_tasks')
@@ -299,9 +305,7 @@ export const updateMaintenanceTaskApi = async (updatedTask, originalTask) => {
             freq: updatedTask.freq,
             duration: updatedTask.duration || null,
             status: updatedTask.status,
-            remarks: updatedTask.remarks,
-            instruction_attachment_url: updatedTask.instruction_attachment_url,
-            instruction_attachment_type: updatedTask.instruction_attachment_type
+            remarks: updatedTask.remarks
         });
 
         if (originalTask) {
