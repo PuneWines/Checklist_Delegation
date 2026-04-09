@@ -1346,6 +1346,17 @@ export default function QuickTask() {
                           {partOptions.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                       </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Assignee (Doer)</label>
+                        <select
+                          value={editFormData.name || ''}
+                          onChange={(e) => handleInputChange('name', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                        >
+                          <option value="">Select User</option>
+                          {doersList.map(u => <option key={u.user_name || u} value={u.user_name || u}>{u.user_name || u}</option>)}
+                        </select>
+                      </div>
                       <div className="space-y-1.5 text-gray-400">
                         <label className="text-[10px] font-bold uppercase tracking-wider">Frequency (Read-only)</label>
                         <select
