@@ -573,6 +573,7 @@ export default function MaintenanceTask() {
                 freq: task.frequency,
                 duration: task.duration || null,
                 status: "Pending",
+                require_attachment: task.requireAttachment, // Ensure it's passed here
                 submission_date: null,
             });
         };
@@ -735,7 +736,8 @@ export default function MaintenanceTask() {
                 generated.forEach(g => {
                     allTasksToSubmit.push({
                         ...g,
-                        audio_url: audioUrl
+                        audio_url: audioUrl,
+                        require_attachment: g.require_attachment // Ensure it's carried into final payload
                     });
                 });
             }

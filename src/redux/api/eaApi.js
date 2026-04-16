@@ -114,6 +114,7 @@ export const completeEATask = async (task, remarks = '', imageUrl = '') => {
                 given_by: task.given_by || givenBy,
                 task_start_date: task.task_start_date,
                 duration: task.duration || null,
+                attachment: task.attachment || false,
                 admin_done: false
             }]);
         if (doneError) throw doneError;
@@ -126,6 +127,7 @@ export const completeEATask = async (task, remarks = '', imageUrl = '') => {
                 remarks: remarks,
                 image_url: imageUrl,
                 admin_done: false,
+                attachment: task.attachment || false,
                 updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
             })
             .eq('task_id', task.id || task.task_id)
@@ -162,6 +164,7 @@ export const extendEATask = async (task, newPlannedDate, remarks = '', imageUrl 
                 next_extend_date: newPlannedDate, // Aligned with delegation
                 task_start_date: task.task_start_date,
                 duration: task.duration || null,
+                attachment: task.attachment || false,
                 admin_done: false
             }]);
         if (doneError) throw doneError;

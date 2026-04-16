@@ -431,5 +431,5 @@ export const fetchApprovedMaintenance = async () => {
     } catch (error) {
         console.error("Error fetching approved maintenance tasks:", error);
         return [];
-    }
+    } 
 };

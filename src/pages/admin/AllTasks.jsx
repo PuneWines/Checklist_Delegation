@@ -326,9 +326,10 @@ const AllTasks = () => {
               { id: "assigned_person", label: "Assigned To" },
               { id: "machine_name", label: "Machine Name" },
               { id: "status", label: "Status" },
-              { id: "part_replaced", label: "Part Replaced" },
+              { id: "attachment", label: "Attach" },
+              { id: "part_replaced", label: "Part" },
               { id: "vendor_name", label: "Vendor" },
-              { id: "bill_amount", label: "Bill Amount" },
+              { id: "bill_amount", label: "Amount" },
               { id: "duration", label: "Duration" },
             ];
           } else {
@@ -341,6 +342,7 @@ const AllTasks = () => {
               { id: "assigned_person", label: "Assigned" },
               { id: "machine_name", label: "Machine" },
               { id: "status", label: "Status" },
+              { id: "attachment", label: "Attach" },
               { id: "part_replaced", label: "Part" },
               { id: "vendor_name", label: "Vendor" },
               { id: "bill_amount", label: "Amount" },
@@ -362,6 +364,7 @@ const AllTasks = () => {
             { id: "phone_number", label: "Phone" },
             { id: "planned_date", label: "Planned" },
             { id: "status", label: "Status" },
+            { id: "attachment", label: "Attach" },
           ];
           if (showHistory) {
             headers.push({ id: "updated_at", label: "Submitted" });
@@ -728,6 +731,20 @@ const AllTasks = () => {
       return;
     }
 
+    // Validation for Mandatory Attachment
+    const isAttachmentRequired =
+      selectedUpdateTask.require_attachment === true ||
+      String(selectedUpdateTask.require_attachment).toLowerCase() === "yes" ||
+      String(selectedUpdateTask.require_attachment).toLowerCase() === "true" ||
+      selectedUpdateTask.attachment === true;
+
+    const isMarkedDone = ["completed", "done", "approved", "✅ completed"].some(s => updateForm.status.toLowerCase().includes(s));
+
+    if (isAttachmentRequired && isMarkedDone && !updateForm.workPhoto) {
+      showToast("Attachment required! Please upload a work photo before completing this repair.", "error");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       let workPhotoUrl = null;
@@ -796,7 +813,8 @@ const AllTasks = () => {
         const isAttachmentRequired =
           task.require_attachment === true ||
           String(task.require_attachment).toLowerCase() === "yes" ||
-          String(task.require_attachment).toLowerCase() === "true";
+          String(task.require_attachment).toLowerCase() === "true" ||
+          task.attachment === true;
 
         // Check if the user has selected a status of "Done" or "yes"
         // (You might not want to enforce attachment if they mark it "Not Done", but remove this extra condition if you want it strictly required on ANY submission)
@@ -1414,7 +1432,7 @@ const AllTasks = () => {
                                                         : task[header.id]}
                                                 </span>
                                               )
-                                            : (header.id === "enable_reminders" || header.id === "require_attachment" || header.id === "enable_reminder")
+                                            : (header.id === "enable_reminders" || header.id === "require_attachment" || header.id === "enable_reminder" || header.id === "attachment")
                                               ? (task[header.id] ? "Yes" : "No")
                                               : (header.id === 'name' || header.id === 'assigned_person' || header.id === 'doer_name')
                                                 ? <span className="font-bold text-gray-900">{task[header.id] || "—"}</span>
@@ -1477,7 +1495,9 @@ const AllTasks = () => {
                                       <div className="flex flex-col gap-2">
                                         <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-purple-600 hover:text-purple-800" : "text-gray-400 cursor-not-allowed"}`}>
                                           <Upload className="h-3.5 w-3.5" />
-                                          <span>{uploadedImages[task.id] ? "File Selected" : "Upload Receipt"}</span>
+                                          <span>
+                                            {uploadedImages[task.id] ? "File Selected" : (task.require_attachment || task.attachment) ? <span>Upload Proof <span className="text-red-500 font-bold">*</span></span> : "Upload Proof"}
+                                          </span>
                                           <input
                                             type="file"
                                             className="hidden"
@@ -1487,7 +1507,9 @@ const AllTasks = () => {
                                         </label>
                                         <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-cyan-500 hover:text-cyan-700" : "text-gray-400 cursor-not-allowed"}`}>
                                           <Camera className="h-3.5 w-3.5" />
-                                          <span>Take Photo</span>
+                                          <span>
+                                            {uploadedImages[task.id] ? "Photo Captured" : (task.require_attachment || task.attachment) ? <span>Take Photo <span className="text-red-500 font-bold">*</span></span> : "Take Photo"}
+                                          </span>
                                           <input
                                             type="file"
                                             accept="image/*"
@@ -1938,7 +1960,10 @@ const AllTasks = () => {
                       <div className="grid grid-cols-2 gap-4">
                         <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                           <Upload className="h-6 w-6 text-gray-400 mb-2" />
-                          <span className="text-xs font-bold text-gray-500">Photo of Work Done</span>
+                          <span className="text-xs font-bold text-gray-500">
+                            Photo of Work Done
+                            {(selectedUpdateTask.require_attachment || selectedUpdateTask.attachment) && <span className="text-red-500 ml-1">*</span>}
+                          </span>
                           <span className="text-[10px] text-gray-400 mt-1">{updateForm.workPhoto ? updateForm.workPhoto.name : "Click to upload"}</span>
                           <input type="file" className="hidden" accept="image/*" onChange={(e) => setUpdateForm({ ...updateForm, workPhoto: e.target.files[0] })} />
                         </label>

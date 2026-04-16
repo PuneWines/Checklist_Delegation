@@ -33,6 +33,7 @@ const defaultTask = () => ({
     planned_time: "09:00",
     task_description: "",
     duration: "",
+    attachment: false,
     recordedAudio: null,
     showCalendar: false,
     showSuggestions: false,
@@ -301,6 +302,28 @@ function TaskCard({ task, index, total, allDoers, onUpdate, onRemove }) {
                         )}
                     />
                 </div>
+
+                {/* Attachment Toggle */}
+                <div className="pt-2">
+                    <button
+                        type="button"
+                        onClick={() => onUpdate(task.id, { attachment: !task.attachment })}
+                        className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border text-xs font-bold transition-all duration-200 ${task.attachment ? 'bg-purple-50 border-purple-200 text-purple-700 shadow-sm' : 'bg-gray-50 border-gray-200 text-gray-400 group-hover:border-gray-300'}`}
+                    >
+                        <div className="flex items-center gap-2">
+                            <Plus className={`w-3.5 h-3.5 transition-transform ${task.attachment ? 'rotate-45' : ''}`} />
+                            <span>Require Attachment / Proof</span>
+                        </div>
+                        <div className={`w-9 h-5 flex items-center rounded-full p-1 transition-colors ${task.attachment ? 'bg-purple-600' : 'bg-gray-300'}`}>
+                            <div className={`bg-white w-3 h-3 rounded-full shadow-sm transform transition-transform ${task.attachment ? 'translate-x-4' : ''}`} />
+                        </div>
+                    </button>
+                    {task.attachment && (
+                        <p className="mt-1.5 px-1 text-[10px] text-purple-500 font-medium">
+                            The doer will be required to upload a photo to complete this task.
+                        </p>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -481,7 +504,8 @@ export default function EATask() {
                     audio_url: audioUrlMap[task.id],
                     duration: task.duration || null,
                     status: 'pending',
-                    given_by: task.given_by
+                    given_by: task.given_by,
+                    attachment: task.attachment
                 };
             });
 

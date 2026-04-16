@@ -63,6 +63,7 @@ export const postRepairTaskApi = async (formData) => {
                 issue_description: formData.issueDetails,
                 audio_url: formData.audio_url || null, // Added audio_url
                 duration: formData.duration || null,
+                attachment: formData.attachment || false,
                 status: 'Pending'
             })
             .select();
