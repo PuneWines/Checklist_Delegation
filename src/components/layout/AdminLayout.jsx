@@ -3,6 +3,8 @@ import aceLogo from "../../assets/Ace_Logoo.jpg";
 
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchNotifications } from "../../redux/slice/notificationSlice";
 import supabase from "../../SupabaseClient";
 import {
   CheckSquare,
@@ -22,11 +24,15 @@ import {
   BookmarkCheck,
   CrossIcon,
   X,
+  Bell,
 } from "lucide-react";
 
 export default function AdminLayout({ children, darkMode, toggleDarkMode, showLayout = true }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const { list: notifications } = useSelector((state) => state.notifications);
+  
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isHolidaySubmenuOpen, setIsHolidaySubmenuOpen] = useState(false);
   const [username, setUsername] = useState("");
@@ -149,6 +155,15 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     setIsSuperAdmin(normalizedUsername === "admin");
   }, [navigate, location.pathname]);
 
+  // Fetch notifications globally for badge count
+  useEffect(() => {
+    const role = localStorage.getItem("role");
+    const userId = localStorage.getItem("user-id");
+    if (role) {
+      dispatch(fetchNotifications({ role: role.toLowerCase(), userId }));
+    }
+  }, [dispatch, location.pathname]);
+
   // Set initial submenu state based on current location
   useEffect(() => {
     if (location.pathname.includes("/dashboard/holiday") || location.pathname.includes("/dashboard/working-day")) {
@@ -176,6 +191,14 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       icon: Database,
       active: location.pathname === "/dashboard/admin",
       showFor: ["admin", "user", "HOD"],
+    },
+    {
+      href: "/dashboard/notifications",
+      label: "Notifications",
+      icon: Bell,
+      active: location.pathname === "/dashboard/notifications",
+      showFor: ["admin", "user", "hod"],
+      badge: notifications.filter(n => !n.isRead).length || null,
     },
     {
       href: "/dashboard/quick-task",
@@ -340,7 +363,14 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
                         <route.icon
                           className={`h-4 w-4 ${route.active ? "text-blue-600" : ""}`}
                         />
-                        {route.label}
+                        <div className="flex items-center justify-between w-full">
+                          <span>{route.label}</span>
+                          {route.badge && (
+                            <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                              {route.badge}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {route.isOpen ? (
                         <ChevronDown className="h-4 w-4" />
@@ -375,10 +405,16 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
                       }`}
                   >
                     <route.icon
-                      className={`h-4 w-4 ${route.active ? "text-blue-600" : ""
-                        }`}
+                      className={`h-4 w-4 ${route.active ? "text-blue-600" : ""}`}
                     />
-                    {route.label}
+                    <div className="flex items-center justify-between w-full">
+                      <span>{route.label}</span>
+                      {route.badge && (
+                        <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                          {route.badge}
+                        </span>
+                      )}
+                    </div>
                   </Link>
                 )}
               </li>
@@ -558,7 +594,14 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
                           className={`h-4 w-4 ${route.active ? "text-blue-600" : ""
                             }`}
                         />
-                        {route.label}
+                        <div className="flex items-center justify-between w-full">
+                          <span>{route.label}</span>
+                          {route.badge && (
+                            <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                              {route.badge}
+                            </span>
+                          )}
+                        </div>
                       </Link>
                     )}
                   </li>

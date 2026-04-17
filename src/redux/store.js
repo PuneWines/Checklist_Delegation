@@ -9,6 +9,7 @@ import settingReducer from './slice/settingSlice'
 import maintenanceReducer from "./slice/maintenanceSlice";
 import repairReducer from "./slice/repairSlice";
 import eaReducer from "./slice/eaSlice";
+import notificationReducer from "./slice/notificationSlice";
 
 const store = configureStore({
     reducer: {
@@ -21,7 +22,8 @@ const store = configureStore({
         setting: settingReducer,
         maintenance: maintenanceReducer,
         repair: repairReducer,
-        ea: eaReducer
+        ea: eaReducer,
+        notifications: notificationReducer
     }
 })
 

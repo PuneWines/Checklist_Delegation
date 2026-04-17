@@ -26,6 +26,7 @@ import AllTasks from "./pages/admin/AllTasks"
 import HolidayListPage from "./pages/admin/HolidayListPage"         // New
 import WorkingDayCalendarPage from "./pages/admin/WorkingDayCalendarPage" // New
 import AdminApprovalPage from "./pages/admin/AdminApprovalPage" // New
+import NotificationsPage from "./pages/admin/Notifications"
 
 // --- Components ---
 import RealtimeLogoutListener from "./components/RealtimeLogoutListener"
@@ -235,6 +236,14 @@ function App() {
                         element={
                             <ProtectedRoute allowedRoles={["admin"]}>
                                 <MisReport />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/notifications"
+                        element={
+                            <ProtectedRoute>
+                                <NotificationsPage />
                             </ProtectedRoute>
                         }
                     />
