@@ -69,9 +69,34 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       "/dashboard/setting"
     ];
 
-    if ((storedRole || "user").toLowerCase() === "user" && restrictedPages.some(p => path.startsWith(p))) {
+    const storedRoleLower = (storedRole || "user").toLowerCase();
+
+    if (storedRoleLower === "user" && restrictedPages.some(p => path.startsWith(p))) {
       navigate("/dashboard/admin");
       return;
+    }
+
+    if (storedRoleLower === "hod") {
+      const designation = (localStorage.getItem("designation") || "").toLowerCase();
+      const isMachineOperator = designation.includes("machin") || designation.includes("operat") || designation.includes("oprat");
+      
+      const hodRestrictedPages = [
+        "/dashboard/maintenance",
+        "/dashboard/ea-task",
+        "/dashboard/quick-task",
+        "/dashboard/holiday-list",
+        "/dashboard/working-day-calendar",
+        "/dashboard/setting"
+      ];
+      
+      if (!isMachineOperator) {
+        hodRestrictedPages.push("/dashboard/repair");
+      }
+
+      if (hodRestrictedPages.some(p => path.startsWith(p))) {
+        navigate("/dashboard/admin");
+        return;
+      }
     }
 
     // Initial load from localStorage

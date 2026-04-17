@@ -146,8 +146,8 @@ export const deleteAssignFrom = createAsyncThunk(
 
 export const updateCustomDropdown = createAsyncThunk(
   'update/custom-dropdown',
-  async ({ id, category, value }) => {
-    const data = await updateCustomDropdownApi({ id, category, value });
+  async ({ id, category, value, image_url }) => {
+    const data = await updateCustomDropdownApi({ id, category, value, image_url });
     return data;
   }
 );

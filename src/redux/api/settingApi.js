@@ -294,14 +294,19 @@ export const deleteAssignFromApi = async (id) => {
   }
 };
 
-export const updateCustomDropdownApi = async ({ id, category, value }) => {
+export const updateCustomDropdownApi = async ({ id, category, value, image_url = undefined }) => {
   try {
     const column = CATEGORY_TO_COLUMN[category];
     if (!column) throw new Error(`Invalid category: ${category}`);
 
+    const updatePayload = { [column]: value };
+    if (image_url !== undefined) {
+      updatePayload.image_url = image_url;
+    }
+
     const { data, error } = await supabase
       .from("dropdown_options")
-      .update({ [column]: value })
+      .update(updatePayload)
       .eq("id", id)
       .select()
       .maybeSingle();
@@ -310,7 +315,8 @@ export const updateCustomDropdownApi = async ({ id, category, value }) => {
     return {
       id: data.id,
       category: category,
-      value: data[column]
+      value: data[column],
+      image_url: data.image_url || null
     };
   } catch (error) {
     console.log("Error updating custom dropdown:", error);

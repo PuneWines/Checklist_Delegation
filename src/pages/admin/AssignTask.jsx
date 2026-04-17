@@ -13,7 +13,11 @@ export default function AssignTask() {
     }
   }, [navigate]);
 
-  const modules = [
+  const role = (localStorage.getItem("role") || "").toLowerCase();
+  const designation = (localStorage.getItem("designation") || "").toLowerCase();
+  const isMachineOperator = designation.includes("machin") || designation.includes("operat") || designation.includes("oprat");
+
+  const allModules = [
     {
       id: "checklist",
       label: "Checklist Operations",
@@ -59,6 +63,15 @@ export default function AssignTask() {
       ring: "hover:ring-purple-200"
     }
   ];
+
+  const modules = allModules.filter(mod => {
+    if (role === "hod") {
+      if (mod.id === "checklist") return true;
+      if (mod.id === "repair" && isMachineOperator) return true;
+      return false;
+    }
+    return true;
+  });
 
   return (
     <AdminLayout>

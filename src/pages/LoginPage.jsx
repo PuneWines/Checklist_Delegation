@@ -42,26 +42,49 @@ const LoginPage = () => {
   };
 
   useEffect(() => {
-    if (isLoggedIn && userData) {
-      console.log("User Data received:", userData); // Debug log
+    const handleLoginSuccess = async () => {
+      if (isLoggedIn && userData) {
+        console.log("User Data received:", userData); // Debug log
 
-      // Store all user data in localStorage
-      localStorage.setItem('user-name', userData.user_name || userData.username || "");
-      localStorage.setItem('user-id', userData.id || "");
-      localStorage.setItem('role', userData.role || "");
-      localStorage.setItem('email_id', userData.email_id || userData.email || "");
-      localStorage.setItem('user_access', userData.user_access || "");
-      localStorage.setItem('profile_image', userData.profile_image || "");
-      localStorage.setItem('can_self_assign', userData.can_self_assign === true ? "true" : "false");
+        let designation = userData.Designation || userData.designation || "";
 
-      console.log("Stored email:", userData.email_id || userData.email); // Debug log
+        // If designation is missing, try fetching it explicitly
+        if (!designation && userData.user_name) {
+          try {
+            const { data } = await supabase
+              .from('users')
+              .select('Designation')
+              .eq('user_name', userData.user_name || userData.username)
+              .single();
+            if (data) {
+              designation = data.Designation || "";
+            }
+          } catch (err) {
+            console.error("Error fetching designation:", err);
+          }
+        }
 
-      showToast(`Welcome back, ${userData.user_name || userData.username}!`, "success");
-      navigate("/dashboard/admin")
-    } else if (error) {
-      showToast(error, "error");
-      setIsLoginLoading(false);
-    }
+        // Store all user data in localStorage
+        localStorage.setItem('user-name', userData.user_name || userData.username || "");
+        localStorage.setItem('user-id', userData.id || "");
+        localStorage.setItem('role', userData.role || "");
+        localStorage.setItem('email_id', userData.email_id || userData.email || "");
+        localStorage.setItem('user_access', userData.user_access || "");
+        localStorage.setItem('profile_image', userData.profile_image || "");
+        localStorage.setItem('can_self_assign', userData.can_self_assign === true ? "true" : "false");
+        localStorage.setItem('designation', designation);
+
+        console.log("Stored email:", userData.email_id || userData.email); // Debug log
+
+        showToast(`Welcome back, ${userData.user_name || userData.username}!`, "success");
+        navigate("/dashboard/admin");
+      } else if (error) {
+        showToast(error, "error");
+        setIsLoginLoading(false);
+      }
+    };
+
+    handleLoginSuccess();
   }, [isLoggedIn, userData, error, navigate, showToast]);
 
 

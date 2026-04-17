@@ -992,6 +992,25 @@ const Setting = () => {
     }
   };
 
+  const handleUpdatePartImage = async (file, part) => {
+    if (!file) return;
+    showToast("Uploading new image...", "info");
+    try {
+      const imageUrl = await uploadPartImageApi(file);
+      await dispatch(updateCustomDropdown({
+        id: part.id,
+        category: 'Part Name',
+        value: part.value,
+        image_url: imageUrl
+      })).unwrap();
+      dispatch(customDropdownDetails());
+      showToast("Image updated successfully!", "success");
+    } catch (err) {
+      console.error('Error updating part image:', err);
+      showToast("Failed to update image", "error");
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-8">
@@ -1901,7 +1920,7 @@ const Setting = () => {
                                           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Associated Parts</p>
                                           <div className="flex flex-wrap gap-2">
                                             {data.parts.length > 0 ? data.parts.map(part => (
-                                              <span key={part.id} className="inline-flex items-center gap-2 px-3 py-1.5 bg-white text-gray-700 text-xs font-medium rounded-md border border-gray-200 shadow-sm">
+                                              <span key={part.id} className="inline-flex items-center gap-2 px-3 py-1.5 bg-white text-gray-700 text-xs font-medium rounded-md border border-gray-200 shadow-sm relative group/part">
                                                 {part.image_url && (
                                                   <img
                                                     src={part.image_url}
@@ -1911,17 +1930,33 @@ const Setting = () => {
                                                   />
                                                 )}
                                                 {part.value}
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (window.confirm(`Delete part "${part.value}"?`)) {
-                                                      dispatch(deleteCustomDropdown(part.id));
-                                                    }
-                                                  }}
-                                                  className="text-gray-400 hover:text-red-600 transition-colors"
-                                                >
-                                                  <X size={12} />
-                                                </button>
+                                                <div className="flex gap-1.5 ml-1 opacity-100 lg:opacity-0 group-hover/part:opacity-100 transition-opacity">
+                                                  <label className="text-blue-400 hover:text-blue-600 cursor-pointer flex items-center justify-center p-0.5" title="Edit part image">
+                                                    <Edit size={12} />
+                                                    <input 
+                                                      type="file" 
+                                                      accept="image/*" 
+                                                      className="hidden" 
+                                                      onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if(file) handleUpdatePartImage(file, part);
+                                                        e.target.value = null;
+                                                      }} 
+                                                    />
+                                                  </label>
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      if (window.confirm(`Delete part "${part.value}"?`)) {
+                                                        dispatch(deleteCustomDropdown(part.id));
+                                                      }
+                                                    }}
+                                                    className="text-gray-400 hover:text-red-600 transition-colors p-0.5"
+                                                    title="Delete part"
+                                                  >
+                                                    <X size={12} />
+                                                  </button>
+                                                </div>
                                               </span>
                                             )) : (
                                               <span className="text-sm text-gray-400 italic">No parts added for this machine</span>
@@ -1993,17 +2028,32 @@ const Setting = () => {
                                             />
                                           )}
                                           {part.value}
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              if (window.confirm(`Delete part "${part.value}"?`)) {
-                                                dispatch(deleteCustomDropdown(part.id));
-                                              }
-                                            }}
-                                            className="text-gray-400 hover:text-red-600"
-                                          >
-                                            <X size={10} />
-                                          </button>
+                                          <div className="flex gap-1.5 ml-1">
+                                            <label className="text-blue-400 hover:text-blue-600 cursor-pointer p-0.5 flex items-center justify-center">
+                                              <Edit size={12} />
+                                              <input 
+                                                type="file" 
+                                                accept="image/*" 
+                                                className="hidden" 
+                                                onChange={(e) => {
+                                                  const file = e.target.files[0];
+                                                  if(file) handleUpdatePartImage(file, part);
+                                                  e.target.value = null;
+                                                }} 
+                                              />
+                                            </label>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (window.confirm(`Delete part "${part.value}"?`)) {
+                                                  dispatch(deleteCustomDropdown(part.id));
+                                                }
+                                              }}
+                                              className="text-gray-400 hover:text-red-600 p-0.5"
+                                            >
+                                              <X size={12} />
+                                            </button>
+                                          </div>
                                         </span>
                                       )) : (
                                         <p className="text-[10px] text-gray-400 italic">No parts added</p>
