@@ -54,13 +54,14 @@ export default function AdminApprovalPage() {
         try {
             // we dont need to store the remark only send to the user via whatsapp 
             
-            // Send notification
+            /* WhatsApp notification disabled
             await sendAdminExtensionRemarkNotification({
                 doerName: task.doer_name || task.name || task.filled_by,
                 taskId: task.original_task_id || task.task_id || task.id,
                 description: task.task_description || task.issue_description,
                 remark: remark
             });
+            */
 
             showToast("Remark sent successfully!", "success");
             // Clear remark for this task
@@ -363,7 +364,7 @@ export default function AdminApprovalPage() {
                 await rejectChecklistTask(task.id, reason);
             }
 
-            // Send notification
+            /* WhatsApp notification disabled
             await sendTaskRejectionNotification({
                 doerName: task.doer_name || task.name || task.filled_by,
                 taskId: task.id, // Or visible task ID
@@ -371,6 +372,7 @@ export default function AdminApprovalPage() {
                 taskType: activeTab,
                 reason: reason
             });
+            */
 
             // Remove from list
             setPendingTasks(prev => prev.filter(t => t.id !== task.id));

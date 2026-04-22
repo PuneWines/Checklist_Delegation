@@ -189,7 +189,7 @@ const settingsSlice = createSlice({
       })
       .addCase(userDetails.fulfilled, (state, action) => {
         state.loading = false;
-        state.userData = action.payload;
+        state.userData = action.payload || [];
       })
       .addCase(userDetails.rejected, (state, action) => {
         state.loading = false;
@@ -213,7 +213,9 @@ const settingsSlice = createSlice({
       })
       .addCase(createUser.fulfilled, (state, action) => {
         state.loading = false;
-        state.userData.push(action.payload);
+        if (action.payload) {
+          state.userData.push(action.payload);
+        }
       })
       .addCase(departmentOnlyDetails.pending, (state) => {
         state.loading = true;
@@ -259,9 +261,11 @@ const settingsSlice = createSlice({
       })
       .addCase(updateUser.fulfilled, (state, action) => {
         state.loading = false;
-        state.userData = state.userData.map((user) =>
-          user.id === action.payload.id ? action.payload : user
-        );
+        if (action.payload && action.payload.id) {
+          state.userData = state.userData.map((user) =>
+            user && user.id === action.payload.id ? action.payload : user
+          );
+        }
       })
       .addCase(updateUser.rejected, (state, action) => {
         state.loading = false;

@@ -360,7 +360,7 @@ const Setting = () => {
         if (eaError) console.error('Error updating EA tasks:', eaError);
       }
 
-      // Send WhatsApp Notifications for shifted tasks
+      /* WhatsApp notification disabled
       if (tasksToShift.length > 0) {
         for (const task of tasksToShift) {
           await sendTaskReassignmentNotification({
@@ -375,6 +375,7 @@ const Setting = () => {
           });
         }
       }
+      */
 
       // Filter out shifted tasks from the local view
       const remainingTasks = leaveTasks.filter(t => !selectedLeaveTaskIds.includes(t._uniqueId));
@@ -773,7 +774,7 @@ const Setting = () => {
 
   // Modified handleDeleteUser
   const handleDeleteUser = (userId) => {
-    const userToDel = userData.find(u => u.id === userId);
+    const userToDel = (userData || []).find(u => u && u.id === userId);
     if (!userToDel) return;
     setUserToDeleteData({ id: userId, name: userToDel.user_name });
     setShowDeleteConfirm(true);
@@ -834,7 +835,7 @@ const Setting = () => {
   // };
   const handleEditUser = (userId) => {
     if (!userData) return;
-    const user = userData.find(u => u.id === userId);
+    const user = (userData || []).find(u => u && u.id === userId);
     if (!user) return;
 
     setUserForm({
@@ -2239,7 +2240,7 @@ const Setting = () => {
                       >
                         <option value="">No Supervisor (Direct Admin)</option>
                         {userData && userData.length > 0 && userData
-                          .filter(u => u.user_name !== userForm.username && u.user_name !== 'admin')
+                          .filter(u => u && u.user_name && u.user_name !== userForm.username && u.user_name !== 'admin')
                           .map((u, i) => (
                             <option key={i} value={u.user_name}>{u.user_name}</option>
                           ))

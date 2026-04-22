@@ -100,26 +100,27 @@ export const createUserApi = async (newUser) => {
       return;
     }
 
-    const lastId = maxIdData?.[0]?.id || 0;
-    const newId = lastId + 1;
+    // Step 2: Insert user
+    // Sanitizing 'number' (bigint) - empty string must be null
+    const phoneNumber = newUser.phone && newUser.phone.toString().trim() !== "" 
+      ? parseInt(newUser.phone.toString().replace(/\D/g, '')) 
+      : null;
 
-    // Step 2: Insert user with new ID
     const insertData = {
-      id: newId,
       user_name: newUser.username,
       password: newUser.password,
       email_id: newUser.email,
-      number: newUser.phone,
+      number: phoneNumber,
       employee_id: newUser.employee_id,
       role: newUser.role,
-      status: newUser.status,
+      status: newUser.status || 'active',
       user_access: newUser.user_access,
       department: newUser.department,
       profile_image: newUser.profile_image || null,
       leave_date: newUser.leave_date || null,
       leave_end_date: newUser.leave_end_date || null,
       remark: newUser.remark || null,
-      reported_by: newUser.reported_by,
+      reported_by: newUser.reported_by || null,
       can_self_assign: newUser.can_self_assign || false
     };
 
@@ -158,17 +159,22 @@ export const createUserApi = async (newUser) => {
 export const updateUserDataApi = async ({ id, updatedUser }) => {
   try {
     // Build the update payload - NEVER include undefined values (causes Supabase 400)
+    // Sanitizing 'number' (bigint) - empty string must be null
+    const phoneNumber = updatedUser.number && updatedUser.number.toString().trim() !== "" 
+      ? parseInt(updatedUser.number.toString().replace(/\D/g, '')) 
+      : null;
+
     const updateData = {
       user_name: updatedUser.user_name,
       email_id: updatedUser.email_id,
-      number: updatedUser.number,
+      number: phoneNumber,
       employee_id: updatedUser.employee_id,
       role: updatedUser.role,
       status: updatedUser.status,
       user_access: updatedUser.user_access,
       department: updatedUser.department,
       profile_image: updatedUser.profile_image,
-      reported_by: updatedUser.reported_by,
+      reported_by: updatedUser.reported_by || null,
       can_self_assign: updatedUser.can_self_assign ?? false
     };
 

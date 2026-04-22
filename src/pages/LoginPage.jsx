@@ -201,10 +201,11 @@ const LoginPage = () => {
                           if (error || !data) return showToast("User not found", "error");
 
                           const otp = Math.floor(100000 + Math.random() * 900000).toString();
-                          await sendPasswordResetOTP(forgotData.username, otp);
+                          // await sendPasswordResetOTP(forgotData.username, otp);
+                          console.log("OTP for", forgotData.username, ":", otp); // Log for debugging since WhatsApp is disabled
                           setForgotData({ ...forgotData, generatedOtp: otp });
                           setForgotStep('otp');
-                          showToast("OTP sent to Admin", "success");
+                          showToast("OTP generated (WhatsApp disabled, check console)", "success");
                         } catch (err) {
                           showToast("Error processing request", "error");
                         } finally {

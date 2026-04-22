@@ -27,7 +27,9 @@ export const fetchDashboardDataApi = async (
     const isAscending = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance');
 
     let query = supabase
-      .from(dashboardType)
+      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' : 
+            dashboardType === 'repair' ? 'repair_tasks' : 
+            dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
       .select('*')
       .order(dateColumn, { ascending: isAscending })
       .range(from, to);
@@ -144,7 +146,9 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     const today = new Date().toISOString().split('T')[0];
 
     let query = supabase
-      .from(dashboardType)
+      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' : 
+            dashboardType === 'repair' ? 'repair_tasks' : 
+            dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
       .select('*', { count: 'exact', head: true });
 
     // Apply role-based filtering
@@ -239,13 +243,14 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
         .gte(dateColumn, `${today}T00:00:00`)
         .lte(dateColumn, `${today}T23:59:59`);
     } else {
+      const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
+                        dashboardType === 'repair' ? 'repair_tasks' : 
+                        dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
+      
       query = supabase
-        .from('checklist')
+        .from(tableName)
         .select('*', { count: 'exact', head: true })
         .is('submission_date', null)
-        .not('status', 'eq', 'yes')
-        .not('status', 'ilike', '%done%')
-        .not('status', 'ilike', '%completed%')
         .gte(dateColumn, `${today}T00:00:00`)
         .lte(dateColumn, `${today}T23:59:59`);
     }
@@ -344,7 +349,9 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
 
     // Build the query
     let query = supabase
-      .from(dashboardType)
+      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' : 
+            dashboardType === 'repair' ? 'repair_tasks' : 
+            dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
       .select('*')
       .gte(dateColumn, `${startDate}T00:00:00`)
       .lte(dateColumn, `${endDate}T23:59:59`)
@@ -512,7 +519,9 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, d
     const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation') ? 'planned_date' : 'task_start_date';
 
     let query = supabase
-      .from(dashboardType)
+      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' : 
+            dashboardType === 'repair' ? 'repair_tasks' : 
+            dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
       .select('department, name')
       .gte(dateColumn, `${startDate}T00:00:00`)
       .lte(dateColumn, `${endDate}T23:59:59`)
@@ -699,7 +708,8 @@ export const fetchChecklistDataByDateRangeApi = async (
   departmentFilter = null,
   page = 1,
   limit = 1000, // Increased for better performance
-  statusFilter = 'all'
+  statusFilter = 'all',
+  dashboardType = 'checklist'
 ) => {
   try {
     console.log('Fetching checklist data by date range:', {
@@ -709,18 +719,23 @@ export const fetchChecklistDataByDateRangeApi = async (
       departmentFilter,
       page,
       limit,
-      statusFilter
+      statusFilter,
+      dashboardType
     });
 
     const from = (page - 1) * limit;
     const to = from + limit - 1;
-    const role = localStorage.getItem('role');
+    const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
+
+    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
+                      dashboardType === 'repair' ? 'repair_tasks' : 
+                      dashboardType === 'ea' ? 'ea_tasks' : 'checklist';
 
     const dateColumn = 'planned_date'; // This API is specific to checklist
 
     let query = supabase
-      .from('checklist')
+      .from(tableName)
       .select('*')
       .order(dateColumn, { ascending: true }) // Ascending for date ranges usually better
       .range(from, to);
@@ -793,15 +808,20 @@ export const getChecklistDateRangeCountApi = async (
   endDate,
   staffFilter = null,
   departmentFilter = null,
-  statusFilter = 'all'
+  statusFilter = 'all',
+  dashboardType = 'checklist'
 ) => {
   try {
     const role = localStorage.getItem('role');
     const username = localStorage.getItem('user-name');
 
+    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
+                      dashboardType === 'repair' ? 'repair_tasks' : 
+                      dashboardType === 'ea' ? 'ea_tasks' : 'checklist';
+
     let query = supabase
-      .from('checklist')
-      .select('*', { count: 'exact', head: true });
+      .from(tableName)
+      .select('*'); // Removed { count: 'exact', head: true } to actually fetch data
 
     const dateColumn = 'planned_date'; // checklist specific
 
@@ -869,7 +889,8 @@ export const getChecklistDateRangeStatsApi = async (
   startDate,
   endDate,
   staffFilter = null,
-  departmentFilter = null
+  departmentFilter = null,
+  dashboardType = 'checklist'
 ) => {
   try {
     const role = localStorage.getItem('role');
@@ -881,9 +902,13 @@ export const getChecklistDateRangeStatsApi = async (
 
     const dateColumn = 'planned_date'; // checklist specific
 
+    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
+                      dashboardType === 'repair' ? 'repair_tasks' : 
+                      dashboardType === 'ea' ? 'ea_tasks' : 'checklist';
+
     // MAIN FIX: Remove the today date filter that was limiting results
     let totalQuery = supabase
-      .from('checklist')
+      .from(tableName)
       .select('*', { count: 'exact', head: true });
 
     // Apply ONLY date range filter - no other date restrictions
@@ -919,7 +944,7 @@ export const getChecklistDateRangeStatsApi = async (
 
     // Get completed tasks count
     let completedQuery = supabase
-      .from('checklist')
+      .from(tableName)
       .select('*', { count: 'exact', head: true })
       .not('submission_date', 'is', null);
 
@@ -1107,9 +1132,12 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, depar
   try {
     const { start, end } = getCurrentMonthRange();
     const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
+    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
+                      dashboardType === 'repair' ? 'repair_tasks' : 
+                      dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
 
     let query = supabase
-      .from(dashboardType)
+      .from(tableName)
       .select('*', { count: 'exact', head: true })
       .gte(dateColumn, start)
       .lte(dateColumn, end);
@@ -1162,15 +1190,19 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, de
       query = supabase
         .from('delegation')
         .select('*', { count: 'exact', head: true })
-        .or('status.eq.done,submission_date.not.is.null')
+        .eq('status', 'done')
         .eq('admin_done', true)
         .gte(dateColumn, start)
         .lte(dateColumn, end);
     } else {
+      const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
+                        dashboardType === 'repair' ? 'repair_tasks' : 
+                        dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
+      
       query = supabase
-        .from(dashboardType)
+        .from(tableName)
         .select('*', { count: 'exact', head: true })
-        .or('submission_date.not.is.null,status.eq.yes,status.ilike.%done%,status.ilike.%completed%')
+        .not('submission_date', 'is', null) // Primary indicator for checklist/maintenance/etc.
         .gte(dateColumn, start)
         .lte(dateColumn, end);
     }
@@ -1228,13 +1260,14 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
         .lt(dateColumn, todayStart)
         .gte(dateColumn, start);
     } else {
+      const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
+                        dashboardType === 'repair' ? 'repair_tasks' : 
+                        dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
+      
       query = supabase
-        .from(dashboardType)
+        .from(tableName)
         .select('*', { count: 'exact', head: true })
         .is('submission_date', null)
-        .not('status', 'eq', 'yes')
-        .not('status', 'ilike', '%done%')
-        .not('status', 'ilike', '%completed%')
         .lt(dateColumn, todayStart)
         .gte(dateColumn, start);
     }

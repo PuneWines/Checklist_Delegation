@@ -358,7 +358,7 @@ export default function RepairTask() {
                 if (data) allResults.push(...data);
             }
 
-            // 4. Send WhatsApp notifications
+            /* WhatsApp notification disabled
             try {
                 for (const insertedTask of allResults) {
                     const assignee = insertedTask.assigned_person;
@@ -378,6 +378,7 @@ export default function RepairTask() {
             } catch (whatsappError) {
                 console.error('WhatsApp notification error:', whatsappError);
             }
+            */
 
             showToast(`${tasks.length} Repair Request(s) submitted successfully!`, 'success');
             setTasks([defaultTask()]);

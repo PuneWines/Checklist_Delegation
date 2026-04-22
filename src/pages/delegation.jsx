@@ -746,7 +746,7 @@ function DelegationDataPage() {
         const results = action.payload;
         const failedTasks = results.filter(r => r.status === 'error');
 
-        // Send WhatsApp notifications for extensions
+        /* WhatsApp notification disabled
         for (const task of selectedData) {
           if (task.status === 'extend' && task.next_extend_date) {
             try {
@@ -762,6 +762,7 @@ function DelegationDataPage() {
             }
           }
         }
+        */
 
         if (failedTasks.length > 0) {
           console.error('Some tasks failed to submit:', failedTasks);
@@ -793,6 +794,7 @@ function DelegationDataPage() {
   };
 
   const handleSendUrgentWhatsApp = async () => {
+    /* Feature Disabled
     if (selectedItems.size === 0) return;
 
     setIsSubmitting(true);
@@ -819,6 +821,7 @@ function DelegationDataPage() {
     } finally {
       setIsSubmitting(false);
     }
+    */
   };
 
 
@@ -889,6 +892,7 @@ function DelegationDataPage() {
 
                 {!showHistory && (
                   <>
+                    {/* 
                     <button
                       onClick={handleSendUrgentWhatsApp}
                       disabled={selectedItems.size === 0 || isSubmitting}
@@ -899,6 +903,7 @@ function DelegationDataPage() {
                       <span className="hidden sm:inline">Urgent WhatsApp</span>
                       <span className="sm:hidden">Urgent</span>
                     </button>
+                    */}
 
                     <button
                       onClick={handleSubmit}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { Users, Calendar, Save, ArrowLeft, Loader2, Mic, Square, Trash2, Plus, CheckCircle2, X, Clock } from "lucide-react";
+import { Users, Calendar, Save, ArrowLeft, Loader2, Mic, Square, Trash2, Plus, CheckCircle2, X, Clock, Phone } from "lucide-react";
 import { ReactMediaRecorder } from "react-media-recorder";
 import AudioPlayer from "../../components/AudioPlayer";
 import supabase from "../../SupabaseClient";
@@ -520,7 +520,7 @@ export default function EATask() {
                 if (data) insertedData.push(...data);
             }
 
-            // 4. Send WhatsApp notifications
+            /* WhatsApp notification disabled
             try {
                 if (insertedData && insertedData.length > 0) {
                     for (const task of insertedData) {
@@ -537,6 +537,7 @@ export default function EATask() {
             } catch (whatsappError) {
                 console.error('WhatsApp notification error:', whatsappError);
             }
+            */
 
             showToast(`${tasksToInsert.length} EA Task(s) assigned successfully!`, 'success');
             setTasks([defaultTask()]);

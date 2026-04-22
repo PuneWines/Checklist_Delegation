@@ -812,7 +812,7 @@ export default function ChecklistTask() {
                 }
             }
 
-            // 4. Send WhatsApp notifications
+            /* WhatsApp notification disabled
             try {
                 if (insertedTasks && insertedTasks.length > 0) {
                     for (const uiTask of tasks) {
@@ -845,6 +845,7 @@ export default function ChecklistTask() {
             } catch (whatsappError) {
                 console.error('WhatsApp notification error:', whatsappError);
             }
+            */
 
             showToast(`Successfully assigned ${allTasksToSubmit.length} task(s)!`, 'success');
             setTasks([defaultTask()]);

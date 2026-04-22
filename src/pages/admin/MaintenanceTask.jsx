@@ -759,7 +759,7 @@ export default function MaintenanceTask() {
                 if (data) insertedData.push(...data);
             }
 
-            // 4. Send WhatsApp notifications
+            /* WhatsApp notification disabled
             try {
                 if (insertedData && insertedData.length > 0) {
                     for (const uiTask of tasks) {
@@ -789,6 +789,7 @@ export default function MaintenanceTask() {
             } catch (whatsappError) {
                 console.error('WhatsApp notification error:', whatsappError);
             }
+            */
 
             showToast(`${allTasksToSubmit.length} Maintenance Task(s) assigned successfully!`, 'success');
             setTasks([defaultTask()]);

@@ -14,6 +14,9 @@ const WHATSAPP_PHONE_NUMBER_ID = import.meta.env.VITE_WHATSAPP_PHONE_NUMBER_ID;
 const WHATSAPP_ACCESS_TOKEN = import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN;
 const WHATSAPP_PRODUCT_ID = import.meta.env.VITE_WHATSAPP_PRODUCT_ID;
 
+// Global Toggle to Enable/Disable WhatsApp Feature
+const WHATSAPP_ENABLED = false;
+
 
 /**
  * Format phone number to international format
@@ -72,6 +75,10 @@ const getUserPhoneNumber = async (username) => {
  * @returns {Promise<boolean>} - Success status
  */
 const sendWhatsAppMessage = async (phoneNumber, message) => {
+    if (!WHATSAPP_ENABLED) {
+        console.log('🚫 WhatsApp sending is currently disabled.');
+        return true; 
+    }
     try {
         const formattedPhone = formatPhoneNumber(phoneNumber);
         if (!formattedPhone) {
@@ -126,6 +133,9 @@ const sendWhatsAppMessage = async (phoneNumber, message) => {
  * @returns {Promise<boolean>} - Success status
  */
 const sendWhatsAppVoiceMessage = async (phoneNumber, audioUrl) => {
+    if (!WHATSAPP_ENABLED) {
+        return true;
+    }
     try {
         const formattedPhone = formatPhoneNumber(phoneNumber);
 

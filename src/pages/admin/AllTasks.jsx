@@ -909,7 +909,7 @@ const AllTasks = () => {
             }).eq("task_id", id);
             if (updateError) throw updateError;
 
-            // Send extension notification
+            /* WhatsApp notification disabled
             if (task) {
               await sendTaskExtensionNotification({
                 doerName: task.doer_name,
@@ -922,6 +922,7 @@ const AllTasks = () => {
                 })
               });
             }
+            */
           } else if (taskStatus === "done") {
             // 1. Insert completion record into ea_tasks_done (Snapshot)
             const { error: doneError = null } = await supabase.from("ea_tasks_done").insert([{
@@ -994,6 +995,7 @@ const AllTasks = () => {
   };
 
   const handleSendUrgentWhatsApp = async () => {
+    /* Feature Disabled
     if (selectedItems.size === 0) return;
 
     setIsSubmitting(true);
@@ -1028,6 +1030,7 @@ const AllTasks = () => {
     } finally {
       setIsSubmitting(false);
     }
+    */
   };
 
   const dateColumn = activeTab === "repair" ? "created_at" : (activeTab === "ea" ? (showHistory ? "updated_at" : "planned_date") : "task_start_date");
@@ -1115,14 +1118,14 @@ const AllTasks = () => {
                         )}
                       </div>
 
-                      <button
+                      {/* <button
                         onClick={handleSendUrgentWhatsApp}
                         disabled={selectedItems.size === 0 || isSubmitting}
                         className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-40 shadow-md shadow-green-600/10 transition-all"
                       >
                         <BellRing className="h-4 w-4" />
                         <span className="hidden md:inline">Urgent</span>
-                      </button>
+                      </button> */}
 
                       {activeTab !== "repair" && (
                         <button
