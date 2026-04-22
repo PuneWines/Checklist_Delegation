@@ -400,7 +400,6 @@ function DelegationDataPage() {
     debouncedSearchTerm,
     startDate,
     endDate,
-    endDate,
   ]);
 
   const handlePageChange = useCallback((page) => {

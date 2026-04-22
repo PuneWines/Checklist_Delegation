@@ -176,7 +176,7 @@ const UserTasks = () => {
       setErrors({})
 
       showToast(`${selectedTasks.length} tasks have been marked as completed.`, "success")
-    } catch (error) {
+    } catch (e) {
       showToast("There was an error submitting the tasks. Please try again.", "error")
     } finally {
       setIsSubmitting(false)

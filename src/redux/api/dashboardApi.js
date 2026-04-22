@@ -75,7 +75,7 @@ export const fetchDashboardDataApi = async (
         query = query.gt(dateColumn, `${today}T23:59:59`);
         break;
 
-      case 'overdue':
+      case 'overdue': {
         // Tasks before today that are not completed AND have null submission_date
         query = query.lt(dateColumn, `${today}T00:00:00`)
           .is('submission_date', null);
@@ -84,6 +84,7 @@ export const fetchDashboardDataApi = async (
           query = query.neq('status', 'done');
         }
         break;
+      }
 
       case 'all':
         // Fetch tasks from start-of-previous-month up to today.
@@ -190,7 +191,7 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
         query = query.gt(dateColumn, `${today}T23:59:59`);
         break;
 
-      case 'overdue':
+      case 'overdue': {
         // Tasks before today that are not completed AND have null submission_date
         query = query.lt(dateColumn, `${today}T00:00:00`)
           .is('submission_date', null);
@@ -199,6 +200,7 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
           query = query.neq('status', 'done');
         }
         break;
+      }
 
       case 'all':
         // No date filters
@@ -771,16 +773,18 @@ export const fetchChecklistDataByDateRangeApi = async (
       case 'completed':
         query = query.not('submission_date', 'is', null);
         break;
-      case 'pending':
+      case 'pending': {
         const today = new Date().toISOString().split('T')[0];
         query = query.is('submission_date', null)
           .gte(dateColumn, `${today}T00:00:00`);
         break;
-      case 'overdue':
+      }
+      case 'overdue': {
         const todayOverdue = new Date().toISOString().split('T')[0];
         query = query.is('submission_date', null)
           .lt(dateColumn, `${todayOverdue}T00:00:00`);
         break;
+      }
       // 'all' - no additional status filter
     }
 
@@ -856,16 +860,18 @@ export const getChecklistDateRangeCountApi = async (
       case 'completed':
         query = query.not('submission_date', 'is', null);
         break;
-      case 'pending':
+      case 'pending': {
         const today = new Date().toISOString().split('T')[0];
         query = query.is('submission_date', null)
           .gte(dateColumn, `${today}T00:00:00`);
         break;
-      case 'overdue':
+      }
+      case 'overdue': {
         const todayOverdue = new Date().toISOString().split('T')[0];
         query = query.is('submission_date', null)
           .lt(dateColumn, `${todayOverdue}T00:00:00`);
         break;
+      }
       // 'all' - no additional status filter
     }
 
