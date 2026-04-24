@@ -19,9 +19,9 @@ export const dashboardData = createAsyncThunk(
 
 export const totalTaskInTable = createAsyncThunk(
   "dashboard/totalTaskInTable",
-  async ({ dashboardType, staffFilter, departmentFilter }) => {
+  async ({ dashboardType, staffFilter, shopFilter }) => {
     try {
-      const response = await countTotalTaskApi(dashboardType, staffFilter, departmentFilter)
+      const response = await countTotalTaskApi(dashboardType, staffFilter, shopFilter)
       return response
     } catch (error) {
       console.error("Error fetching total tasks:", error)
@@ -33,9 +33,9 @@ export const totalTaskInTable = createAsyncThunk(
 // Update completeTaskInTable
 export const completeTaskInTable = createAsyncThunk(
   "dashboard/completeTaskInTable",
-  async ({ dashboardType, staffFilter, departmentFilter }) => {
+  async ({ dashboardType, staffFilter, shopFilter }) => {
     try {
-      const response = await countCompleteTaskApi(dashboardType, staffFilter, departmentFilter)
+      const response = await countCompleteTaskApi(dashboardType, staffFilter, shopFilter)
       return response
     } catch (error) {
       console.error("Error fetching complete tasks:", error)
@@ -69,9 +69,9 @@ export const uniqueGivenByData = createAsyncThunk(
 // Update pendingTaskInTable
 export const pendingTaskInTable = createAsyncThunk(
   "dashboard/pendingTaskInTable",
-  async ({ dashboardType, staffFilter, departmentFilter }) => {
+  async ({ dashboardType, staffFilter, shopFilter }) => {
     try {
-      const response = await countPendingOrDelayTaskApi(dashboardType, staffFilter, departmentFilter)
+      const response = await countPendingOrDelayTaskApi(dashboardType, staffFilter, shopFilter)
       return response
     } catch (error) {
       console.error("Error fetching pending tasks:", error)
@@ -83,9 +83,9 @@ export const pendingTaskInTable = createAsyncThunk(
 // Update overdueTaskInTable
 export const overdueTaskInTable = createAsyncThunk(
   "dashboard/overdueTaskInTable",
-  async ({ dashboardType, staffFilter, departmentFilter }) => {
+  async ({ dashboardType, staffFilter, shopFilter }) => {
     try {
-      const response = await countOverDueORExtendedTaskApi(dashboardType, staffFilter, departmentFilter)
+      const response = await countOverDueORExtendedTaskApi(dashboardType, staffFilter, shopFilter)
       return response
     } catch (error) {
       console.error("Error fetching overdue tasks:", error)

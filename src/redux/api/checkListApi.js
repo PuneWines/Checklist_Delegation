@@ -32,7 +32,7 @@ export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchT
     // Apply search filter if searchTerm exists
     if (searchTerm && searchTerm.trim() !== '') {
       const searchValue = searchTerm.trim();
-      query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
+      query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,shop_name.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
     }
 
     // Apply role filter
@@ -47,10 +47,10 @@ export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchT
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
       query = query.in('name', reportingUsers);
     } else if (role === 'admin' && userAccess && userAccess !== 'all') {
-      // Filter by departments in user_access for admin
-      const allowedDepartments = userAccess.split(',').map(dept => dept.trim()).filter(d => d && d !== 'all');
-      if (allowedDepartments.length > 0) {
-        query = query.in('department', allowedDepartments);
+      // Filter by shops in user_access for admin
+      const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(s => s && s !== 'all');
+      if (allowedShops.length > 0) {
+        query = query.in('shop', allowedShops);
       }
     }
 
@@ -91,7 +91,7 @@ export const fetchChechListDataForHistory = async (page = 1, searchTerm = '') =>
     // Apply search filter if searchTerm exists
     if (searchTerm && searchTerm.trim() !== '') {
       const searchValue = searchTerm.trim();
-      query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
+      query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,shop_name.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
     }
 
     if (role === 'user' && username) {
@@ -105,10 +105,10 @@ export const fetchChechListDataForHistory = async (page = 1, searchTerm = '') =>
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
       query = query.in('name', reportingUsers);
     } else if (role === 'admin' && userAccess && userAccess !== 'all') {
-      // Filter by departments in user_access for admin
-      const allowedDepartments = userAccess.split(',').map(dept => dept.trim()).filter(d => d && d !== 'all');
-      if (allowedDepartments.length > 0) {
-        query = query.in('department', allowedDepartments);
+      // Filter by shops in user_access for admin
+      const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(s => s && s !== 'all');
+      if (allowedShops.length > 0) {
+        query = query.in('shop', allowedShops);
       }
     }
 
@@ -187,7 +187,7 @@ export const updateChecklistData = async (submissionData) => {
         submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
         image: imageUrl,
         // // Add other fields as needed
-        // department: item.department,
+        // shop: (item.shop || item.shop_name),
         // task_description: item.taskDescription,
         // given_by: item.givenBy
       };

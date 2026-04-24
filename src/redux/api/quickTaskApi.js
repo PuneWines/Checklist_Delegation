@@ -52,7 +52,7 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
     // Deduplicate: keep only first occurrence of each task_description + name combo
     const seen = new Set();
     const uniqueRows = (data || []).filter(row => {
-      const key = `${(row.department || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
+      const key = `${(row.shop || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -119,7 +119,7 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
     // Deduplicate: keep only first occurrence of each task_description + name combo
     const seen = new Set();
     const uniqueRows = (data || []).filter(row => {
-      const key = `${(row.department || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
+      const key = `${(row.shop || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -152,7 +152,7 @@ export const deleteChecklistTasksApi = async (tasks) => {
     const { error } = await supabase
       .from("checklist")
       .delete()
-      .eq("department", task.department)
+      .eq("shop", (task.shop || task.shop_name))
       .eq("name", task.name)
       .eq("task_description", task.task_description)
       .eq("frequency", task.frequency)
@@ -169,7 +169,7 @@ export const deleteDelegationTasksApi = async (tasks) => {
     const { error } = await supabase
       .from("delegation")
       .delete()
-      .eq("department", task.department)
+      .eq("shop", (task.shop || task.shop_name))
       .eq("name", task.name)
       .eq("task_description", task.task_description)
       .eq("frequency", task.frequency)
@@ -184,7 +184,7 @@ export const deleteDelegationTasksApi = async (tasks) => {
 export const updateChecklistTaskApi = async (updatedTask, originalTask) => {
   try {
     let query = supabase.from("checklist").update({
-      department: updatedTask.department,
+      shop: updatedTask.shop,
       given_by: updatedTask.given_by,
       name: updatedTask.name,
       task_description: updatedTask.task_description,
@@ -201,7 +201,7 @@ export const updateChecklistTaskApi = async (updatedTask, originalTask) => {
     if (originalTask) {
       // Update all matching pending tasks
       query = query
-        .eq("department", originalTask.department)
+        .eq("shop", originalTask.shop)
         .eq("name", originalTask.name)
         .eq("task_description", originalTask.task_description)
         .is("submission_date", null);
@@ -222,7 +222,7 @@ export const updateChecklistTaskApi = async (updatedTask, originalTask) => {
 export const updateDelegationTaskApi = async (updatedTask, originalTask) => {
   try {
     let query = supabase.from("delegation").update({
-      department: updatedTask.department,
+      shop: updatedTask.shop,
       given_by: updatedTask.given_by,
       name: updatedTask.name,
       task_description: updatedTask.task_description,
@@ -239,7 +239,7 @@ export const updateDelegationTaskApi = async (updatedTask, originalTask) => {
     if (originalTask) {
       // Update all matching pending tasks
       query = query
-        .eq("department", originalTask.department)
+        .eq("shop", originalTask.shop)
         .eq("name", originalTask.name)
         .eq("task_description", originalTask.task_description)
         .is("submission_date", null);

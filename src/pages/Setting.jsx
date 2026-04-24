@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, User, Building, X, Save, Edit, Trash2, Settings, Search, ChevronDown, Calendar, RefreshCw, Image } from 'lucide-react';
+import { Plus, User, Building, X, Save, Edit, Trash2, Settings, Search, ChevronDown, Calendar, RefreshCw, Image, ClipboardList, Layers } from 'lucide-react';
 import AdminLayout from '../components/layout/AdminLayout';
 import { useDispatch, useSelector } from 'react-redux';
-import { createDepartment, createUser, deleteUser, departmentOnlyDetails, givenByDetails, departmentDetails, updateDepartment, updateUser, userDetails, customDropdownDetails, createCustomDropdown, deleteCustomDropdown, createAssignFrom, deleteDepartment, deleteAssignFrom, updateCustomDropdown, updateAssignFrom, createMachineEntries, uploadProfileImage } from '../redux/slice/settingSlice';
+import { createShop, createUser, deleteUser, shopOnlyDetails, givenByDetails, shopDetails, updateShop, updateUser, userDetails, customDropdownDetails, createCustomDropdown, deleteCustomDropdown, createAssignFrom, deleteShop, deleteAssignFrom, updateCustomDropdown, updateAssignFrom, createMachineEntries, uploadProfileImage, fetchMasterTasksAll, createMasterTask, updateMasterTask, deleteMasterTask, fetchLevelsAll, createLevel, updateLevel, deleteLevel } from '../redux/slice/settingSlice';
 import { uploadPartImageApi } from '../redux/api/settingApi';
 import supabase from '../SupabaseClient';
 import CalendarComponent from '../components/CalendarComponent';
@@ -24,16 +24,16 @@ const Setting = () => {
   const { showToast } = useMagicToast();
   const [activeTab, setActiveTab] = useState('users');
   const [showUserModal, setShowUserModal] = useState(false);
-  const [showDeptModal, setShowDeptModal] = useState(false);
+  const [showShopModal, setShowShopModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
-  const [currentDeptId, setCurrentDeptId] = useState(null);
+  const [currentShopId, setCurrentShopId] = useState(null);
   const [usernameFilter, setUsernameFilter] = useState('');
   const [usernameDropdownOpen, setUsernameDropdownOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const lastSyncError = useRef({ status: null, timestamp: 0 });
 
-  const [activeDeptSubTab, setActiveDeptSubTab] = useState('departments');
+  const [activeShopSubTab, setActiveShopSubTab] = useState('shops');
   // Leave Management State
   const [leavePersonId, setLeavePersonId] = useState('');
   const [leavePersonName, setLeavePersonName] = useState('');
@@ -62,7 +62,26 @@ const Setting = () => {
   const [profileFile, setProfileFile] = useState(null);
   const [profilePreview, setProfilePreview] = useState(null);
 
-  const { userData, department, departmentsOnly, givenBy, customDropdowns, loading, error } = useSelector((state) => state.setting);
+  const [activeAutomateSubTab, setActiveAutomateSubTab] = useState('masterTasks');
+  const [showMasterTaskModal, setShowMasterTaskModal] = useState(false);
+  const [showLevelModal, setShowLevelModal] = useState(false);
+  const [currentMasterTaskId, setCurrentMasterTaskId] = useState(null);
+  const [currentLevelId, setCurrentLevelId] = useState(null);
+
+  const [masterTaskForm, setMasterTaskForm] = useState({
+    shop_name: '',
+    level_name: '',
+    task_description: '',
+    frequency: 'Daily',
+    duration: '',
+    require_attachment: false
+  });
+
+  const [levelForm, setLevelForm] = useState({
+    level_name: ''
+  });
+
+  const { userData, shops, shopsOnly, givenBy, customDropdowns, masterTasks, levels, loading, error } = useSelector((state) => state.setting);
   const dispatch = useDispatch();
 
   useEffect(() => {
@@ -189,8 +208,8 @@ const Setting = () => {
     // Initial fetch of device logs
     fetchDeviceLogsAndUpdateStatus();
 
-    // Fetch departments and dropdowns on mount
-    dispatch(departmentDetails());
+    // Fetch shops and dropdowns on mount
+    dispatch(shopDetails());
     dispatch(customDropdownDetails());
     dispatch(givenByDetails()); // Fetch givenBy details on mount
 
@@ -204,6 +223,10 @@ const Setting = () => {
   // Add manual refresh button handler
   const handleManualRefresh = () => {
     fetchDeviceLogsAndUpdateStatus();
+    if (activeTab === 'automate') {
+      dispatch(fetchMasterTasksAll());
+      dispatch(fetchLevelsAll());
+    }
   };
 
   const handleUsernameFilterSelect = (username) => {
@@ -224,9 +247,17 @@ const Setting = () => {
     if (activeTab === 'users') {
       resetUserForm();
       setShowUserModal(true);
-    } else if (activeTab === 'departments' || activeTab === 'categories') {
-      resetDeptForm();
-      setShowDeptModal(true);
+    } else if (activeTab === 'shops' || activeTab === 'categories') {
+      resetShopForm();
+      setShowShopModal(true);
+    } else if (activeTab === 'automate') {
+      if (activeAutomateSubTab === 'masterTasks') {
+        resetMasterTaskForm();
+        setShowMasterTaskModal(true);
+      } else {
+        resetLevelForm();
+        setShowLevelModal(true);
+      }
     }
     // No action for leave tab
   };
@@ -370,7 +401,7 @@ const Setting = () => {
             description: task.task_description || task.tasks || task.title || task.issue_description,
             startDate: (task.task_start_date || task.planned_date || task.created_at) ? new Date(task.task_start_date || task.planned_date || task.created_at).toLocaleDateString('en-IN') : 'N/A',
             givenBy: task.given_by || task.filled_by || 'Admin',
-            department: task.department,
+            shop: task.shop,
             taskType: task._table
           });
         }
@@ -418,16 +449,20 @@ const Setting = () => {
     setActiveTab(tab);
     if (tab === 'users') {
       dispatch(userDetails());
-      dispatch(departmentOnlyDetails());
-    } else if (tab === 'departments') {
-      // Fetch data based on activeDeptSubTab
-      if (activeDeptSubTab === 'departments') {
-        dispatch(departmentDetails());
-      } else if (activeDeptSubTab === 'givenBy') {
+      dispatch(shopOnlyDetails());
+    } else if (tab === 'shops') {
+      // Fetch data based on activeShopSubTab
+      if (activeShopSubTab === 'shops') {
+        dispatch(shopDetails());
+      } else if (activeShopSubTab === 'givenBy') {
         dispatch(givenByDetails());
       }
     } else if (tab === 'categories') {
       dispatch(customDropdownDetails());
+    } else if (tab === 'automate') {
+      dispatch(fetchMasterTasksAll());
+      dispatch(fetchLevelsAll());
+      dispatch(shopDetails());
     }
   };
 
@@ -444,7 +479,7 @@ const Setting = () => {
   //     username: 'john_doe',
   //     email: 'john@example.com',
   //     password: '********',
-  //     department: 'IT',
+  //     shop: 'IT',
   //     givenBy: 'admin',
   //     phone: '1234567890',
   //     role: 'user',
@@ -455,7 +490,7 @@ const Setting = () => {
   //     username: 'jane_smith',
   //     email: 'jane@example.com',
   //     password: '********',
-  //     department: 'HR',
+  //     shop: 'HR',
   //     givenBy: 'admin',
   //     phone: '0987654321',
   //     role: 'admin',
@@ -463,7 +498,7 @@ const Setting = () => {
   //   }
   // ]);
 
-  // const [departments, setDepartments] = useState([
+  // const [shops, setShops] = useState([
   //   { id: '1', name: 'IT', givenBy: 'super_admin' },
   //   { id: '2', name: 'HR', givenBy: 'super_admin' },
   //   { id: '3', name: 'Finance', givenBy: 'admin' }
@@ -478,15 +513,16 @@ const Setting = () => {
     employee_id: '',
     role: 'user',
     status: 'active',
-    department: '',
+    shop: '',
     user_access: '',
     Designation: '',
     profile_image: '',
     reported_by: '',
-    can_self_assign: false
+    can_self_assign: false,
+    task_level: ''
   });
 
-  const [deptForm, setDeptForm] = useState({
+  const [shopForm, setShopForm] = useState({
     name: '',
     givenBy: '',
     partName: '',
@@ -521,7 +557,7 @@ const Setting = () => {
 
   useEffect(() => {
     dispatch(userDetails());
-    dispatch(departmentDetails()); // Fetch departments on mount
+    dispatch(shopDetails()); // Fetch shops on mount
     dispatch(givenByDetails()); // Fetch givenBy details on mount
     dispatch(customDropdownDetails()); // Fetch custom dropdowns on mount
   }, [dispatch])
@@ -546,11 +582,12 @@ const Setting = () => {
     const newUser = {
       ...userForm,
       employee_id: generatedEmpId,
-      user_access: userForm.user_access || userForm.department,
-      department: userForm.department,
+      user_access: userForm.user_access || userForm.shop,
+      shop_name: userForm.shop,
       profile_image: imageUrl,
       reported_by: userForm.reported_by,
-      can_self_assign: userForm.can_self_assign
+      can_self_assign: userForm.can_self_assign,
+      task_level: userForm.task_level
     };
 
     try {
@@ -593,15 +630,16 @@ const Setting = () => {
       employee_id: userForm.employee_id,
       role: userForm.role,
       status: userForm.status,
-      user_access: userForm.user_access || userForm.department,
-      department: userForm.department,
+      user_access: userForm.user_access || userForm.shop,
+      shop_name: userForm.shop,
       Designation: userForm.Designation || null,
       profile_image: imageUrl,
       leave_date: userForm.leave_date || null,
       leave_end_date: userForm.leave_end_date || null,
       remark: userForm.remark || null,
       reported_by: userForm.reported_by,
-      can_self_assign: userForm.can_self_assign
+      can_self_assign: userForm.can_self_assign,
+      task_level: userForm.task_level
     };
 
     try {
@@ -626,18 +664,18 @@ const Setting = () => {
     }
   };
 
-  const handleUpdateDepartment = async (e) => {
+  const handleUpdateShop = async (e) => {
     e.preventDefault();
 
     if (activeTab === 'categories') {
       try {
         await dispatch(updateCustomDropdown({
-          id: currentDeptId,
+          id: currentShopId,
           category: 'Machine Name', // Force Machine Name category
-          value: deptForm.givenBy
+          value: shopForm.givenBy
         })).unwrap();
-        resetDeptForm();
-        setShowDeptModal(false);
+        resetShopForm();
+        setShowShopModal(false);
         dispatch(customDropdownDetails()); // Explicitly refresh custom dropdowns
       } catch (error) {
         console.error('Error updating category:', error);
@@ -645,35 +683,35 @@ const Setting = () => {
       return;
     }
 
-    if (activeTab === 'departments') {
-      if (activeDeptSubTab === 'departments') {
-        const updatedDept = {
-          department: deptForm.name,
-          given_by: deptForm.givenBy
+    if (activeTab === 'shops') {
+      if (activeShopSubTab === 'shops') {
+        const updatedShop = {
+          shop: shopForm.name,
+          given_by: shopForm.givenBy
         };
         try {
-          await dispatch(updateDepartment({ id: currentDeptId, updatedDept })).unwrap();
+          await dispatch(updateShop({ id: currentShopId, updatedShop })).unwrap();
 
           // Also ensure it exists in assign_from table
-          if (deptForm.givenBy) {
+          if (shopForm.givenBy) {
             try {
-              await dispatch(createAssignFrom({ given_by: deptForm.givenBy })).unwrap();
+              await dispatch(createAssignFrom({ given_by: shopForm.givenBy })).unwrap();
             } catch (e) { }
           }
-          resetDeptForm();
-          setShowDeptModal(false);
-          dispatch(departmentDetails()); // Explicitly refresh department details
+          resetShopForm();
+          setShowShopModal(false);
+          dispatch(shopDetails()); // Explicitly refresh shop details
         } catch (error) {
-          console.error('Error updating department:', error);
+          console.error('Error updating shop:', error);
         }
-      } else if (activeDeptSubTab === 'givenBy') {
+      } else if (activeShopSubTab === 'givenBy') {
         try {
           await dispatch(updateAssignFrom({
-            id: currentDeptId,
-            given_by: deptForm.name
+            id: currentShopId,
+            given_by: shopForm.name
           })).unwrap();
-          resetDeptForm();
-          setShowDeptModal(false);
+          resetShopForm();
+          setShowShopModal(false);
           dispatch(givenByDetails()); // Explicitly refresh givenBy details
         } catch (error) {
           console.error('Error updating assign_from:', error);
@@ -682,13 +720,13 @@ const Setting = () => {
     }
   };
 
-  const handleAddDepartment = async (e) => {
+  const handleAddShop = async (e) => {
     e.preventDefault();
 
     if (activeTab === 'categories') {
       try {
-        const machineName = deptForm.givenBy;
-        const machineArea = deptForm.machineArea;
+        const machineName = shopForm.givenBy;
+        const machineArea = shopForm.machineArea;
         const parts = inputParts.filter(p => p.name.trim() !== '');
 
         if (!machineName) {
@@ -727,8 +765,8 @@ const Setting = () => {
 
         await dispatch(createMachineEntries(entries)).unwrap();
 
-        resetDeptForm();
-        setShowDeptModal(false);
+        resetShopForm();
+        setShowShopModal(false);
         dispatch(customDropdownDetails());
         showToast("Machine saved successfully!", "success");
       } catch (error) {
@@ -738,37 +776,104 @@ const Setting = () => {
       return;
     }
 
-    if (activeTab === 'departments') {
-      if (activeDeptSubTab === 'givenBy') {
+    if (activeTab === 'shops') {
+      if (activeShopSubTab === 'givenBy') {
         try {
-          await dispatch(createAssignFrom({ given_by: deptForm.name })).unwrap(); // Changed to createAssignFrom
-          resetDeptForm();
-          setShowDeptModal(false);
+          await dispatch(createAssignFrom({ given_by: shopForm.name })).unwrap();
+          resetShopForm();
+          setShowShopModal(false);
           dispatch(givenByDetails()); // Explicitly refresh givenBy details
         } catch (error) {
           console.error('Error adding assign_from:', error);
         }
-      } else { // activeDeptSubTab === 'departments'
+      } else { // activeShopSubTab === 'shops'
         try {
-          await dispatch(createDepartment({
-            department: deptForm.name,
-            given_by: deptForm.givenBy
-          })).unwrap(); // Pass department and given_by
+          await dispatch(createShop({
+            shop: shopForm.name,
+            given_by: shopForm.givenBy
+          })).unwrap();
 
           // Also ensure it exists in assign_from table
-          if (deptForm.givenBy) {
+          if (shopForm.givenBy) {
             try {
-              await dispatch(createAssignFrom({ given_by: deptForm.givenBy })).unwrap();
+              await dispatch(createAssignFrom({ given_by: shopForm.givenBy })).unwrap();
             } catch (e) { }
           }
 
-          resetDeptForm();
-          setShowDeptModal(false);
-          dispatch(departmentDetails()); // Explicitly refresh department details
+          resetShopForm();
+          setShowShopModal(false);
+          dispatch(shopDetails()); // Explicitly refresh shop details
         } catch (error) {
-          console.error('Error adding department:', error);
+          console.error('Error adding shop:', error);
         }
       }
+    }
+  };
+
+  const resetMasterTaskForm = () => {
+    setMasterTaskForm({
+      shop_name: '',
+      level_name: '',
+      task_description: '',
+      frequency: 'Daily',
+      duration: '',
+      require_attachment: false
+    });
+    setIsEditing(false);
+    setCurrentMasterTaskId(null);
+  };
+
+  const resetLevelForm = () => {
+    setLevelForm({ level_name: '' });
+    setIsEditing(false);
+    setCurrentLevelId(null);
+  };
+
+  const handleAddMasterTask = async (e) => {
+    e.preventDefault();
+    try {
+      await dispatch(createMasterTask(masterTaskForm)).unwrap();
+      setShowMasterTaskModal(false);
+      resetMasterTaskForm();
+      showToast("Master task created!", "success");
+    } catch (err) {
+      showToast("Failed to create master task", "error");
+    }
+  };
+
+  const handleUpdateMasterTask = async (e) => {
+    e.preventDefault();
+    try {
+      await dispatch(updateMasterTask({ id: currentMasterTaskId, updates: masterTaskForm })).unwrap();
+      setShowMasterTaskModal(false);
+      resetMasterTaskForm();
+      showToast("Master task updated!", "success");
+    } catch (err) {
+      showToast("Failed to update master task", "error");
+    }
+  };
+
+  const handleAddLevel = async (e) => {
+    e.preventDefault();
+    try {
+      await dispatch(createLevel(levelForm)).unwrap();
+      setShowLevelModal(false);
+      resetLevelForm();
+      showToast("Level created!", "success");
+    } catch (err) {
+      showToast("Failed to create level", "error");
+    }
+  };
+
+  const handleUpdateLevel = async (e) => {
+    e.preventDefault();
+    try {
+      await dispatch(updateLevel({ id: currentLevelId, updates: levelForm })).unwrap();
+      setShowLevelModal(false);
+      resetLevelForm();
+      showToast("Level updated!", "success");
+    } catch (err) {
+      showToast("Failed to update level", "error");
     }
   };
 
@@ -844,7 +949,7 @@ const Setting = () => {
       password: '', // Leave empty when editing to keep current password
       phone: user.number || '',
       employee_id: user.employee_id || '',
-      department: user.department || '',
+      shop: user.shop_name || user.shop || '',
       user_access: user.user_access || '',
       role: user.role || 'user',
       status: user.status || 'active',
@@ -854,7 +959,8 @@ const Setting = () => {
       leave_end_date: user.leave_end_date ? user.leave_end_date.split('T')[0] : '',
       remark: user.remark || '',
       reported_by: user.reported_by || '',
-      can_self_assign: user.can_self_assign || false
+      can_self_assign: user.can_self_assign || false,
+      task_level: user.task_level || ''
     });
     setProfilePreview(user.profile_image || null);
     setProfileFile(null);
@@ -863,34 +969,34 @@ const Setting = () => {
     setShowUserModal(true);
   };
 
-  const handleEditDepartment = (deptId) => {
-    if (activeTab === 'departments' && activeDeptSubTab === 'departments') {
-      const dept = department.find(d => d.id === deptId);
-      setDeptForm({
-        name: dept.department,
-        givenBy: dept.given_by || ''
+  const handleEditShop = (shopId) => {
+    if (activeTab === 'shops' && activeShopSubTab === 'shops') {
+      const shopItem = shops.find(s => s.id === shopId);
+      setShopForm({
+        name: shopItem.shop,
+        givenBy: shopItem.given_by || ''
       });
-      setCurrentDeptId(deptId);
+      setCurrentShopId(shopId);
       setIsEditing(true); // Set editing mode
-      setShowDeptModal(true);
-    } else if (activeTab === 'departments' && activeDeptSubTab === 'givenBy') {
-      const item = givenBy.find(g => g.id === deptId); // Assuming givenBy items also have an 'id'
-      setDeptForm({
+      setShowShopModal(true);
+    } else if (activeTab === 'shops' && activeShopSubTab === 'givenBy') {
+      const item = givenBy.find(g => g.id === shopId); // Assuming givenBy items also have an 'id'
+      setShopForm({
         name: item.given_by,
         givenBy: '' // givenBy table only has 'given_by' field, no secondary field
       });
-      setCurrentDeptId(deptId);
+      setCurrentShopId(shopId);
       setIsEditing(true);
-      setShowDeptModal(true);
+      setShowShopModal(true);
     } else if (activeTab === 'categories') {
-      const item = customDropdowns.find(c => c.id === deptId);
-      setDeptForm({
+      const item = customDropdowns.find(c => c.id === shopId);
+      setShopForm({
         name: item.category,
         givenBy: item.value
       });
-      setCurrentDeptId(deptId);
+      setCurrentShopId(shopId);
       setIsEditing(true);
-      setShowDeptModal(true);
+      setShowShopModal(true);
     }
   };
   // const handleUpdateUser = (e) => {
@@ -911,7 +1017,7 @@ const Setting = () => {
       password: '',
       phone: '',
       employee_id: '',
-      department: '',
+      shop: '',
       user_access: '',
       givenBy: '',
       role: 'user',
@@ -922,7 +1028,8 @@ const Setting = () => {
       leave_end_date: '',
       remark: '',
       reported_by: '',
-      can_self_assign: false
+      can_self_assign: false,
+      task_level: ''
     });
     setProfileFile(null);
     setProfilePreview(null);
@@ -930,27 +1037,27 @@ const Setting = () => {
     setCurrentUserId(null);
   };
 
-  // Department form handlers
-  const handleDeptInputChange = (e) => {
+  // Shop form handlers
+  const handleShopInputChange = (e) => {
     const { name, value } = e.target;
-    setDeptForm(prev => ({ ...prev, [name]: value }));
+    setShopForm(prev => ({ ...prev, [name]: value }));
   };
 
-  // const handleAddDepartment = (e) => {
+  // const handleAddShop = (e) => {
   //   e.preventDefault();
   //   const newDept = {
   //     ...deptForm,
-  //     id: (departments.length + 1).toString()
+  //     id: (shops.length + 1).toString()
   //   };
-  //   setDepartments([...departments, newDept]);
+  //   setShops([...shops, newDept]);
   //   resetDeptForm();
   //   setShowDeptModal(false);
   // };
 
 
-  //   const handleUpdateDepartment = (e) => {
+  //   const handleUpdateShop = (e) => {
   //     e.preventDefault();
-  //     setDepartments(departments.map(dept => 
+  //     setShops(shops.map(dept => 
   //       dept.id === currentDeptId ? { ...deptForm, id: currentDeptId } : dept
   //     ));
   //     resetDeptForm();
@@ -958,18 +1065,18 @@ const Setting = () => {
   //   };
 
 
-  // const handleDeleteDepartment = (deptId) => {
-  //   setDepartments(department.filter(dept => dept.id !== deptId));
+  // const handleDeleteShop = (deptId) => {
+  //   setShops(shop.filter(dept => dept.id !== deptId));
   // };
 
-  const resetDeptForm = () => {
-    setDeptForm({
+  const resetShopForm = () => {
+    setShopForm({
       name: '',
       givenBy: '',
       partName: '',
       machineArea: ''
     });
-    setCurrentDeptId(null);
+    setCurrentShopId(null);
     setIsEditing(false);
     setInputParts([{ name: '', file: null, preview: null }]);
   };
@@ -1022,9 +1129,10 @@ const Setting = () => {
             <div className="flex bg-gray-100/80 p-1 rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-max xscrol">
               {[
                 { id: 'users', label: 'Users', icon: User },
-                { id: 'departments', label: 'Departments', icon: Building, action: () => { dispatch(departmentDetails()); dispatch(givenByDetails()); } },
+                { id: 'shops', label: 'Shops', icon: Building, action: () => { dispatch(shopDetails()); dispatch(givenByDetails()); } },
                 { id: 'leave', label: 'Leave', icon: Calendar },
                 { id: 'categories', label: 'Machines', icon: Settings },
+                { id: 'automate', label: 'Automate', icon: ClipboardList },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1058,12 +1166,12 @@ const Setting = () => {
                 <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
               </button>
 
-              {(activeTab === 'users' || activeTab === 'departments' || activeTab === 'categories') && (
+              {(activeTab === 'users' || activeTab === 'shops' || activeTab === 'categories' || activeTab === 'automate') && (
                 <button
                   onClick={() => {
                     if (activeTab === 'categories') {
-                      resetDeptForm();
-                      setShowDeptModal(true);
+                      resetShopForm();
+                      setShowShopModal(true);
                     } else {
                       handleAddButtonClick();
                     }
@@ -1073,9 +1181,10 @@ const Setting = () => {
                   <Plus size={18} />
                   <span className="hidden sm:inline">
                     {activeTab === 'users' ? 'New User' :
-                      activeTab === 'departments' ?
-                        (activeDeptSubTab === 'departments' ? 'New Department' : 'New Assign From') :
-                        'New Machine'}
+                      activeTab === 'shops' ?
+                        (activeShopSubTab === 'shops' ? 'New Shop' : 'New Assign From') :
+                        activeTab === 'categories' ? 'New Machine' :
+                        (activeAutomateSubTab === 'masterTasks' ? 'New Master Task' : 'New Level')}
                   </span>
                   <span className="sm:hidden">Add</span>
                 </button>
@@ -1327,7 +1436,7 @@ const Setting = () => {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Task</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Department</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Shop</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Given By</th>
                       </tr>
                     </thead>
@@ -1375,7 +1484,7 @@ const Setting = () => {
                           <td className="px-4 py-3 text-xs text-gray-600 font-medium whitespace-nowrap">
                             {task.task_start_date ? new Date(task.task_start_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'}
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-600 font-medium truncate max-w-[100px]">{task.department || '—'}</td>
+                          <td className="px-4 py-3 text-xs text-gray-600 font-medium truncate max-w-[100px]">{task.shop || task.shop_name || '—'}</td>
                           <td className="px-4 py-3 text-xs text-gray-700 font-bold">{task.given_by || task.filled_by || '—'}</td>
                         </tr>
                       ))}
@@ -1452,7 +1561,7 @@ const Setting = () => {
                           Employee ID
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Department
+                          Shop
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Designation
@@ -1505,7 +1614,7 @@ const Setting = () => {
                             <div className="text-sm text-gray-900">{user?.employee_id || 'N/A'}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{user?.department || '—'}</div>
+                            <div className="text-sm text-gray-900">{user?.shop || user?.shop_name || '—'}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-purple-700 font-bold">{user?.Designation || '—'}</div>
@@ -1622,8 +1731,8 @@ const Setting = () => {
 
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
-                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Department</p>
-                              <p className="text-xs text-indigo-700 font-bold">{user?.department || '—'}</p>
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Shop</p>
+                              <p className="text-xs text-indigo-700 font-bold">{user?.shop || user?.shop_name || '—'}</p>
                             </div>
                             {user?.Designation && (
                               <div className="space-y-1">
@@ -1670,27 +1779,27 @@ const Setting = () => {
           </div>
         )}
 
-        {/* Departments Tab */}
-        {activeTab === 'departments' && (
+        {/* Shops Tab */}
+        {activeTab === 'shops' && (
           <div className="bg-white shadow rounded-lg overflow-hidden border border-purple-200">
             <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple px-4 py-4 md:px-6">
               <div className="flex flex-col sm:flex-row gap-4 justify-between items-center text-center sm:text-left">
-                <h2 className="text-lg font-bold text-purple-700">Department Management</h2>
+                <h2 className="text-lg font-bold text-purple-700">Shop Management</h2>
 
                 <div className="flex border border-purple-200 rounded-lg overflow-hidden bg-white shadow-sm">
                   <button
-                    className={`px-4 py-2 text-xs font-bold transition-all ${activeDeptSubTab === 'departments' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
+                    className={`px-4 py-2 text-xs font-bold transition-all ${activeShopSubTab === 'shops' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
                     onClick={() => {
-                      setActiveDeptSubTab('departments');
-                      dispatch(departmentDetails());
+                      setActiveShopSubTab('shops');
+                      dispatch(shopDetails());
                     }}
                   >
-                    Main Departments
+                    Main Shops
                   </button>
                   <button
-                    className={`px-4 py-2 text-xs font-bold border-l border-purple-100 transition-all ${activeDeptSubTab === 'givenBy' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
+                    className={`px-4 py-2 text-xs font-bold border-l border-purple-100 transition-all ${activeShopSubTab === 'givenBy' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
                     onClick={() => {
-                      setActiveDeptSubTab('givenBy');
+                      setActiveShopSubTab('givenBy');
                       dispatch(givenByDetails());
                     }}
                   >
@@ -1715,8 +1824,8 @@ const Setting = () => {
               </div>
             )}
 
-            {/* Departments Sub-tab - Show only department names */}
-            {activeDeptSubTab === 'departments' && !loading && (
+            {/* Shops Sub-tab - Show only shop names */}
+            {activeShopSubTab === 'shops' && !loading && (
               <div className="max-h-[calc(100vh-250px)] overflow-auto scrollbar-thin">
                 <div className="inline-block min-w-full align-middle">
                   <table className="min-w-full divide-y divide-gray-200">
@@ -1726,7 +1835,7 @@ const Setting = () => {
                           ID
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Department Name
+                          Shop Name
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
@@ -1734,23 +1843,23 @@ const Setting = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {department && department.length > 0 ? (
-                        department.map((dept, index) => (
-                          <tr key={`dept-${dept.id || index}`} className="hover:bg-gray-50">
+                      {shops && shops.length > 0 ? (
+                        shops.map((shopItem, index) => (
+                          <tr key={`shop-${shopItem.id || index}`} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{dept.department}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{shopItem.shop}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                               <div className="flex space-x-2 justify-end">
                                 <button
-                                  onClick={() => handleEditDepartment(dept.id)}
+                                  onClick={() => handleEditShop(shopItem.id)}
                                   className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"
                                 >
                                   <Edit size={16} />
                                 </button>
                                 <button
                                   onClick={() => {
-                                    if (window.confirm('Delete this department?')) {
-                                      dispatch(deleteDepartment(dept.id));
+                                    if (window.confirm('Delete this shop?')) {
+                                      dispatch(deleteShop(shopItem.id));
                                     }
                                   }}
                                   className="p-1 text-red-600 hover:bg-red-50 rounded-md"
@@ -1764,7 +1873,7 @@ const Setting = () => {
                       ) : (
                         <tr>
                           <td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500">
-                            No departments found
+                            No shops found
                           </td>
                         </tr>
                       )}
@@ -1775,7 +1884,7 @@ const Setting = () => {
             )}
 
             {/* Given By Sub-tab - Show only given_by values */}
-            {activeDeptSubTab === 'givenBy' && !loading && (
+            {activeShopSubTab === 'givenBy' && !loading && (
               <div className="h-[calc(100vh-275px)] overflow-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -1793,7 +1902,7 @@ const Setting = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.given_by}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex space-x-2 justify-end">
-                              <button onClick={() => handleEditDepartment(item.id)} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md">
+                              <button onClick={() => handleEditShop(item.id)} className="p-1 text-blue-600 hover:bg-blue-50 rounded-md">
                                 <Edit size={16} />
                               </button>
                               <button onClick={() => {
@@ -1883,11 +1992,11 @@ const Setting = () => {
                           <tbody className="bg-white divide-y divide-gray-200">
                             {machineNames.map((machineName, idx) => {
                               const data = machinesByName[machineName];
-                              const isExpanded = activeDeptSubTab === `expanded-${idx}`;
+                              const isExpanded = activeShopSubTab === `expanded-${idx}`;
 
                               return (
                                 <React.Fragment key={idx}>
-                                  <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setActiveDeptSubTab(isExpanded ? '' : `expanded-${idx}`)}>
+                                  <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setActiveShopSubTab(isExpanded ? '' : `expanded-${idx}`)}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 flex items-center gap-2">
                                       <ChevronDown size={16} className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                       {machineName}
@@ -1978,13 +2087,13 @@ const Setting = () => {
                       <div className="md:hidden space-y-4 p-4 bg-gray-50/50">
                         {machineNames.map((machineName, idx) => {
                           const data = machinesByName[machineName];
-                          const isExpanded = activeDeptSubTab === `expanded-mob-${idx}`;
+                          const isExpanded = activeShopSubTab === `expanded-mob-${idx}`;
 
                           return (
                             <div key={`machine-card-${idx}`} className="bg-white rounded-xl border border-indigo-100 shadow-sm overflow-hidden">
                               <div
                                 className="bg-indigo-50/50 px-4 py-3 border-b border-indigo-100 flex justify-between items-center cursor-pointer"
-                                onClick={() => setActiveDeptSubTab(isExpanded ? '' : `expanded-mob-${idx}`)}
+                                onClick={() => setActiveShopSubTab(isExpanded ? '' : `expanded-mob-${idx}`)}
                               >
                                 <div className="flex items-center gap-2">
                                   <ChevronDown size={16} className={`text-indigo-600 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -2071,6 +2180,129 @@ const Setting = () => {
                   );
                 })()}
               </div>
+            </div>
+          </div>
+        )}
+
+
+        {/* Automate Tab (Master Task Management) */}
+        {activeTab === 'automate' && (
+          <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-purple-100">
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-6 border-b border-purple-100">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-purple-900">Master Task Manager</h2>
+                  <p className="text-sm text-purple-600">Automate recurring checklist tasks by shop and level</p>
+                </div>
+
+                <div className="flex bg-white/50 p-1 rounded-xl border border-purple-100">
+                  <button
+                    onClick={() => setActiveAutomateSubTab('masterTasks')}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeAutomateSubTab === 'masterTasks' ? 'bg-purple-600 text-white shadow-sm' : 'text-purple-400 hover:text-purple-600'}`}
+                  >
+                    Master Tasks
+                  </button>
+                  <button
+                    onClick={() => setActiveAutomateSubTab('levels')}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeAutomateSubTab === 'levels' ? 'bg-purple-600 text-white shadow-sm' : 'text-purple-400 hover:text-purple-600'}`}
+                  >
+                    Levels
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {activeAutomateSubTab === 'masterTasks' ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-100">
+                    <thead>
+                      <tr className="bg-gray-50/50">
+                        <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Shop Name</th>
+                        <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Level</th>
+                        <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Description</th>
+                        <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Frequency</th>
+                        <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {masterTasks && masterTasks.length > 0 ? masterTasks.map((t) => (
+                        <tr key={t.id} className="hover:bg-gray-50/50 transition-all">
+                          <td className="px-6 py-4 text-sm font-bold text-gray-700">{t.shop || t.shop_name}</td>
+                          <td className="px-6 py-4">
+                            <span className="px-2 py-1 bg-purple-50 text-purple-600 text-[10px] font-black rounded uppercase">{t.level_name || t.level}</span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">{t.task_description}</td>
+                          <td className="px-6 py-4 text-sm text-gray-500 font-medium">{t.frequency}</td>
+                          <td className="px-6 py-4 text-right space-x-2">
+                            <button
+                              onClick={() => {
+                                setMasterTaskForm({ ...t });
+                                setCurrentMasterTaskId(t.id);
+                                setIsEditing(true);
+                                setShowMasterTaskModal(true);
+                              }}
+                              className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg transition-all"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm("Delete this master task?")) {
+                                  dispatch(deleteMasterTask(t.id));
+                                }
+                              }}
+                              className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-all"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan="5" className="px-6 py-20 text-center text-gray-400 text-sm font-medium">No master tasks configured. Click 'New Master Task' to start.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {levels && levels.length > 0 ? levels.map((l) => (
+                    <div key={l.id} className="bg-gray-50/50 border border-gray-100 p-4 rounded-2xl flex items-center justify-between group hover:border-purple-200 hover:bg-white transition-all shadow-sm hover:shadow-md">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-purple-600 shadow-sm border border-purple-50">
+                          <Layers size={18} />
+                        </div>
+                        <span className="font-black text-gray-700 text-sm">{l.level_name}</span>
+                      </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => {
+                            setLevelForm({ ...l });
+                            setCurrentLevelId(l.id);
+                            setIsEditing(true);
+                            setShowLevelModal(true);
+                          }}
+                          className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-lg"
+                        >
+                          <Edit size={14} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Delete this level? This may affect users and master tasks using it.")) {
+                              dispatch(deleteLevel(l.id));
+                            }
+                          }}
+                          className="p-2 text-red-400 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="col-span-full py-20 text-center text-gray-400 text-sm font-medium">No levels configured.</div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2249,20 +2481,20 @@ const Setting = () => {
                     </div>
 
                     <div className="space-y-2 md:col-span-2">
-                      <label htmlFor="department" className="block text-sm font-bold text-gray-700 ml-1">Department Assigned</label>
+                      <label htmlFor="shop" className="block text-sm font-bold text-gray-700 ml-1">Shop Assigned</label>
                       <select
-                        id="department"
-                        name="department"
-                        value={userForm.department}
+                        id="shop"
+                        name="shop"
+                        value={userForm.shop}
                         onChange={handleUserInputChange}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
                       >
-                        <option value="">Choose a department...</option>
-                        {department && department.length > 0 ? (
-                          [...new Set(department.map(dept => dept.department))]
+                        <option value="">Choose a shop...</option>
+                        {shops && shops.length > 0 ? (
+                          [...new Set(shops.map(s => s.shop))]
                             .filter(Boolean)
-                            .map((deptName, index) => (
-                              <option key={index} value={deptName}>{deptName}</option>
+                            .map((shopName, index) => (
+                              <option key={index} value={shopName}>{shopName}</option>
                             ))
                         ) : null}
                       </select>
@@ -2388,12 +2620,12 @@ const Setting = () => {
           </div>
         )}
 
-        {/* Department / Category Modal */}
-        {showDeptModal && (
+        {/* Shop / Category Modal */}
+        {showShopModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div
               className="absolute inset-0 bg-gray-900/40 backdrop-blur-md animate-in fade-in duration-300"
-              onClick={() => setShowDeptModal(false)}
+              onClick={() => setShowShopModal(false)}
             ></div>
 
             <div className="relative bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 border border-white/50 max-h-[90vh] flex flex-col">
@@ -2405,16 +2637,16 @@ const Setting = () => {
                     <h3 className="text-2xl font-black text-white tracking-tight">
                       {activeTab === 'categories'
                         ? (isEditing ? 'Refine Asset' : 'New Infrastructure')
-                        : (activeDeptSubTab === 'givenBy'
+                        : (activeShopSubTab === 'givenBy'
                           ? (isEditing ? 'Update Designation' : 'Create Designation')
-                          : (isEditing ? 'Update Department' : 'Create Department'))}
+                          : (isEditing ? 'Update Shop' : 'Create Shop'))}
                     </h3>
                     <p className="text-white/70 text-xs font-bold uppercase tracking-[0.2em] mt-1">
                       {activeTab === 'categories' ? 'Configure machine architecture' : 'Organize your workforce structure'}
                     </p>
                   </div>
                   <button
-                    onClick={() => setShowDeptModal(false)}
+                    onClick={() => setShowShopModal(false)}
                     className="p-2.5 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all hover:rotate-90"
                   >
                     <X size={22} />
@@ -2423,19 +2655,19 @@ const Setting = () => {
               </div>
 
               <div className="p-4 md:p-8 overflow-y-auto flex-1">
-                <form onSubmit={isEditing ? handleUpdateDepartment : handleAddDepartment} className="space-y-6">
+                <form onSubmit={isEditing ? handleUpdateShop : handleAddShop} className="space-y-6">
                   <div className="space-y-2">
                     <label htmlFor="givenBy" className="block text-sm font-bold text-gray-700 ml-1">
                       {activeTab === 'categories' ? 'Machine Name' :
-                        activeDeptSubTab === 'givenBy' ? 'Assign From Name' : 'Department Name'}
+                        activeShopSubTab === 'givenBy' ? 'Assign From Name' : 'Shop Name'}
                     </label>
                     {activeTab === 'categories' ? (
                       <input
                         type="text"
                         name="givenBy" // Using givenBy as the value field for categories
                         id="givenBy"
-                        value={deptForm.givenBy}
-                        onChange={handleDeptInputChange}
+                        value={shopForm.givenBy}
+                        onChange={handleShopInputChange}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
                         placeholder="Enter machine name..."
                       />
@@ -2444,16 +2676,16 @@ const Setting = () => {
                         type="text"
                         name="name"
                         id="name"
-                        value={deptForm.name}
-                        onChange={handleDeptInputChange}
+                        value={shopForm.name}
+                        onChange={handleShopInputChange}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-                        placeholder={activeDeptSubTab === 'givenBy' ? 'e.g. CEO' : 'e.g. Marketing'}
+                        placeholder={activeShopSubTab === 'givenBy' ? 'e.g. CEO' : 'e.g. Shop A'}
                       />
                     )}
                   </div>
 
 
-                  {deptForm.name === "Temperature" && (
+                  {shopForm.name === "Temperature" && (
                     <p className="text-xs text-amber-600 ml-1 mt-1 font-bold">
                       ⚠️ Temperature strictly uses: 'Low', 'Medium', 'High'
                     </p>
@@ -2543,8 +2775,8 @@ const Setting = () => {
                           type="text"
                           name="machineArea"
                           id="machineArea"
-                          value={deptForm.machineArea}
-                          onChange={handleDeptInputChange}
+                          value={shopForm.machineArea}
+                          onChange={handleShopInputChange}
                           className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
                           placeholder="Enter machine area..."
                         />
@@ -2558,7 +2790,7 @@ const Setting = () => {
                   <div className="flex justify-end gap-3 pt-6 border-t border-gray-50 mt-4">
                     <button
                       type="button"
-                      onClick={() => setShowDeptModal(false)}
+                      onClick={() => setShowShopModal(false)}
                       className="px-8 py-3 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-all active:scale-95"
                     >
                       Cancel
@@ -2569,8 +2801,8 @@ const Setting = () => {
                     >
                       <Save size={16} strokeWidth={3} />
                       {activeTab === 'categories'
-                        ? (currentDeptId ? 'Update Asset' : 'Save Asset')
-                        : (currentDeptId ? 'Update Entry' : 'Save Entry')}
+                        ? (currentShopId ? 'Update Asset' : 'Save Asset')
+                        : (currentShopId ? 'Update Entry' : 'Save Entry')}
                     </button>
                   </div>
                 </form>
@@ -2620,6 +2852,49 @@ const Setting = () => {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-3">
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Task Level (Checklist)</label>
+                    <div className="relative group">
+                      <Layers size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-600 transition-colors" />
+                      <select
+                        name="task_level"
+                        value={userForm.task_level}
+                        onChange={handleUserInputChange}
+                        className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 outline-none transition-all text-sm font-bold appearance-none hover:bg-white"
+                      >
+                        <option value="">No Level assigned</option>
+                        {levels.map((l, i) => (
+                          <option key={i} value={l.level_name}>{l.level_name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 mt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white rounded-lg text-indigo-600 shadow-sm border border-indigo-100">
+                        <Settings size={18} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Self-Assign</p>
+                        <p className="text-[10px] text-indigo-400 font-bold">Allow user to create own tasks</p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="can_self_assign"
+                        checked={userForm.can_self_assign}
+                        onChange={(e) => setUserForm(prev => ({ ...prev, can_self_assign: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
+                </div>
+
                 <div className="flex flex-col gap-3">
                   <button
                     type="button"
@@ -2646,6 +2921,160 @@ const Setting = () => {
             </div>
           </div>
         )}
+        {/* Master Task Modal */}
+        {showMasterTaskModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-md animate-in fade-in" onClick={() => setShowMasterTaskModal(false)}></div>
+            <div className="relative bg-white rounded-[2.5rem] shadow-2xl max-w-xl w-full overflow-hidden animate-in zoom-in-95 border border-white/50 flex flex-col">
+              <div className="bg-gradient-to-br from-purple-600 to-indigo-600 px-10 py-8 relative">
+                <div className="relative z-10 flex justify-between items-center">
+                  <div>
+                    <h3 className="text-2xl font-black text-white tracking-tight">{isEditing ? 'Edit Template' : 'New Task Template'}</h3>
+                    <p className="text-white/70 text-xs font-bold uppercase tracking-[0.2em] mt-1">Configure automated task settings</p>
+                  </div>
+                  <button onClick={() => setShowMasterTaskModal(false)} className="p-2.5 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all"><X size={22} /></button>
+                </div>
+              </div>
+              <div className="p-10 overflow-y-auto">
+                <form onSubmit={isEditing ? handleUpdateMasterTask : handleAddMasterTask} className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Shop Name</label>
+                      <select
+                        value={masterTaskForm.shop_name}
+                        onChange={(e) => setMasterTaskForm({ ...masterTaskForm, shop_name: e.target.value })}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm font-bold"
+                        required
+                      >
+                        <option value="">Select Shop</option>
+                        {shops && [...new Set(shops.map(s => s.shop))].map((s, i) => (
+                          <option key={i} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Task Level</label>
+                      <select
+                        value={masterTaskForm.level_name}
+                        onChange={(e) => setMasterTaskForm({ ...masterTaskForm, level_name: e.target.value })}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm font-bold"
+                        required
+                      >
+                        <option value="">Select Level</option>
+                        {levels.map((l, i) => (
+                          <option key={i} value={l.level_name}>{l.level_name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Task Description</label>
+                    <textarea
+                      value={masterTaskForm.task_description}
+                      onChange={(e) => setMasterTaskForm({ ...masterTaskForm, task_description: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm font-medium resize-none"
+                      rows="3"
+                      placeholder="What needs to be done?"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Frequency</label>
+                      <select
+                        value={masterTaskForm.frequency}
+                        onChange={(e) => setMasterTaskForm({ ...masterTaskForm, frequency: e.target.value })}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm font-bold"
+                      >
+                        <option value="Daily">Daily</option>
+                        <option value="Weekly">Weekly</option>
+                        <option value="Monthly">Monthly</option>
+                        <option value="One Time (No Recurrence)">One Time</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Duration (Mins)</label>
+                      <input
+                        type="number"
+                        value={masterTaskForm.duration}
+                        onChange={(e) => setMasterTaskForm({ ...masterTaskForm, duration: e.target.value })}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm font-bold"
+                        placeholder="e.g. 30"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-purple-50 rounded-2xl border border-purple-100">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white rounded-lg text-purple-600 shadow-sm border border-purple-100">
+                        <Image size={18} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-purple-900 uppercase tracking-widest">Require Image</p>
+                        <p className="text-[10px] text-purple-400 font-bold">Attachment mandatory on submission</p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={masterTaskForm.require_attachment}
+                        onChange={(e) => setMasterTaskForm({ ...masterTaskForm, require_attachment: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-6 border-t border-gray-50">
+                    <button type="button" onClick={() => setShowMasterTaskModal(false)} className="px-8 py-3 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-gray-600">Cancel</button>
+                    <button type="submit" className="px-10 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-black rounded-2xl hover:shadow-lg transition-all flex items-center gap-2 uppercase tracking-widest">
+                      <Save size={16} strokeWidth={3} /> {isEditing ? 'Save Template' : 'Create Template'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Level Modal */}
+        {showLevelModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-md animate-in fade-in" onClick={() => setShowLevelModal(false)}></div>
+            <div className="relative bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 border border-white/50">
+              <div className="bg-gradient-to-br from-indigo-600 to-blue-600 px-8 py-6 relative">
+                <div className="relative z-10 flex justify-between items-center">
+                  <div>
+                    <h3 className="text-xl font-black text-white tracking-tight">{isEditing ? 'Edit Level' : 'New Level'}</h3>
+                  </div>
+                  <button onClick={() => setShowLevelModal(false)} className="p-2 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all"><X size={18} /></button>
+                </div>
+              </div>
+              <div className="p-8">
+                <form onSubmit={isEditing ? handleUpdateLevel : handleAddLevel} className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Level Name</label>
+                    <input
+                      type="text"
+                      value={levelForm.level_name}
+                      onChange={(e) => setLevelForm({ level_name: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm font-bold"
+                      placeholder="e.g. L1, Senior, Maintenance..."
+                      required
+                    />
+                  </div>
+                  <div className="flex justify-end gap-3 pt-4">
+                    <button type="button" onClick={() => setShowLevelModal(false)} className="px-6 py-2 text-xs font-black text-gray-400 uppercase tracking-widest">Cancel</button>
+                    <button type="submit" className="px-8 py-2 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-all uppercase tracking-widest">Save Level</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </AdminLayout >
   );

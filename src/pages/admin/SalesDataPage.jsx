@@ -7,7 +7,7 @@ import { checklistData, checklistHistoryData, updateChecklist } from "../../redu
 import { postChecklistAdminDoneAPI } from "../../redux/api/checkListApi"
 import { uniqueDoerNameData } from "../../redux/slice/assignTaskSlice";
 
-export default function AccountDataPage({ showLayout = true, departmentFilter = "" }) {
+export default function AccountDataPage({ showLayout = true, shopFilter = "" }) {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedItems, setSelectedItems] = useState(new Set())
   const [additionalData, setAdditionalData] = useState({})
@@ -87,7 +87,7 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
         const img = uploadedImages[id];
         return {
           taskId: item.id,
-          department: item.department,
+          shop: item.shop,
           givenBy: item.given_by,
           name: item.name,
           taskDescription: item.task_description, // Map correctly
@@ -139,8 +139,8 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
       const lower = searchTerm.toLowerCase();
       rawData = rawData.filter(item => Object.values(item).some(v => v && String(v).toLowerCase().includes(lower)));
     }
-    if (departmentFilter && departmentFilter !== 'all') {
-      rawData = rawData.filter(item => item.department === departmentFilter);
+    if (shopFilter && shopFilter !== 'all') {
+      rawData = rawData.filter(item => item.shop === shopFilter);
     }
 
     if (showHistory) return rawData;
@@ -175,7 +175,7 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
       }
       return true;
     });
-  }, [checklist, history, searchTerm, showHistory, departmentFilter]);
+  }, [checklist, history, searchTerm, showHistory, shopFilter]);
 
   // Infinite Scroll
   const tableRef = useRef(null);
@@ -285,7 +285,8 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
                   )}
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Task ID</th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Department Name</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Shop Name</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Level</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Given By</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Name</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[250px]">Task Description</th>
@@ -334,7 +335,10 @@ export default function AccountDataPage({ showLayout = true, departmentFilter = 
                       #{item.id}
                     </td>
                     <td className="px-3 py-4 text-sm text-gray-600 whitespace-nowrap align-top">
-                      {item.department || "-"}
+                      {item.shop || item.shop_name || "-"}
+                    </td>
+                    <td className="px-3 py-4 text-sm text-gray-600 whitespace-nowrap align-top">
+                      {item.task_level || "-"}
                     </td>
                     <td className="px-3 py-4 text-sm text-gray-600 whitespace-nowrap align-top">
                       {item.given_by || "-"}

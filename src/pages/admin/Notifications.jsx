@@ -85,7 +85,7 @@ export default function Notifications() {
                   </span>
                 )}
               </div>
-              Notifications <span className="text-purple-600">Hub</span>
+              Announcements <span className="text-purple-600">Hub</span>
               {list.filter(n => !n.isRead).length > 0 && (
                 <span className="ml-2 px-3 py-1 bg-red-100 text-red-600 rounded-full text-xs font-black animate-pulse uppercase tracking-widest">
                   {list.filter(n => !n.isRead).length} New
@@ -111,14 +111,14 @@ export default function Notifications() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 grayscale opacity-50">
               <Loader2 className="animate-spin text-purple-600 mb-4" size={48} />
-              <p className="font-bold text-gray-400">Loading notifications...</p>
+              <p className="font-bold text-gray-400">Loading announcements...</p>
             </div>
           ) : list.length === 0 ? (
             <div className="bg-white/60 backdrop-blur-md rounded-3xl p-12 border border-gray-100 text-center shadow-sm">
               <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-300">
                 <Bell size={32} />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-1">No notifications yet</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-1">No announcements yet</h3>
               <p className="text-gray-500">When announcements are made, they will appear here.</p>
             </div>
           ) : (
@@ -258,7 +258,7 @@ export default function Notifications() {
                       disabled={isSubmitting}
                       className="px-6 py-2.5 bg-[#6333ea] hover:bg-[#5229c7] text-white rounded-lg font-bold text-sm shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2"
                     >
-                      {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : "Save Notification"}
+                      {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : "Save Announcement"}
                     </button>
                   </div>
                 </form>

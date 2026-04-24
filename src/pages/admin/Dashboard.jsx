@@ -19,8 +19,8 @@ import {
 } from "../../redux/slice/dashboardSlice.js"
 import {
   fetchDashboardDataApi,
-  getUniqueDepartmentsApi,
-  getStaffNamesByDepartmentApi,
+  getUniqueShopsApi,
+  getStaffNamesByShopApi,
   fetchChecklistDataByDateRangeApi,
   getChecklistDateRangeStatsApi
 } from "../../redux/api/dashboardApi.js"
@@ -50,12 +50,12 @@ export default function AdminDashboard() {
   const [hasMoreData, setHasMoreData] = useState(true)
   const [allTasks, setAllTasks] = useState([])
   const [batchSize] = useState(1000)
-  const [departmentFilter, setDepartmentFilter] = useState("all")
-  const [availableDepartments, setAvailableDepartments] = useState([])
+  const [shopFilter, setShopFilter] = useState("all")
+  const [availableShops, setAvailableShops] = useState([])
   const [mainTab, setMainTab] = useState("default") // "default", "maintenance", "repair", "ea"
 
-  // State for department data
-  const [departmentData, setDepartmentData] = useState({
+  // State for shop data
+  const [shopData, setShopData] = useState({
     allTasks: [],
     staffMembers: [],
     totalTasks: 0,
@@ -103,7 +103,7 @@ export default function AdminDashboard() {
       try {
         setIsLoadingMore(true);
 
-        if (mainTab === 'maintenance' || departmentFilter === 'Maintenance') {
+        if (mainTab === 'maintenance' || shopFilter === 'Maintenance') {
           // For maintenance, we'll fetch all and filter in processFilteredData or use specific API
           // For now, let's use the standard fetch but it will be filtered by processFilteredData
           const result = await fetchAllMaintenanceTasksForDashboard(1, batchSize);
@@ -121,7 +121,7 @@ export default function AdminDashboard() {
           });
 
           await processFilteredData(filteredData, null);
-        } else if (mainTab === 'repair' || departmentFilter === 'Repair') {
+        } else if (mainTab === 'repair' || shopFilter === 'Repair') {
           const result = await fetchAllRepairTasks(1, batchSize);
           const data = result.data || [];
 
@@ -139,7 +139,7 @@ export default function AdminDashboard() {
             startDate,
             endDate,
             dashboardStaffFilter,
-            departmentFilter,
+            shopFilter,
             1,
             batchSize,
             'all'
@@ -150,14 +150,14 @@ export default function AdminDashboard() {
             startDate,
             endDate,
             dashboardStaffFilter,
-            departmentFilter
+            shopFilter
           );
 
           // Process the filtered data
           await processFilteredData(filteredData, stats);
         } else {
           // For delegation, use the existing logic with date filtering
-          await fetchDepartmentDataWithDateRange(startDate, endDate);
+          await fetchShopDataWithDateRange(startDate, endDate);
         }
       } catch (error) {
         console.error("Error fetching date range data:", error);
@@ -180,7 +180,7 @@ export default function AdminDashboard() {
       });
 
       // Reload original data without date filter
-      fetchDepartmentData(1, false);
+      fetchShopData(1, false);
     }
   };
 
@@ -315,8 +315,8 @@ export default function AdminDashboard() {
       completionRate: totalTasks > 0 ? ((completedTasks / totalTasks) * 100).toFixed(1) : 0
     };
 
-    // Update department data with filtered results
-    setDepartmentData(prev => ({
+    // Update shop data with filtered results
+    setShopData(prev => ({
       ...prev,
       allTasks: processedTasks,
       totalTasks: finalStats.totalTasks,
@@ -338,9 +338,9 @@ export default function AdminDashboard() {
     });
   };
 
-  const fetchDepartmentDataWithDateRange = async (startDate, endDate, page = 1, append = false) => {
+  const fetchShopDataWithDateRange = async (startDate, endDate, page = 1, append = false) => {
     try {
-      const data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', departmentFilter);
+      const data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', shopFilter);
 
       // Filter data by date range on client side
       const start = new Date(startDate);
@@ -501,20 +501,20 @@ export default function AdminDashboard() {
     return date.getTime() === tomorrow.getTime()
   }
 
-  const fetchDepartmentData = async (page = 1, append = false) => {
+  const fetchShopData = async (page = 1, append = false) => {
     try {
       setIsLoadingMore(true);
       if (page === 1) {
         setHasMoreData(true);
         if (!append) {
-          setDepartmentData(prev => ({ ...prev, allTasks: [] }));
+          setShopData(prev => ({ ...prev, allTasks: [] }));
         }
       }
 
       // Fetch ALL pages of data for accurate stat counts
       let data = [];
 
-      if (mainTab === 'maintenance' || departmentFilter === 'Maintenance') {
+      if (mainTab === 'maintenance' || shopFilter === 'Maintenance') {
         // Maintenance pagination
         let p = 1;
         let hasMore = true;
@@ -526,7 +526,7 @@ export default function AdminDashboard() {
           p++;
           if (p > 20) break; // safety limit
         }
-      } else if (mainTab === 'repair' || departmentFilter === 'Repair') {
+      } else if (mainTab === 'repair' || shopFilter === 'Repair') {
         // Repair pagination
         let p = 1;
         let hasMore = true;
@@ -543,7 +543,7 @@ export default function AdminDashboard() {
         let p = 1;
         let hasMore = true;
         while (hasMore) {
-          const batch = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, p, batchSize, 'all', departmentFilter);
+          const batch = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, p, batchSize, 'all', shopFilter);
           data = [...data, ...(batch || [])];
           if (!batch || batch.length < batchSize) hasMore = false;
           p++;
@@ -553,7 +553,7 @@ export default function AdminDashboard() {
 
       if (!data || data.length === 0) {
         if (page === 1) {
-          setDepartmentData(prev => ({
+          setShopData(prev => ({
             ...prev,
             allTasks: [],
             totalTasks: 0,
@@ -567,8 +567,6 @@ export default function AdminDashboard() {
         setIsLoadingMore(false);
         return;
       }
-
-      console.log(`✅ Fetched ${data.length} TOTAL records for ${mainTab || dashboardType}`);
 
       const username = localStorage.getItem("user-name")
       const userRoleLower = (localStorage.getItem("role") || "").toLowerCase()
@@ -609,14 +607,14 @@ export default function AdminDashboard() {
       let uniqueStaff;
 
       if (mainTab === 'maintenance' || mainTab === 'repair' ||
-        departmentFilter === 'Maintenance' || departmentFilter === 'Repair') {
+        shopFilter === 'Maintenance' || shopFilter === 'Repair') {
         // For maintenance/repair tabs, extract from task data (no users table link)
         uniqueStaff = [...new Set(data.map((task) => task.name).filter((name) => name && name.trim() !== ""))];
       } else {
-        // For checklist/delegation: always fetch from users table (department-aware)
-        // This shows ALL users in the selected department, not just those with tasks in the current batch
+        // For checklist/delegation: always fetch from users table (shop-aware)
+        // This shows ALL users in the selected shop, not just those with tasks in the current batch
         try {
-          uniqueStaff = await getStaffNamesByDepartmentApi(departmentFilter !== 'all' ? departmentFilter : null);
+          uniqueStaff = await getStaffNamesByShopApi(shopFilter !== 'all' ? shopFilter : null);
           // Cross-filter: only show staff who actually have tasks assigned (in the full task table)
           const staffWithTasks = new Set(data.map((task) => (task.name || '').trim().toLowerCase()));
           uniqueStaff = uniqueStaff.filter(name => staffWithTasks.has((name || '').trim().toLowerCase()));
@@ -740,7 +738,7 @@ export default function AdminDashboard() {
           }
 
           // Determine status based on task type or dates
-          if (mainTab === 'repair' || mainTab === 'maintenance' || departmentFilter === 'Maintenance' || departmentFilter === 'Repair') {
+          if (mainTab === 'repair' || mainTab === 'maintenance' || shopFilter === 'Maintenance' || shopFilter === 'Repair') {
             // For repair/maintenance, use the explicit status if available, fallback to calculated
             if (task.status) {
               const taskStatus = task.status.toLowerCase();
@@ -771,7 +769,7 @@ export default function AdminDashboard() {
             machine_name: task.machine_name || "-",
             part_name: task.part_name || "-",
             part_area: task.part_area || "-",
-            department: task.department || "-",
+            shop: ((task.shop || task.shop_name) || (task.shop || task.shop_name)) || "-",
             given_by: task.given_by || task.filled_by || "-",
             enable_reminders: task.enable_reminders || task.enable_reminder || false,
             require_attachment: task.require_attachment || false,
@@ -836,7 +834,7 @@ export default function AdminDashboard() {
         progress: staff.totalTasks > 0 ? Math.round((staff.completedTasks / staff.totalTasks) * 100) : 0,
       }))
 
-      setDepartmentData(prev => {
+      setShopData(prev => {
         const updatedTasks = append
           ? [...prev.allTasks, ...processedTasks]
           : processedTasks
@@ -871,31 +869,31 @@ export default function AdminDashboard() {
     }
   }
 
-  const fetchDepartments = async () => {
+  const fetchShops = async () => {
     if (dashboardType === 'checklist' || dashboardType === 'delegation') {
       try {
-        // Fetch all departments from the departments table — admins see all
-        const departments = await getUniqueDepartmentsApi();
-        setAvailableDepartments(departments);
+        // Fetch all shops from the shops table — admins see all
+        const shops = await getUniqueShopsApi();
+        setAvailableShops(shops);
       } catch (error) {
-        console.error('Error fetching departments:', error);
-        setAvailableDepartments([]);
+        console.error('Error fetching shops:', error);
+        setAvailableShops([]);
       }
     } else {
-      setAvailableDepartments([]);
+      setAvailableShops([]);
     }
   }
 
   useEffect(() => {
-    fetchDepartments();
+    fetchShops();
   }, [dashboardType, userRole]);
 
-  // Reset staff filter when department filter changes
+  // Reset staff filter when shop filter changes
   useEffect(() => {
     if (dashboardType === 'checklist' || dashboardType === 'delegation') {
       setDashboardStaffFilter("all");
     }
-  }, [departmentFilter, dashboardType]);
+  }, [shopFilter, dashboardType]);
 
   // Add scroll event listener for infinite scroll
   useEffect(() => {
@@ -920,55 +918,55 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     // Fetch detailed data for charts and tables
-    fetchDepartmentData(1, false)
+    fetchShopData(1, false)
 
-    // Update Redux state counts with staff and department filters
+    // Update Redux state counts with staff and shop filters
     dispatch(
       totalTaskInTable({
         dashboardType,
         staffFilter: dashboardStaffFilter,
-        departmentFilter,
+        shopFilter,
       }),
     )
     dispatch(
       completeTaskInTable({
         dashboardType,
         staffFilter: dashboardStaffFilter,
-        departmentFilter,
+        shopFilter,
       }),
     )
     dispatch(
       pendingTaskInTable({
         dashboardType,
         staffFilter: dashboardStaffFilter,
-        departmentFilter,
+        shopFilter,
       }),
     )
     dispatch(
       overdueTaskInTable({
         dashboardType,
         staffFilter: dashboardStaffFilter,
-        departmentFilter,
+        shopFilter,
       }),
     )
-  }, [dashboardType, dashboardStaffFilter, departmentFilter, mainTab, dispatch])
+  }, [dashboardType, dashboardStaffFilter, shopFilter, mainTab, dispatch])
 
-  // Sync mainTab when departmentFilter changes from other sources (like DashboardHeader)
+  // Sync mainTab when shopFilter changes from other sources (like DashboardHeader)
   useEffect(() => {
-    if (departmentFilter === "Maintenance") {
+    if (shopFilter === "Maintenance") {
       setMainTab("maintenance")
-    } else if (departmentFilter === "Repair") {
+    } else if (shopFilter === "Repair") {
       setMainTab("repair")
-    } else if (departmentFilter === "all") {
+    } else if (shopFilter === "all") {
       // Only reset to default if we are not on a special tab
       if (mainTab !== "ea" && mainTab !== "maintenance" && mainTab !== "repair") {
         setMainTab("default")
       }
     }
-  }, [departmentFilter])
+  }, [shopFilter])
 
   // Filter tasks based on criteria
-  const filteredTasks = departmentData.allTasks.filter((task) => {
+  const filteredTasks = shopData.allTasks.filter((task) => {
     if (filterStatus !== "all" && task.status !== filterStatus) return false
     if (filterStaff !== "all" && task.assignedTo.toLowerCase() !== filterStaff.toLowerCase()) {
       return false
@@ -987,7 +985,7 @@ export default function AdminDashboard() {
   // Reset dashboard staff filter when dashboard type changes
   useEffect(() => {
     setDashboardStaffFilter("all")
-    setDepartmentFilter("all")
+    setShopFilter("all")
     // Only reset mainTab to default if we are not on EA/Maintenance/Repair
     if (mainTab !== "ea" && mainTab !== "maintenance" && mainTab !== "repair") {
       setMainTab("default")
@@ -1089,7 +1087,7 @@ export default function AdminDashboard() {
   // Calculate filtered stats for cards - same logic as table
   const cardStats = (() => {
     // Filter tasks that are not upcoming (due today or before)
-    const filteredTasks = departmentData.allTasks.filter((task) => {
+    const filteredTasks = shopData.allTasks.filter((task) => {
       const taskDate = parseTaskStartDate(task.originalTaskStartDate)
       return taskDate && taskDate <= today
     })
@@ -1112,7 +1110,7 @@ export default function AdminDashboard() {
     if (!isLoadingMore && hasMoreData) {
       const nextPage = currentPage + 1
       setCurrentPage(nextPage)
-      fetchDepartmentData(nextPage, true)
+      fetchShopData(nextPage, true)
     }
   }
 
@@ -1123,12 +1121,12 @@ export default function AdminDashboard() {
     pendingTasks: filteredDateStats.pendingTasks || 0,
     overdueTasks: filteredDateStats.overdueTasks || 0,
   } : {
-    // Use departmentData which is computed from the FULL paginated fetch (all tasks up to today)
+    // Use shopData which is computed from the FULL paginated fetch (all tasks up to today)
     // This matches the actual row count in the table/sheet rather than the Redux month-restricted count
-    totalTasks: departmentData.totalTasks || 0,
-    completedTasks: departmentData.completedTasks || 0,
-    pendingTasks: departmentData.pendingTasks || 0,
-    overdueTasks: departmentData.overdueTasks || 0,
+    totalTasks: shopData.totalTasks || 0,
+    completedTasks: shopData.completedTasks || 0,
+    pendingTasks: shopData.pendingTasks || 0,
+    overdueTasks: shopData.overdueTasks || 0,
   };
 
   const notDoneTask = (displayStats.totalTasks || 0) - (displayStats.completedTasks || 0);
@@ -1143,21 +1141,21 @@ export default function AdminDashboard() {
               activeTab={mainTab === 'default' ? 'checklist' : mainTab}
               setActiveTab={(tabId) => {
                 // Clear current tasks immediately to prevent showing old data on new tab
-                setDepartmentData(prev => ({ ...prev, allTasks: [] }));
+                setShopData(prev => ({ ...prev, allTasks: [] }));
                 
                 if (tabId === 'checklist') {
                   setMainTab("default")
-                  setDepartmentFilter("all")
+                  setShopFilter("all")
                   setDashboardType("checklist")
                 } else if (tabId === 'maintenance') {
                   setMainTab("maintenance")
-                  setDepartmentFilter("Maintenance")
+                  setShopFilter("Maintenance")
                 } else if (tabId === 'repair') {
                   setMainTab("repair")
-                  setDepartmentFilter("Repair")
+                  setShopFilter("Repair")
                 } else if (tabId === 'ea') {
                   setMainTab("ea")
-                  setDepartmentFilter("all")
+                  setShopFilter("all")
                 }
               }}
             />
@@ -1174,9 +1172,9 @@ export default function AdminDashboard() {
           availableStaff={availableStaff}
           userRole={userRole}
           username={username}
-          departmentFilter={departmentFilter}
-          setDepartmentFilter={setDepartmentFilter}
-          availableDepartments={availableDepartments}
+          shopFilter={shopFilter}
+          setShopFilter={setShopFilter}
+          availableShops={availableShops}
           isLoadingMore={isLoadingMore}
           onDateRangeChange={handleDateRangeChange}
         />
@@ -1190,7 +1188,7 @@ export default function AdminDashboard() {
             setSearchQuery={setSearchQuery}
             filterStaff={filterStaff}
             setFilterStaff={setFilterStaff}
-            departmentData={departmentData}
+            shopData={shopData}
             getTasksByView={getTasksByView}
             getFrequencyColor={getFrequencyColor}
             isLoadingMore={isLoadingMore}
@@ -1200,18 +1198,18 @@ export default function AdminDashboard() {
             dateRange={dateRange}
             activeTab={activeTab}
             dashboardStaffFilter={dashboardStaffFilter}
-            departmentFilter={departmentFilter}
+            shopFilter={shopFilter}
             parseTaskStartDate={parseTaskStartDate}
             userRole={userRole}
           />
         )}
 
         {mainTab === "maintenance" && (
-          <MaintenanceView stats={displayStats} tasks={departmentData.allTasks} />
+          <MaintenanceView stats={displayStats} tasks={shopData.allTasks} />
         )}
 
         {mainTab === "repair" && (
-          <RepairView stats={displayStats} tasks={departmentData.allTasks} />
+          <RepairView stats={displayStats} tasks={shopData.allTasks} />
         )}
 
         {mainTab === "ea" && (

@@ -8,7 +8,7 @@ import DelegationPage from "./delegation-data";
 import { useDispatch, useSelector } from "react-redux";
 import { deleteChecklistTask, deleteDelegationTask, uniqueChecklistTaskData, uniqueDelegationTaskData, updateChecklistTask, updateDelegationTask, fetchUsers, resetChecklistPagination, resetDelegationPagination } from "../redux/slice/quickTaskSlice";
 import { maintenanceData, deleteMaintenanceTask, updateMaintenanceTask } from "../redux/slice/maintenanceSlice";
-import { fetchUniqueDepartmentDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../redux/api/assignTaskApi";
+import { fetchUniqueShopDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../redux/api/assignTaskApi";
 import { fetchCustomDropdownsApi } from "../redux/api/settingApi";
 import { ReactMediaRecorder } from "react-media-recorder";
 import supabase from "../SupabaseClient";
@@ -68,7 +68,7 @@ export default function QuickTask() {
   const [recordedAudio, setRecordedAudio] = useState(null);
 
   // Dropdown lists
-  const [departments, setDepartments] = useState([]);
+  const [shops, setShops] = useState([]);
   const [givenByList, setGivenByList] = useState([]);
   const [doersList, setDoersList] = useState([]);
   const [customOptions, setCustomOptions] = useState([]);
@@ -122,13 +122,13 @@ export default function QuickTask() {
 
     // Fetch dropdown data
     const fetchDropdownData = async () => {
-      const [depts, givens, doers, customs] = await Promise.all([
-        fetchUniqueDepartmentDataApi(),
+      const [shopData, givens, doers, customs] = await Promise.all([
+        fetchUniqueShopDataApi(),
         fetchUniqueGivenByDataApi(),
         fetchUniqueDoerNameDataApi(),
         fetchCustomDropdownsApi()
       ]);
-      setDepartments(depts);
+      setShops(shopData);
       setGivenByList(givens);
       setDoersList(doers);
       setCustomOptions(customs);
@@ -250,7 +250,7 @@ export default function QuickTask() {
     } else {
       setEditFormData({
         id: task.id,
-        department: task.department || '',
+        shop: task.shop || task.shop_name || '',
         given_by: task.given_by || '',
         name: task.name || '',
         task_description: task.task_description || '',
@@ -367,7 +367,7 @@ export default function QuickTask() {
         await dispatch(updateDelegationTask({
           updatedTask: finalEditData,
           originalTask: originalTask ? {
-            department: originalTask.department,
+            shop: originalTask.shop || originalTask.shop_name,
             name: originalTask.name,
             task_description: originalTask.task_description
           } : null
@@ -383,7 +383,7 @@ export default function QuickTask() {
         await dispatch(updateChecklistTask({
           updatedTask: finalEditData,
           originalTask: {
-            department: originalTask.department,
+            shop: originalTask.shop || originalTask.shop_name,
             name: originalTask.name,
             task_description: originalTask.task_description
           }
@@ -432,8 +432,8 @@ export default function QuickTask() {
       return newData;
     });
 
-    // If department changes, refresh doers list
-    if (field === 'department') {
+    // If shop changes, refresh doers list
+    if (field === 'shop' || field === 'shop_name') {
       const doers = await fetchUniqueDoerNameDataApi(value);
       setDoersList(doers);
     }
@@ -558,7 +558,7 @@ export default function QuickTask() {
     });
     // Deduplicate strictly by task_description + name (API already deduped, this is a safety net)
     return searched.filter(task => {
-      const key = `${(task.department || '').trim()}::${(task.task_description || '').trim()}::${(task.name || '').trim()}::${(task.frequency || '').trim()}::${(task.task_start_date || task.created_at || '').trim()}`;
+      const key = `${(task.shop || task.shop_name || '').trim()}::${(task.task_description || '').trim()}::${(task.name || '').trim()}::${(task.frequency || '').trim()}::${(task.task_start_date || task.created_at || '').trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -593,7 +593,7 @@ export default function QuickTask() {
     });
     // Deduplicate strictly by task_description + name (API already deduped, this is a safety net)
     const unique = searched.filter(task => {
-      const key = `${(task.department || '').trim()}::${(task.task_description || '').trim()}::${(task.name || '').trim()}::${(task.frequency || '').trim()}::${(task.created_at || '').trim()}`;
+      const key = `${(task.shop || task.shop_name || '').trim()}::${(task.task_description || '').trim()}::${(task.name || '').trim()}::${(task.frequency || '').trim()}::${(task.created_at || '').trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -789,7 +789,8 @@ export default function QuickTask() {
                         { key: 'actions', label: 'Actions' },
                         { key: 'id', label: 'Task ID' },
                         { key: 'task_description', label: 'Task Description', minWidth: 'min-w-[300px]' },
-                        { key: 'department', label: 'Department' },
+                        { key: 'shop', label: 'Shop Name' },
+                        { key: 'task_level', label: 'Level' },
                         { key: 'given_by', label: 'Assign From' },
                         { key: 'name', label: 'Name' },
                         { key: 'task_start_date', label: 'Working Day', bg: 'bg-yellow-50' },
@@ -853,9 +854,18 @@ export default function QuickTask() {
                             </div>
                           </td>
 
-                          {/* Department */}
+                          {/* Shop */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {task.department}
+                            {task.shop_name || task.shop}
+                          </td>
+
+                          {/* Level */}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {task.task_level ? (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-tighter">
+                                {task.task_level}
+                              </span>
+                            ) : "—"}
                           </td>
 
                           {/* Given By */}
@@ -953,9 +963,15 @@ export default function QuickTask() {
                                 />
                               </div>
                               <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold text-gray-500">
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>{task.department}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>{task.shop_name || task.shop}</span>
+                                {task.task_level && (
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-black uppercase tracking-tighter">{task.task_level}</span>
+                                  </span>
+                                )}
                                 <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>{task.name}</span>
-                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>{formatTimestampToDDMMYYYY(task.task_start_date)}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-orange-400"></span>{formatTimestampToDDMMYYYY(task.task_start_date)}</span>
                                 {task.duration && (
                                   <span className="flex items-center gap-1.5 text-blue-600">
                                     <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
@@ -1190,7 +1206,7 @@ export default function QuickTask() {
               freqFilter={freqFilter}
               setFreqFilter={setFreqFilter}
               externalSelectedTasks={selectedTasks}
-              departments={departments}
+              shops={shops}
               givenByList={givenByList}
               doersList={doersList}
               onSelectionChange={(taskOrAll, allTasks) => {
@@ -1375,14 +1391,14 @@ export default function QuickTask() {
                   ) : (
                     <>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Department</label>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Shop Name</label>
                         <select
-                          value={editFormData.department || ''}
-                          onChange={(e) => handleInputChange('department', e.target.value)}
+                          value={editFormData.shop || ''}
+                          onChange={(e) => handleInputChange('shop', e.target.value)}
                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
                         >
-                          <option value="">Select Dept</option>
-                          {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                          <option value="">Select Shop</option>
+                          {shops.map(shop => <option key={shop} value={shop}>{shop}</option>)}
                         </select>
                       </div>
                       <div className="space-y-1.5">

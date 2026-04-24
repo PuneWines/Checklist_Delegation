@@ -59,23 +59,23 @@ export const fetchUserDetailsApi = async () => {
 //   }
 // };
 
-export const fetchDepartmentDataApi = async () => {
+export const fetchShopDataApi = async () => {
   try {
     const { data, error } = await supabase
-      .from('departments')
+      .from('shop')
       .select('*')
       .order('name', { ascending: true });
 
     if (error) {
-      console.log("error when fetching departments", error);
+      console.log("error when fetching shops", error);
       return [];
     }
 
     // Format to match old expectations if necessary, 
-    // though name is better than department field name now
+    // though name is better than shop field name now
     const formatted = data.map(d => ({
       id: d.id,
-      department: d.name,
+      shop: d.name,
       given_by: d.given_by || ""
     }));
 
@@ -102,8 +102,8 @@ export const createUserApi = async (newUser) => {
 
     // Step 2: Insert user
     // Sanitizing 'number' (bigint) - empty string must be null
-    const phoneNumber = newUser.phone && newUser.phone.toString().trim() !== "" 
-      ? parseInt(newUser.phone.toString().replace(/\D/g, '')) 
+    const phoneNumber = newUser.phone && newUser.phone.toString().trim() !== ""
+      ? parseInt(newUser.phone.toString().replace(/\D/g, ''))
       : null;
 
     const insertData = {
@@ -115,7 +115,7 @@ export const createUserApi = async (newUser) => {
       role: newUser.role,
       status: newUser.status || 'active',
       user_access: newUser.user_access,
-      department: newUser.department,
+      shop_name: newUser.shop,
       profile_image: newUser.profile_image || null,
       leave_date: newUser.leave_date || null,
       leave_end_date: newUser.leave_end_date || null,
@@ -160,8 +160,8 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
   try {
     // Build the update payload - NEVER include undefined values (causes Supabase 400)
     // Sanitizing 'number' (bigint) - empty string must be null
-    const phoneNumber = updatedUser.number && updatedUser.number.toString().trim() !== "" 
-      ? parseInt(updatedUser.number.toString().replace(/\D/g, '')) 
+    const phoneNumber = updatedUser.number && updatedUser.number.toString().trim() !== ""
+      ? parseInt(updatedUser.number.toString().replace(/\D/g, ''))
       : null;
 
     const updateData = {
@@ -172,7 +172,7 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
       role: updatedUser.role,
       status: updatedUser.status,
       user_access: updatedUser.user_access,
-      department: updatedUser.department,
+      shop_name: updatedUser.shop_name || updatedUser.shop || null,
       profile_image: updatedUser.profile_image,
       reported_by: updatedUser.reported_by || null,
       can_self_assign: updatedUser.can_self_assign ?? false
@@ -230,13 +230,13 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
 };
 
 
-export const createDepartmentApi = async (newDept) => {
+export const createShopApi = async (newShop) => {
   try {
     const { data, error } = await supabase
-      .from("departments")
+      .from("shop")
       .insert([{
-        name: newDept.department,
-        given_by: newDept.given_by
+        name: newShop.shop,
+        given_by: newShop.given_by
       }])
       .select()
       .maybeSingle();
@@ -244,18 +244,18 @@ export const createDepartmentApi = async (newDept) => {
     if (error) throw error;
     return data;
   } catch (error) {
-    console.log("Error creating department:", error);
+    console.log("Error creating shop:", error);
     throw error;
   }
 };
 
-export const updateDepartmentDataApi = async ({ id, updatedDept }) => {
+export const updateShopDataApi = async ({ id, updatedShop }) => {
   try {
     const { data, error } = await supabase
-      .from("departments")
+      .from("shop")
       .update({
-        name: updatedDept.department,
-        given_by: updatedDept.given_by
+        name: updatedShop.shop,
+        given_by: updatedShop.given_by
       })
       .eq("id", id)
       .select()
@@ -264,23 +264,23 @@ export const updateDepartmentDataApi = async ({ id, updatedDept }) => {
     if (error) throw error;
     return data;
   } catch (error) {
-    console.log("Error updating department:", error);
+    console.log("Error updating shop:", error);
     throw error;
   }
 };
 
 
-export const deleteDepartmentApi = async (id) => {
+export const deleteShopApi = async (id) => {
   try {
     const { error } = await supabase
-      .from("departments")
+      .from("shop")
       .delete()
       .eq("id", id);
 
     if (error) throw error;
     return id;
   } catch (error) {
-    console.log("Error deleting department:", error);
+    console.log("Error deleting shop:", error);
     throw error;
   }
 };
@@ -354,18 +354,18 @@ export const deleteUserByIdApi = async (id) => {
 
 // In your settingApi.js file, add these functions:
 
-// Fetch only unique departments
-export const fetchDepartmentsOnlyApi = async () => {
+// Fetch only unique shops
+export const fetchShopsOnlyApi = async () => {
   try {
     const { data, error } = await supabase
-      .from('departments')
+      .from('shop')
       .select('name')
       .order('name', { ascending: true });
 
     if (error) throw error;
-    return data.map(d => ({ department: d.name }));
+    return data.map(d => ({ shop: d.name }));
   } catch (error) {
-    console.log("error fetching departments", error);
+    console.log("error fetching shops", error);
     return [];
   }
 };
@@ -587,4 +587,54 @@ export const createMachineEntriesApi = async (entries) => {
     console.error("Error creating machine entries:", error);
     throw error;
   }
+};
+
+// Master Task Management
+export const fetchMasterTasksAllApi = async () => {
+  const { data, error } = await supabase.from('master_tasks').select('*');
+  if (error) throw error;
+  return data;
+};
+
+export const createMasterTaskApi = async (task) => {
+  const { data, error } = await supabase.from('master_tasks').insert(task).select().single();
+  if (error) throw error;
+  return data;
+};
+
+export const updateMasterTaskApi = async ({ id, updates }) => {
+  const { data, error } = await supabase.from('master_tasks').update(updates).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+};
+
+export const deleteMasterTaskApi = async (id) => {
+  const { error } = await supabase.from('master_tasks').delete().eq('id', id);
+  if (error) throw error;
+  return id;
+};
+
+// Levels Management
+export const fetchLevelsAllApi = async () => {
+  const { data, error } = await supabase.from('levels').select('*').order('created_at', { ascending: true });
+  if (error) throw error;
+  return data;
+};
+
+export const createLevelApi = async (level) => {
+  const { data, error } = await supabase.from('levels').insert(level).select().single();
+  if (error) throw error;
+  return data;
+};
+
+export const updateLevelApi = async ({ id, updates }) => {
+  const { data, error } = await supabase.from('levels').update(updates).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+};
+
+export const deleteLevelApi = async (id) => {
+  const { error } = await supabase.from('levels').delete().eq('id', id);
+  if (error) throw error;
+  return id;
 };

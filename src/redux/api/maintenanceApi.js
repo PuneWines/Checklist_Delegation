@@ -37,7 +37,7 @@ export const fetchMaintenanceDataSortByDate = async (page = 1, limit = 50, searc
 
         if (searchTerm && searchTerm.trim() !== '') {
             const searchValue = searchTerm.trim();
-            query = query.or(`name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
+            query = query.or(`name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,shop_name.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
         }
 
         if (role === 'hod' && username) {
@@ -123,7 +123,7 @@ export const fetchMaintenanceDataForHistory = async (page = 1, searchTerm = '') 
 
         if (searchTerm && searchTerm.trim() !== '') {
             const searchValue = searchTerm.trim();
-            query = query.or(`name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
+            query = query.or(`name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,shop_name.ilike.%${searchValue}%,machine_name.ilike.%${searchValue}%,part_name.ilike.%${searchValue}%,part_area.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
         }
 
         if (role === 'HOD' && username) {
@@ -431,5 +431,5 @@ export const fetchApprovedMaintenance = async () => {
     } catch (error) {
         console.error("Error fetching approved maintenance tasks:", error);
         return [];
-    } 
+    }
 };

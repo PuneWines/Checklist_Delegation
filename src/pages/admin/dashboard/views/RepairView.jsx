@@ -100,7 +100,7 @@ export default function RepairView({ tasks = [] }) {
     const processedData = useMemo(() => {
         if (!tasks || tasks.length === 0) {
             return {
-                deptData: [],
+                shopData: [],
                 statusCounts: { Pending: 0, Completed: 0, InProgress: 0, Observation: 0, Cancelled: 0 },
                 vendorData: [],
                 totalCost: 0,
@@ -109,17 +109,17 @@ export default function RepairView({ tasks = [] }) {
             };
         }
 
-        const deptStats = {};
+        const shopStats = {};
         const statusCounts = { Pending: 0, Completed: 0, InProgress: 0, Observation: 0, Cancelled: 0 };
         const vendorCosts = {};
         let totalCost = 0;
         let completedTasksCount = 0;
 
         tasks.forEach(task => {
-            // Department / Machine Name grouping
-            const dept = task.machine_name || "General";
-            if (!deptStats[dept]) deptStats[dept] = { total: 0, completed: 0 };
-            deptStats[dept].total++;
+            // Shop / Machine Name grouping
+            const shop = task.machine_name || "General";
+            if (!shopStats[shop]) shopStats[shop] = { total: 0, completed: 0 };
+            shopStats[shop].total++;
 
             // Normalize Status
             const rawStatus = (task.status || "Pending").toLowerCase();
@@ -128,7 +128,7 @@ export default function RepairView({ tasks = [] }) {
             if (rawStatus.includes("approved") || rawStatus.includes("complete") || rawStatus === "done") {
                 statusKey = "Completed";
                 completedTasksCount++;
-                deptStats[dept].completed++;
+                shopStats[shop].completed++;
             } else if (rawStatus.includes("approval")) {
                 statusKey = "InProgress"; // Show as In Progress if it's explicitly pending approval
             } else if (rawStatus.includes("observation")) {
@@ -153,13 +153,13 @@ export default function RepairView({ tasks = [] }) {
             }
         });
 
-        // Format Department Data (Top 10 sorted by total tasks)
-        const deptData = Object.keys(deptStats)
+        // Format Shop Data (Top 10 sorted by total tasks)
+        const shopData = Object.keys(shopStats)
             .map(name => ({
                 name,
-                total: deptStats[name].total,
-                completed: deptStats[name].completed,
-                rate: Math.round((deptStats[name].completed / deptStats[name].total) * 100)
+                total: shopStats[name].total,
+                completed: shopStats[name].completed,
+                rate: Math.round((shopStats[name].completed / shopStats[name].total) * 100)
             }))
             .sort((a, b) => b.total - a.total)
             .slice(0, 10);
@@ -175,10 +175,10 @@ export default function RepairView({ tasks = [] }) {
             { name: "Partial", value: statusCounts.InProgress + statusCounts.Pending, color: "#10B981" },
         ];
 
-        return { deptData, statusCounts, vendorData, totalCost, completedTasksCount, paymentData };
+        return { shopData, statusCounts, vendorData, totalCost, completedTasksCount, paymentData };
     }, [tasks]);
 
-    const { deptData, statusCounts, vendorData, totalCost, completedTasksCount, paymentData } = processedData;
+    const { shopData, statusCounts, vendorData, totalCost, completedTasksCount, paymentData } = processedData;
 
     const taskOverviewData = [
         { name: "Total Tasks", value: tasks.length },
@@ -199,13 +199,13 @@ export default function RepairView({ tasks = [] }) {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Repair Status by Department */}
+                {/* Repair Status by Shop */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <div className="flex items-center justify-between mb-8">
-                        <h3 className="text-lg font-bold text-gray-800 text-center w-full">Repair Status by Machine/Dept</h3>
+                        <h3 className="text-lg font-bold text-gray-800 text-center w-full">Repair Status by Shop/Machine</h3>
                     </div>
                     <div className="space-y-6">
-                        {deptData.length > 0 ? deptData.map((item, i) => (
+                        {shopData.length > 0 ? shopData.map((item, i) => (
                             <div key={i} className="space-y-1">
                                 <div className="flex justify-between text-[11px] font-semibold">
                                     <span className="text-gray-500 truncate max-w-[70%]">{item.name}</span>

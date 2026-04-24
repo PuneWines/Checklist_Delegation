@@ -230,7 +230,7 @@ const CalendarPage = () => {
             // For admins, we now show EVERYTHING by default to match the global counts 
             // of the Working Day Calendar, unless we WANT to add optional filtering later.
             // This fixes the issue where counts are visible but tasks are hidden due to 
-            // strict department/access rules.
+            // strict shop/access rules.
 
             let [
                 checklistRes,
@@ -808,9 +808,9 @@ const CalendarPage = () => {
                                                                     </div>
                                                                 </div>
                                                                 <div>
-                                                                    <p className="text-[9px] font-black text-gray-400 uppercase mb-2 tracking-widest">Department Unit</p>
+                                                                    <p className="text-[9px] font-black text-gray-400 uppercase mb-2 tracking-widest">Shop Unit</p>
                                                                     <div className="text-xs font-black text-purple-600 uppercase">
-                                                                        {task.department || 'General Operations'}
+                                                                        {task.shop || 'General Operations'}
                                                                     </div>
                                                                 </div>
                                                             </div>

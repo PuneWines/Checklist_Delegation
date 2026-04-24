@@ -11,7 +11,7 @@ import { fetchDashboardDataApi, getDashboardDataCount } from "../../../redux/api
 import { useDispatch } from "react-redux"
 import { updateChecklistTask, updateDelegationTask } from "../../../redux/slice/quickTaskSlice"
 import { updateMaintenanceTask } from "../../../redux/slice/maintenanceSlice"
-import { fetchUniqueDepartmentDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../../../redux/api/assignTaskApi"
+import { fetchUniqueShopDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../../../redux/api/assignTaskApi"
 
 const isAudioUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
@@ -30,10 +30,10 @@ export default function TaskNavigationTabs({
   setSearchQuery,
   filterStaff,
   setFilterStaff,
-  departmentData,
+  shopData,
   getFrequencyColor,
   dashboardStaffFilter,
-  departmentFilter,
+  shopFilter,
   userRole // Add this prop
 }) {
   const [currentPage, setCurrentPage] = useState(1)
@@ -49,7 +49,7 @@ export default function TaskNavigationTabs({
   const [isUploading, setIsUploading] = useState(false)
 
   // Dropdown lists
-  const [departments, setDepartments] = useState([]);
+  const [shops, setShops] = useState([]);
   const [givenByList, setGivenByList] = useState([]);
   const [doersList, setDoersList] = useState([]);
 
@@ -63,7 +63,7 @@ export default function TaskNavigationTabs({
       id: task.id,
       task_description: task.title || '',
       name: task.assignedTo || '',
-      department: task.department || '',
+      shop: (task.shop || task.shop_name) || '',
       task_start_date: task.originalTaskStartDate || '',
       frequency: task.frequency || '',
       originalAudioUrl: isAudioUrl(task.title) ? task.title : null,
@@ -80,8 +80,8 @@ export default function TaskNavigationTabs({
   const handleInputChange = async (field, value) => {
     setEditFormData(prev => ({ ...prev, [field]: value }));
 
-    // If department changes, refresh doers list
-    if (field === 'department') {
+    // If shop changes, refresh doers list
+    if (field === 'shop') {
       const doers = await fetchUniqueDoerNameDataApi(value);
       setDoersList(doers);
     }
@@ -135,7 +135,7 @@ export default function TaskNavigationTabs({
         await dispatch(updateChecklistTask({
           updatedTask: finalEditData,
           originalTask: {
-            department: originalTask.department,
+            shop: originalTask.shop,
             name: originalTask.assignedTo,
             task_description: originalTask.title
           }
@@ -159,7 +159,7 @@ export default function TaskNavigationTabs({
         await dispatch(updateDelegationTask({
           updatedTask: finalEditData,
           originalTask: {
-            department: originalTask.department,
+            shop: originalTask.shop,
             name: originalTask.assignedTo,
             task_description: originalTask.title
           }
@@ -193,7 +193,7 @@ export default function TaskNavigationTabs({
     setDisplayedTasks([])
     setHasMoreData(true)
     setTotalCount(0)
-  }, [taskView, dashboardType, dashboardStaffFilter, departmentFilter]) // Add departmentFilter
+  }, [taskView, dashboardType, dashboardStaffFilter, shopFilter]) // Add shopFilter
 
   // Function to load tasks from server
   const loadTasksFromServer = useCallback(async (page = 1, append = false) => {
@@ -207,22 +207,22 @@ export default function TaskNavigationTabs({
         dashboardStaffFilter,
         taskView,
         page,
-        departmentFilter
+        shopFilter
       });
 
-      // Use departmentFilter for server call (only affects table data)
+      // Use shopFilter for server call (only affects table data)
       const data = await fetchDashboardDataApi(
         dashboardType,
         dashboardStaffFilter,
         page,
         itemsPerPage,
         taskView,
-        departmentFilter // Pass department filter to API
+        shopFilter // Pass shop filter to API
       )
 
       // Get total count for this view (only on first load)
       if (page === 1) {
-        const count = await getDashboardDataCount(dashboardType, dashboardStaffFilter, taskView, departmentFilter)
+        const count = await getDashboardDataCount(dashboardType, dashboardStaffFilter, taskView, shopFilter)
         setTotalCount(count)
       }
 
@@ -285,7 +285,7 @@ export default function TaskNavigationTabs({
           timeStatus,
           frequency: task.frequency || "one-time",
           rating: task.color_code_for || 0,
-          department: task.department || "N/A",
+          shop: (task.shop || task.shop_name) || "N/A",
         }
       })
 
@@ -356,7 +356,7 @@ export default function TaskNavigationTabs({
     } finally {
       setIsLoadingMore(false)
     }
-  }, [dashboardType, dashboardStaffFilter, taskView, searchQuery, departmentFilter, isLoadingMore, itemsPerPage])
+  }, [dashboardType, dashboardStaffFilter, taskView, searchQuery, shopFilter, isLoadingMore, itemsPerPage])
 
   // Helper functions
   const parseTaskStartDate = (dateStr) => {
@@ -415,17 +415,17 @@ export default function TaskNavigationTabs({
 
     // Fetch dropdown data
     const fetchDropdownData = async () => {
-      const [depts, givens, doers] = await Promise.all([
-        fetchUniqueDepartmentDataApi(),
+      const [shopData, givens, doers] = await Promise.all([
+        fetchUniqueShopDataApi(),
         fetchUniqueGivenByDataApi(),
         fetchUniqueDoerNameDataApi()
       ]);
-      setDepartments(depts);
+      setShops(shopData);
       setGivenByList(givens);
       setDoersList(doers);
     };
     fetchDropdownData();
-  }, [taskView, dashboardType, dashboardStaffFilter, departmentFilter])
+  }, [taskView, dashboardType, dashboardStaffFilter, shopFilter])
 
   // Load more when search changes (client-side filter)
   useEffect(() => {
@@ -517,7 +517,7 @@ export default function TaskNavigationTabs({
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-purple-600" />
                 <span className="font-medium text-purple-700">Filters</span>
-                {(searchQuery || dashboardStaffFilter !== "all" || departmentFilter !== "all") && (
+                {(searchQuery || dashboardStaffFilter !== "all" || shopFilter !== "all") && (
                   <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
                     Active
                   </span>
@@ -557,9 +557,9 @@ export default function TaskNavigationTabs({
                           Staff: {dashboardStaffFilter}
                         </span>
                       )}
-                      {departmentFilter !== "all" && (
+                      {shopFilter !== "all" && (
                         <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
-                          Department: {departmentFilter}
+                          Shop: {shopFilter}
                         </span>
                       )}
                       {searchQuery && (
@@ -568,7 +568,7 @@ export default function TaskNavigationTabs({
                         </span>
                       )}
                       {!dashboardStaffFilter || dashboardStaffFilter === "all" &&
-                        !departmentFilter || departmentFilter === "all" &&
+                        !shopFilter || shopFilter === "all" &&
                         !searchQuery && (
                           <span className="text-xs text-gray-500">No active filters</span>
                         )}
@@ -610,7 +610,7 @@ export default function TaskNavigationTabs({
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Description</th>
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Staff</th>
                       {dashboardType === "checklist" && (
-                        <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Dept</th>
+                        <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Shop</th>
                       )}
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Date</th>
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100 italic">Status</th>
@@ -766,17 +766,17 @@ export default function TaskNavigationTabs({
                           <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 font-medium">
                             {editingTaskId === task.id ? (
                               <select
-                                value={editFormData.department}
-                                onChange={(e) => handleInputChange('department', e.target.value)}
+                                value={editFormData.shop}
+                                onChange={(e) => handleInputChange('shop', e.target.value)}
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                               >
-                                <option value="">Select Department</option>
-                                {departments.map(dept => (
-                                  <option key={dept} value={dept}>{dept}</option>
+                                <option value="">Select Shop</option>
+                                {shops.map(shop => (
+                                  <option key={shop} value={shop}>{shop}</option>
                                 ))}
                               </select>
                             ) : (
-                              task.department
+                              (task.shop || task.shop_name)
                             )}
                           </td>
                         )}
@@ -887,8 +887,8 @@ export default function TaskNavigationTabs({
                     )}
                     {dashboardType === "checklist" && (
                       <div className="flex flex-col col-span-2 mt-1">
-                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Department</span>
-                        <span className="text-xs font-semibold text-gray-700">{task.department}</span>
+                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Shop</span>
+                        <span className="text-xs font-semibold text-gray-700">{(task.shop || task.shop)}</span>
                       </div>
                     )}
                   </div>

@@ -158,9 +158,9 @@ export const fetchDelegationDataSortByDate = async () => {
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
       query = query.in('name', reportingUsers);
     } else if (role === 'admin' && userAccess && userAccess !== 'all') {
-      const allowedDepartments = userAccess.split(',').map(dept => dept.trim()).filter(d => d && d !== 'all');
-      if (allowedDepartments.length > 0) {
-        query = query.in('department', allowedDepartments);
+      const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(d => d && d !== 'all');
+      if (allowedShops.length > 0) {
+        query = query.in('shop', allowedShops);
       }
     }
 

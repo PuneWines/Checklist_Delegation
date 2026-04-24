@@ -146,7 +146,7 @@ export const fetchPendingRepairApprovals = async () => {
         return (data || []).map(task => ({
             ...task,
             id: task.id,
-            department: task.department || 'Repair',
+            shop: (task.shop || task.shop_name) || 'Repair',
             name: task.assigned_person || task.filled_by
         }));
     } catch (error) {
@@ -212,7 +212,7 @@ export const fetchApprovedRepairs = async () => {
         if (error) throw error;
         return (data || []).map(task => ({
             ...task,
-            department: task.department || 'Repair'
+            shop: (task.shop || task.shop_name) || 'Repair'
         }));
     } catch (error) {
         console.error("Error fetching approved repair tasks:", error);

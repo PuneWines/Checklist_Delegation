@@ -9,12 +9,12 @@ export const fetchDashboardDataApi = async (
   page = 1,
   limit = 50,
   taskView = 'recent',
-  departmentFilter = null,
+  shopFilter = null,
   startDate = null,
   endDate = null
 ) => {
   try {
-    console.log('Fetching dashboard data:', { dashboardType, staffFilter, page, limit, taskView, departmentFilter });
+    console.log('Fetching dashboard data:', { dashboardType, staffFilter, page, limit, taskView, shopFilter });
 
     const from = (page - 1) * limit;
     const to = from + limit - 1;
@@ -27,9 +27,9 @@ export const fetchDashboardDataApi = async (
     const isAscending = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance');
 
     let query = supabase
-      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' : 
-            dashboardType === 'repair' ? 'repair_tasks' : 
-            dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
+      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
+        dashboardType === 'repair' ? 'repair_tasks' :
+          dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
       .select('*')
       .order(dateColumn, { ascending: isAscending })
       .range(from, to);
@@ -46,9 +46,9 @@ export const fetchDashboardDataApi = async (
       query = query.in('name', reportingUsers);
     }
 
-    // Apply department filter if provided (for checklist and delegation)
-    if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
-      query = query.eq('department', departmentFilter);
+    // Apply shop filter if provided (for checklist and delegation)
+    if (shopFilter && shopFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
+      query = query.eq('shop_name', shopFilter);
     }
 
 
@@ -128,7 +128,6 @@ export const fetchDashboardDataApi = async (
       return !holidayDates.includes(dateStr);
     });
 
-    console.log(`Fetched ${filteredData.length} records for ${taskView} view (after holiday filter)`);
     return filteredData.map(task => ({
       ...task,
       id: task.id || task.task_id
@@ -140,16 +139,16 @@ export const fetchDashboardDataApi = async (
   }
 };
 
-export const getDashboardDataCount = async (dashboardType, staffFilter = null, taskView = 'recent', departmentFilter = null) => {
+export const getDashboardDataCount = async (dashboardType, staffFilter = null, taskView = 'recent', shopFilter = null) => {
   try {
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
     const today = new Date().toISOString().split('T')[0];
 
     let query = supabase
-      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' : 
-            dashboardType === 'repair' ? 'repair_tasks' : 
-            dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
+      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
+        dashboardType === 'repair' ? 'repair_tasks' :
+          dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
       .select('*', { count: 'exact', head: true });
 
     // Apply role-based filtering
@@ -169,9 +168,9 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
       query = query.eq('name', staffFilter);
     }
 
-    // Apply department filter (for checklist and delegation)
-    if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
-      query = query.eq('department', departmentFilter);
+    // Apply shop filter (for checklist and delegation)
+    if (shopFilter && shopFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
+      query = query.eq('shop_name', shopFilter);
     }
 
     const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
@@ -227,7 +226,7 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
   }
 };
 
-export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null) => {
+export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = null, shopFilter = null) => {
   const role = localStorage.getItem('role');
   const username = localStorage.getItem('user-name');
 
@@ -245,10 +244,10 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
         .gte(dateColumn, `${today}T00:00:00`)
         .lte(dateColumn, `${today}T23:59:59`);
     } else {
-      const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
-                        dashboardType === 'repair' ? 'repair_tasks' : 
-                        dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
-      
+      const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
+        dashboardType === 'repair' ? 'repair_tasks' :
+          dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
+
       query = supabase
         .from(tableName)
         .select('*', { count: 'exact', head: true })
@@ -271,9 +270,9 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
       query = query.eq('name', staffFilter);
     }
 
-    // Apply department filter (only for checklist)
-    if (departmentFilter && departmentFilter !== 'all' && dashboardType === 'checklist') {
-      query = query.eq('department', departmentFilter);
+    // Apply shop filter (only for checklist)
+    if (shopFilter && shopFilter !== 'all' && dashboardType === 'checklist') {
+      query = query.eq('shop_name', shopFilter);
     }
 
     const { count, error } = await query;
@@ -291,13 +290,13 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
   }
 };
 
-export const getDashboardSummaryApi = async (dashboardType, staffFilter = null) => {
+export const getDashboardSummaryApi = async (dashboardType, staffFilter = null, shopFilter = null, startDate = null, endDate = null) => {
   try {
     const [totalTasks, completedTasks, pendingTasks, overdueTasks] = await Promise.all([
-      countTotalTaskApi(dashboardType, staffFilter),
-      countCompleteTaskApi(dashboardType, staffFilter),
-      countPendingOrDelayTaskApi(dashboardType, staffFilter),
-      countOverDueORExtendedTaskApi(dashboardType, staffFilter)
+      countTotalTaskApi(dashboardType, staffFilter, shopFilter, startDate, endDate),
+      countCompleteTaskApi(dashboardType, staffFilter, shopFilter, startDate, endDate),
+      countPendingOrDelayTaskApi(dashboardType, staffFilter, shopFilter),
+      countOverDueORExtendedTaskApi(dashboardType, staffFilter, shopFilter, startDate, endDate)
     ]);
 
     const completionRate = totalTasks > 0 ? ((completedTasks / totalTasks) * 100).toFixed(1) : 0;
@@ -316,9 +315,9 @@ export const getDashboardSummaryApi = async (dashboardType, staffFilter = null) 
 };
 
 // Alternative version if you want to see detailed task breakdown for debugging
-export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, departmentFilter = null, page = 1, limit = 20, selectedMonth = null) => {
+export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, shopFilter = null, page = 1, limit = 20, selectedMonth = null) => {
   try {
-    console.log('Fetching staff tasks data:', { dashboardType, staffFilter, departmentFilter, page, limit, selectedMonth });
+    console.log('Fetching staff tasks data:', { dashboardType, staffFilter, shopFilter, page, limit, selectedMonth });
 
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
@@ -351,9 +350,9 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
 
     // Build the query
     let query = supabase
-      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' : 
-            dashboardType === 'repair' ? 'repair_tasks' : 
-            dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
+      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
+        dashboardType === 'repair' ? 'repair_tasks' :
+          dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
       .select('*')
       .gte(dateColumn, `${startDate}T00:00:00`)
       .lte(dateColumn, `${endDate}T23:59:59`)
@@ -376,9 +375,9 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
       query = query.eq('name', staffFilter);
     }
 
-    // Apply department filter if provided
-    if (departmentFilter && departmentFilter !== 'all') {
-      query = query.eq('department', departmentFilter);
+    // Apply shop filter if provided
+    if (shopFilter && shopFilter !== 'all') {
+      query = query.eq('shop_name', shopFilter);
     }
 
     const { data: tasksData, error } = await query;
@@ -394,11 +393,11 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
     const summary = {};
 
     tasksData.forEach(task => {
-      const key = `${task.department}-${task.name}`;
+      const key = `${((task.shop || task.shop_name) || (task.shop || task.shop_name))}-${task.name}`;
 
       if (!summary[key]) {
         summary[key] = {
-          department: task.department,
+          shop: ((task.shop || task.shop_name) || (task.shop || task.shop_name)),
           name: task.name,
           total_tasks: 0,
           total_completed_tasks: 0,
@@ -411,11 +410,11 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
       // Check if task is completed
       // Generic completion check: has submission_date AND (if delegation) is approved
       const statusLower = (task.status || "").toLowerCase();
-      const isCompleted = (task.submission_date !== null) || 
-                          (statusLower === 'yes') || 
-                          (statusLower.includes('done')) || 
-                          (statusLower.includes('completed')) || 
-                          (dashboardType === 'delegation' && task.admin_done === true);
+      const isCompleted = (task.submission_date !== null) ||
+        (statusLower === 'yes') ||
+        (statusLower.includes('done')) ||
+        (statusLower.includes('completed')) ||
+        (dashboardType === 'delegation' && task.admin_done === true);
 
       if (isCompleted) {
         summary[key].total_completed_tasks++;
@@ -470,7 +469,7 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
 
       return {
         id: (staff.name || "unnamed").replace(/\s+/g, "-").toLowerCase(),
-        department: staff.department || "No Department",
+        shop: ((staff.shop || staff.shop_name) || (staff.shop || staff.shop_name)) || "No Shop",
         name: staff.name || "Unnamed Staff",
         email: `${(staff.name || "user").toLowerCase().replace(/\s+/g, ".")}@example.com`,
         profile_image: userImageMap[staff.name] || null,
@@ -499,7 +498,7 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
   }
 };
 
-export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, departmentFilter = null, selectedMonth = null) => {
+export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, shopFilter = null, selectedMonth = null) => {
   try {
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
@@ -521,10 +520,10 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, d
     const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation') ? 'planned_date' : 'task_start_date';
 
     let query = supabase
-      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' : 
-            dashboardType === 'repair' ? 'repair_tasks' : 
-            dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
-      .select('department, name')
+      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
+        dashboardType === 'repair' ? 'repair_tasks' :
+          dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
+      .select('shop_name, name')
       .gte(dateColumn, `${startDate}T00:00:00`)
       .lte(dateColumn, `${endDate}T23:59:59`)
       .not('name', 'is', null);
@@ -546,9 +545,9 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, d
       query = query.eq('name', staffFilter);
     }
 
-    // Apply department filter
-    if (departmentFilter && departmentFilter !== 'all') {
-      query = query.eq('department', departmentFilter);
+    // Apply shop filter
+    if (shopFilter && shopFilter !== 'all') {
+      query = query.eq('shop_name', shopFilter);
     }
 
     const { data, error } = await query;
@@ -559,7 +558,7 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, d
     }
 
     // Count unique staff names
-    const uniqueStaff = new Set(data.map(item => `${item.department}-${item.name}`));
+    const uniqueStaff = new Set(data.map(item => `${((item.shop || item.shop_name) || (item.shop || item.shop_name))}-${item.name}`));
     console.log(`Total unique staff count for ${month}/${year}: ${uniqueStaff.size}`);
     return uniqueStaff.size;
 
@@ -588,14 +587,14 @@ export const getCurrentMonthDateRange = () => {
   };
 };
 
-export const getTotalUsersCountApi = async (departmentFilter = null) => {
+export const getTotalUsersCountApi = async (shopFilter = null) => {
   try {
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
 
     let query = supabase
       .from('users')
-      .select('user_name, department', { count: 'exact', head: true })
+      .select('user_name, shop_name', { count: 'exact', head: true })
       .not('user_name', 'is', null)
       .not('user_name', 'eq', '');
 
@@ -604,9 +603,9 @@ export const getTotalUsersCountApi = async (departmentFilter = null) => {
       query = query.or(`reported_by.eq.${username},user_name.eq.${username}`);
     }
 
-    // Apply department filter if provided and not "all"
-    if (departmentFilter && departmentFilter !== 'all') {
-      query = query.eq('department', departmentFilter);
+    // Apply shop filter if provided and not "all"
+    if (shopFilter && shopFilter !== 'all') {
+      query = query.eq('shop_name', shopFilter);
     }
 
     const { count, error } = await query;
@@ -616,7 +615,7 @@ export const getTotalUsersCountApi = async (departmentFilter = null) => {
       throw error;
     }
 
-    console.log(`Total users count${departmentFilter && departmentFilter !== 'all' ? ` for department ${departmentFilter}` : ''}: ${count}`);
+    console.log(`Total users count${shopFilter && shopFilter !== 'all' ? ` for shop ${shopFilter}` : ''}: ${count}`);
     return count || 0;
   } catch (error) {
     console.error("Error from Supabase:", error);
@@ -624,32 +623,32 @@ export const getTotalUsersCountApi = async (departmentFilter = null) => {
   }
 };
 
-export const getUniqueDepartmentsApi = async () => {
+export const getUniqueShopsApi = async () => {
   try {
-    // Departments are managed in the dedicated 'departments' table (same as Settings page)
+    // Shops are managed in the dedicated 'shop' table (same as Settings page)
     const { data, error } = await supabase
-      .from('departments')
+      .from('shop')
       .select('name')
       .not('name', 'is', null)
       .not('name', 'eq', '')
       .order('name', { ascending: true });
 
     if (error) {
-      console.error("Error fetching departments:", error);
+      console.error("Error fetching shops:", error);
       throw error;
     }
 
     const role = localStorage.getItem('role');
     const userAccess = localStorage.getItem('user_access');
 
-    let departments = (data || []).map(d => d.name.trim()).filter(Boolean);
+    let shops = (data || []).map(d => d.name.trim()).filter(Boolean);
 
     if (role === 'HOD' && userAccess && userAccess !== 'all') {
-      const allowedDepts = userAccess.split(',').map(d => d.trim().toLowerCase());
-      departments = departments.filter(d => allowedDepts.includes(d.toLowerCase()));
+      const allowedShops = userAccess.split(',').map(d => d.trim().toLowerCase());
+      shops = shops.filter(d => allowedShops.includes(d.toLowerCase()));
     }
 
-    return departments;
+    return shops;
   } catch (error) {
     console.error("Error from Supabase:", error);
     throw error;
@@ -658,7 +657,7 @@ export const getUniqueDepartmentsApi = async () => {
 
 
 
-export const getStaffNamesByDepartmentApi = async (departmentFilter = null) => {
+export const getStaffNamesByShopApi = async (shopFilter = null) => {
   try {
     const role = localStorage.getItem('role');
     const username = localStorage.getItem('user-name');
@@ -668,7 +667,7 @@ export const getStaffNamesByDepartmentApi = async (departmentFilter = null) => {
       .select('user_name, user_access, status, reported_by')
       .not('user_name', 'is', null)
       .not('user_name', 'eq', '')
-      .eq('status', 'active'); 
+      .eq('status', 'active');
 
     const { data, error } = await query;
 
@@ -685,12 +684,12 @@ export const getStaffNamesByDepartmentApi = async (departmentFilter = null) => {
       staff = staff.filter(user => user.reported_by === username || user.user_name === username);
     }
 
-    // Filter by department if provided
-    if (departmentFilter && departmentFilter !== 'all') {
+    // Filter by shop if provided
+    if (shopFilter && shopFilter !== 'all') {
       staff = staff.filter(user => {
         if (!user.user_access) return false;
-        const userDepartments = user.user_access.split(',').map(dept => dept.trim().toLowerCase());
-        return userDepartments.includes(departmentFilter.toLowerCase());
+        const userShops = user.user_access.split(',').map(dept => dept.trim().toLowerCase());
+        return userShops.includes(shopFilter.toLowerCase());
       });
     }
 
@@ -707,7 +706,7 @@ export const fetchChecklistDataByDateRangeApi = async (
   startDate,
   endDate,
   staffFilter = null,
-  departmentFilter = null,
+  shopFilter = null,
   page = 1,
   limit = 1000, // Increased for better performance
   statusFilter = 'all',
@@ -718,7 +717,7 @@ export const fetchChecklistDataByDateRangeApi = async (
       startDate,
       endDate,
       staffFilter,
-      departmentFilter,
+      shopFilter,
       page,
       limit,
       statusFilter,
@@ -730,9 +729,9 @@ export const fetchChecklistDataByDateRangeApi = async (
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
 
-    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
-                      dashboardType === 'repair' ? 'repair_tasks' : 
-                      dashboardType === 'ea' ? 'ea_tasks' : 'checklist';
+    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
+      dashboardType === 'repair' ? 'repair_tasks' :
+        dashboardType === 'ea' ? 'ea_tasks' : 'checklist';
 
     const dateColumn = 'planned_date'; // This API is specific to checklist
 
@@ -758,9 +757,9 @@ export const fetchChecklistDataByDateRangeApi = async (
       query = query.eq('name', username);
     }
 
-    // Apply department filter
-    if (departmentFilter && departmentFilter !== 'all') {
-      query = query.eq('department', departmentFilter);
+    // Apply shop filter
+    if (shopFilter && shopFilter !== 'all') {
+      query = query.eq('shop_name', shopFilter);
     }
 
     // Apply staff filter (for admin users)
@@ -811,7 +810,7 @@ export const getChecklistDateRangeCountApi = async (
   startDate,
   endDate,
   staffFilter = null,
-  departmentFilter = null,
+  shopFilter = null,
   statusFilter = 'all',
   dashboardType = 'checklist'
 ) => {
@@ -819,9 +818,9 @@ export const getChecklistDateRangeCountApi = async (
     const role = localStorage.getItem('role');
     const username = localStorage.getItem('user-name');
 
-    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
-                      dashboardType === 'repair' ? 'repair_tasks' : 
-                      dashboardType === 'ea' ? 'ea_tasks' : 'checklist';
+    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
+      dashboardType === 'repair' ? 'repair_tasks' :
+        dashboardType === 'ea' ? 'ea_tasks' : 'checklist';
 
     let query = supabase
       .from(tableName)
@@ -845,9 +844,9 @@ export const getChecklistDateRangeCountApi = async (
       query = query.eq('name', username);
     }
 
-    // Apply department filter
-    if (departmentFilter && departmentFilter !== 'all') {
-      query = query.eq('department', departmentFilter);
+    // Apply shop filter
+    if (shopFilter && shopFilter !== 'all') {
+      query = query.eq('shop_name', shopFilter);
     }
 
     // Apply staff filter
@@ -895,7 +894,7 @@ export const getChecklistDateRangeStatsApi = async (
   startDate,
   endDate,
   staffFilter = null,
-  departmentFilter = null,
+  shopFilter = null,
   dashboardType = 'checklist'
 ) => {
   try {
@@ -903,14 +902,14 @@ export const getChecklistDateRangeStatsApi = async (
     const username = localStorage.getItem('user-name');
 
     console.log('📊 getChecklistDateRangeStatsApi called with:', {
-      startDate, endDate, staffFilter, departmentFilter
+      startDate, endDate, staffFilter, shopFilter
     });
 
     const dateColumn = 'planned_date'; // checklist specific
 
-    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
-                      dashboardType === 'repair' ? 'repair_tasks' : 
-                      dashboardType === 'ea' ? 'ea_tasks' : 'checklist';
+    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
+      dashboardType === 'repair' ? 'repair_tasks' :
+        dashboardType === 'ea' ? 'ea_tasks' : 'checklist';
 
     // MAIN FIX: Remove the today date filter that was limiting results
     let totalQuery = supabase
@@ -929,9 +928,9 @@ export const getChecklistDateRangeStatsApi = async (
       totalQuery = totalQuery.eq('name', username);
     }
 
-    // Apply department filter
-    if (departmentFilter && departmentFilter !== 'all') {
-      totalQuery = totalQuery.eq('department', departmentFilter);
+    // Apply shop filter
+    if (shopFilter && shopFilter !== 'all') {
+      totalQuery = totalQuery.eq('shop_name', shopFilter);
     }
 
     // Apply staff filter
@@ -963,8 +962,8 @@ export const getChecklistDateRangeStatsApi = async (
     if (role === 'user' && username) {
       completedQuery = completedQuery.eq('name', username);
     }
-    if (departmentFilter && departmentFilter !== 'all') {
-      completedQuery = completedQuery.eq('department', departmentFilter);
+    if (shopFilter && shopFilter !== 'all') {
+      completedQuery = completedQuery.eq('shop_name', shopFilter);
     }
     if (staffFilter && staffFilter !== 'all' && role === 'admin') {
       completedQuery = completedQuery.eq('name', staffFilter);
@@ -998,8 +997,8 @@ export const getChecklistDateRangeStatsApi = async (
     if (role === 'user' && username) {
       overdueQuery = overdueQuery.eq('name', username);
     }
-    if (departmentFilter && departmentFilter !== 'all') {
-      overdueQuery = overdueQuery.eq('department', departmentFilter);
+    if (shopFilter && shopFilter !== 'all') {
+      overdueQuery = overdueQuery.eq('shop_name', shopFilter);
     }
     if (staffFilter && staffFilter !== 'all' && role === 'admin') {
       overdueQuery = overdueQuery.eq('name', staffFilter);
@@ -1037,7 +1036,7 @@ export const fetchCompleteChecklistDataByDateRangeApi = async (
   startDate,
   endDate,
   staffFilter = null,
-  departmentFilter = null,
+  shopFilter = null,
   statusFilter = 'all'
 ) => {
   try {
@@ -1045,7 +1044,7 @@ export const fetchCompleteChecklistDataByDateRangeApi = async (
       startDate,
       endDate,
       staffFilter,
-      departmentFilter,
+      shopFilter,
       statusFilter
     });
 
@@ -1059,7 +1058,7 @@ export const fetchCompleteChecklistDataByDateRangeApi = async (
       startDate,
       endDate,
       staffFilter,
-      departmentFilter,
+      shopFilter,
       statusFilter
     );
 
@@ -1072,7 +1071,7 @@ export const fetchCompleteChecklistDataByDateRangeApi = async (
         startDate,
         endDate,
         staffFilter,
-        departmentFilter,
+        shopFilter,
         page,
         limit,
         statusFilter
@@ -1131,16 +1130,19 @@ const getCurrentMonthRange = () => {
 };
 
 
-export const countTotalTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null) => {
+export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopFilter = null, startDate = null, endDate = null) => {
   const role = localStorage.getItem('role');
   const username = localStorage.getItem('user-name');
 
   try {
-    const { start, end } = getCurrentMonthRange();
+    const { start: defaultStart, end: defaultEnd } = getCurrentMonthRange();
+    const start = startDate ? `${startDate}T00:00:00` : defaultStart;
+    const end = endDate ? `${endDate}T23:59:59` : defaultEnd;
+    
     const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
-    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
-                      dashboardType === 'repair' ? 'repair_tasks' : 
-                      dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
+    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
+      dashboardType === 'repair' ? 'repair_tasks' :
+        dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
 
     let query = supabase
       .from(tableName)
@@ -1162,9 +1164,9 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, depar
       query = query.eq('name', staffFilter);
     }
 
-    // Apply department filter (only for checklist)
-    if (departmentFilter && departmentFilter !== 'all' && dashboardType === 'checklist') {
-      query = query.eq('department', departmentFilter);
+    // Apply shop filter
+    if (shopFilter && shopFilter !== 'all') {
+      query = query.eq('shop_name', shopFilter);
     }
 
     const { count, error } = await query;
@@ -1183,12 +1185,15 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, depar
 };
 
 // 2. Count Complete Tasks (Current Month)
-export const countCompleteTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null) => {
+export const countCompleteTaskApi = async (dashboardType, staffFilter = null, shopFilter = null, startDate = null, endDate = null) => {
   const role = localStorage.getItem('role');
   const username = localStorage.getItem('user-name');
 
   try {
-    const { start, end } = getCurrentMonthRange();
+    const { start: defaultStart, end: defaultEnd } = getCurrentMonthRange();
+    const start = startDate ? `${startDate}T00:00:00` : defaultStart;
+    const end = endDate ? `${endDate}T23:59:59` : defaultEnd;
+    
     const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
     let query;
 
@@ -1201,10 +1206,10 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, de
         .gte(dateColumn, start)
         .lte(dateColumn, end);
     } else {
-      const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
-                        dashboardType === 'repair' ? 'repair_tasks' : 
-                        dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
-      
+      const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
+        dashboardType === 'repair' ? 'repair_tasks' :
+          dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
+
       query = supabase
         .from(tableName)
         .select('*', { count: 'exact', head: true })
@@ -1227,9 +1232,9 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, de
       query = query.eq('name', staffFilter);
     }
 
-    // Apply department filter (only for checklist)
-    if (departmentFilter && departmentFilter !== 'all' && dashboardType === 'checklist') {
-      query = query.eq('department', departmentFilter);
+    // Apply shop filter
+    if (shopFilter && shopFilter !== 'all') {
+      query = query.eq('shop_name', shopFilter);
     }
 
     const { count, error } = await query;
@@ -1247,13 +1252,14 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, de
   }
 };
 
-// 3. Count Overdue Tasks (Current Month) - UPDATED
-export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null) => {
+export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter = null, shopFilter = null, startDate = null, endDate = null) => {
   const role = localStorage.getItem('role');
   const username = localStorage.getItem('user-name');
 
   try {
-    const { start, todayStart } = getCurrentMonthRange();
+    const { start: defaultStart, todayStart } = getCurrentMonthRange();
+    const start = startDate ? `${startDate}T00:00:00` : defaultStart;
+    
     const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
     let query;
 
@@ -1266,10 +1272,10 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
         .lt(dateColumn, todayStart)
         .gte(dateColumn, start);
     } else {
-      const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' : 
-                        dashboardType === 'repair' ? 'repair_tasks' : 
-                        dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
-      
+      const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
+        dashboardType === 'repair' ? 'repair_tasks' :
+          dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
+
       query = supabase
         .from(tableName)
         .select('*', { count: 'exact', head: true })
@@ -1292,9 +1298,9 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
       query = query.eq('name', staffFilter);
     }
 
-    // Apply department filter (only for checklist)
-    if (departmentFilter && departmentFilter !== 'all' && dashboardType === 'checklist') {
-      query = query.eq('department', departmentFilter);
+    // Apply shop filter (only for checklist)
+    if (shopFilter && shopFilter !== 'all' && dashboardType === 'checklist') {
+      query = query.eq('shop_name', shopFilter);
     }
 
     const { count, error } = await query;

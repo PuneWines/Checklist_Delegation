@@ -77,7 +77,7 @@ const getUserPhoneNumber = async (username) => {
 const sendWhatsAppMessage = async (phoneNumber, message) => {
     if (!WHATSAPP_ENABLED) {
         console.log('🚫 WhatsApp sending is currently disabled.');
-        return true; 
+        return true;
     }
     try {
         const formattedPhone = formatPhoneNumber(phoneNumber);
@@ -196,7 +196,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
             taskType,
             machineName,
             partName,
-            department
+            shop
         } = taskDetails;
 
         const phoneNumber = await getUserPhoneNumber(doerName);
@@ -218,7 +218,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
                     `Task ID: ${taskId}\n` +
                     `⚙️ Machine: ${machineName || 'N/A'}\n` +
                     `🧩 Part: ${partName || 'N/A'}\n` +
-                    `🏢 Dept: ${department || 'N/A'}\n` +
+                    `🏢 Shop: ${shop || 'N/A'}\n` +
                     `📝 Task: ${displayDescription}\n` +
                     `🗓️ Planned: ${dueDate}\n` +
                     `🧑 Given By: ${givenBy}\n`;
@@ -228,7 +228,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
                 body = `Name: ${doerName}\n` +
                     `Task ID: ${taskId}\n` +
                     `⚙️ Machine: ${machineName || 'N/A'}\n` +
-                    `🏢 Dept: ${department || 'N/A'}\n` +
+                    `🏢 Shop: ${shop || 'N/A'}\n` +
                     `📝 Issue: ${displayDescription}\n` +
                     `🗓️ Date: ${dueDate}\n` +
                     `🧑 Filled By: ${givenBy}\n`;
@@ -237,7 +237,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
             case 'checklist':
                 body = `Name: ${doerName}\n` +
                     `Task ID: ${taskId}\n` +
-                    `🏢 Dept: ${department || 'N/A'}\n` +
+                    `🏢 Shop: ${shop || 'N/A'}\n` +
                     `📝 Task: ${displayDescription}\n` +
                     `⏳ Planned Date: ${dueDate}\n` +
                     `🧑 Given By: ${givenBy}\n`;
@@ -281,7 +281,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
  */
 export const sendChecklistTaskNotification = async (taskDetails) => {
     try {
-        const { doerName, taskId, description, startDate, givenBy, department, duration } = taskDetails;
+        const { doerName, taskId, description, startDate, givenBy, shop, duration } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
 
@@ -294,7 +294,7 @@ export const sendChecklistTaskNotification = async (taskDetails) => {
             `Dear ${doerName},\n\n` +
             `A new checklist task has been assigned to you.\n\n` +
             `📌 Task ID: ${taskId}\n` +
-            `🏢 Dept: ${department || 'N/A'}\n` +
+            `🏢 Shop: ${shop || 'N/A'}\n` +
             `📝 Task: ${displayDescription}\n` +
             `⏳ Planned Date: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
@@ -319,7 +319,7 @@ export const sendChecklistTaskNotification = async (taskDetails) => {
  */
 export const sendMaintenanceTaskNotification = async (taskDetails) => {
     try {
-        const { doerName, taskId, description, startDate, givenBy, machineName, partName, department, duration } = taskDetails;
+        const { doerName, taskId, description, startDate, givenBy, machineName, partName, shop, duration } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
 
@@ -334,7 +334,7 @@ export const sendMaintenanceTaskNotification = async (taskDetails) => {
             `📌 Task ID: ${taskId}\n` +
             `⚙️ Machine: ${machineName || 'N/A'}\n` +
             `🧩 Part: ${partName || 'N/A'}\n` +
-            `🏢 Dept: ${department || 'N/A'}\n` +
+            `🏢 Shop: ${shop || 'N/A'}\n` +
             `📝 Task: ${displayDescription}\n` +
             `🗓️ Planned Date: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
@@ -359,7 +359,7 @@ export const sendMaintenanceTaskNotification = async (taskDetails) => {
  */
 export const sendRepairTaskNotification = async (taskDetails) => {
     try {
-        const { doerName, taskId, description, startDate, givenBy, machineName, department, duration } = taskDetails;
+        const { doerName, taskId, description, startDate, givenBy, machineName, shop, duration } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
 
@@ -373,7 +373,7 @@ export const sendRepairTaskNotification = async (taskDetails) => {
             `A repair request has been assigned to you.\n\n` +
             `📌 Task ID: ${taskId}\n` +
             `⚙️ Machine: ${machineName || 'N/A'}\n` +
-            `🏢 Dept: ${department || 'N/A'}\n` +
+            `🏢 Shop: ${shop || 'N/A'}\n` +
             `📝 Issue: ${displayDescription}\n` +
             `🗓️ Date: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
@@ -435,7 +435,7 @@ export const sendEATaskNotification = async (taskDetails) => {
  */
 export const sendDelegationTaskNotification = async (taskDetails) => {
     try {
-        const { doerName, taskId, description, startDate, givenBy, department, duration } = taskDetails;
+        const { doerName, taskId, description, startDate, givenBy, shop, duration } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
 
@@ -448,7 +448,7 @@ export const sendDelegationTaskNotification = async (taskDetails) => {
             `Dear ${doerName},\n\n` +
             `A new task has been delegated to you.\n\n` +
             `📌 Task ID: ${taskId}\n` +
-            `🏢 Dept: ${department || 'N/A'}\n` +
+            `🏢 Shop: ${shop || 'N/A'}\n` +
             `📝 Task: ${displayDescription}\n` +
             `⏳ Deadline: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
@@ -702,7 +702,7 @@ export const sendTaskReassignmentNotification = async (taskDetails) => {
             description,
             startDate,
             givenBy,
-            department,
+            shop,
             taskType
         } = taskDetails;
 
@@ -719,7 +719,7 @@ export const sendTaskReassignmentNotification = async (taskDetails) => {
             `A task has been reassigned to you from ${originalDoerName} (currently on leave).\n\n` +
             `📌 Task ID: ${taskId}\n` +
             `📋 Type: ${taskType ? taskType.toUpperCase() : 'TASK'}\n` +
-            `🏢 Dept: ${department || 'N/A'}\n` +
+            `🏢 Shop: ${shop || 'N/A'}\n` +
             `📝 Task: ${displayDescription}\n` +
             `⏳ Date: ${startDate}\n` +
             `🧑 Originally Given By: ${givenBy}\n\n` +

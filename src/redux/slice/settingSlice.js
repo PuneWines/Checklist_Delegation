@@ -1,24 +1,32 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import {
-  createDepartmentApi,
+  createShopApi,
   createUserApi,
   deleteUserByIdApi,
-  fetchDepartmentDataApi,
+  fetchShopDataApi,
   fetchUserDetailsApi,
-  updateDepartmentDataApi,
+  updateShopDataApi,
   updateUserDataApi,
-  fetchDepartmentsOnlyApi,
+  fetchShopsOnlyApi,
   fetchGivenByDataApi,
   fetchCustomDropdownsApi,
   createCustomDropdownApi,
   deleteCustomDropdownApi,
   createAssignFromApi,
-  deleteDepartmentApi,
+  deleteShopApi,
   deleteAssignFromApi,
   updateCustomDropdownApi,
   updateAssignFromApi,
   createMachineEntriesApi,
-  uploadProfileImageApi
+  uploadProfileImageApi,
+  fetchMasterTasksAllApi,
+  createMasterTaskApi,
+  updateMasterTaskApi,
+  deleteMasterTaskApi,
+  fetchLevelsAllApi,
+  createLevelApi,
+  updateLevelApi,
+  deleteLevelApi
 } from '../api/settingApi';
 
 
@@ -30,11 +38,11 @@ export const userDetails = createAsyncThunk(
   }
 );
 
-export const departmentOnlyDetails = createAsyncThunk(
-  'fetch/departments-only',
+export const shopOnlyDetails = createAsyncThunk(
+  'fetch/shops-only',
   async () => {
-    const departments = await fetchDepartmentsOnlyApi();
-    return departments;
+    const shops = await fetchShopsOnlyApi();
+    return shops;
   }
 );
 
@@ -46,11 +54,11 @@ export const givenByDetails = createAsyncThunk(
   }
 );
 
-export const departmentDetails = createAsyncThunk(
-  'fetch/department',
+export const shopDetails = createAsyncThunk(
+  'fetch/shop',
   async () => {
-    const department = await fetchDepartmentDataApi();
-    return department;
+    const shop = await fetchShopDataApi();
+    return shop;
   }
 );
 
@@ -67,17 +75,17 @@ export const updateUser = createAsyncThunk('update/users', async ({ id, updatedU
   return user;
 });
 
-export const createDepartment = createAsyncThunk(
-  'post/department',
-  async (newDept) => {
-    const department = await createDepartmentApi(newDept);
-    return department;
+export const createShop = createAsyncThunk(
+  'post/shop',
+  async (newShop) => {
+    const shop = await createShopApi(newShop);
+    return shop;
   }
 );
 
-export const updateDepartment = createAsyncThunk('update/department', async ({ id, updatedDept }) => {
-  const department = await updateDepartmentDataApi({ id, updatedDept });
-  return department;
+export const updateShop = createAsyncThunk('update/shop', async ({ id, updatedShop }) => {
+  const shop = await updateShopDataApi({ id, updatedShop });
+  return shop;
 });
 
 export const deleteUser = createAsyncThunk(
@@ -120,10 +128,10 @@ export const createAssignFrom = createAsyncThunk(
   }
 );
 
-export const deleteDepartment = createAsyncThunk(
-  'delete/department',
+export const deleteShop = createAsyncThunk(
+  'delete/shop',
   async (id) => {
-    const deletedId = await deleteDepartmentApi(id);
+    const deletedId = await deleteShopApi(id);
     return deletedId;
   }
 );
@@ -168,14 +176,48 @@ export const uploadProfileImage = createAsyncThunk(
   }
 );
 
+export const fetchMasterTasksAll = createAsyncThunk('fetch/master-tasks-all', async () => {
+  return await fetchMasterTasksAllApi();
+});
+
+export const createMasterTask = createAsyncThunk('post/master-task', async (task) => {
+  return await createMasterTaskApi(task);
+});
+
+export const updateMasterTask = createAsyncThunk('update/master-task', async ({ id, updates }) => {
+  return await updateMasterTaskApi({ id, updates });
+});
+
+export const deleteMasterTask = createAsyncThunk('delete/master-task', async (id) => {
+  return await deleteMasterTaskApi(id);
+});
+
+export const fetchLevelsAll = createAsyncThunk('fetch/levels-all', async () => {
+  return await fetchLevelsAllApi();
+});
+
+export const createLevel = createAsyncThunk('post/level', async (level) => {
+  return await createLevelApi(level);
+});
+
+export const updateLevel = createAsyncThunk('update/level', async ({ id, updates }) => {
+  return await updateLevelApi({ id, updates });
+});
+
+export const deleteLevel = createAsyncThunk('delete/level', async (id) => {
+  return await deleteLevelApi(id);
+});
+
 const settingsSlice = createSlice({
   name: 'settings',
   initialState: {
     userData: [],
-    department: [],
-    departmentsOnly: [],
+    shops: [],
+    shopsOnly: [],
     givenBy: [],
     customDropdowns: [],
+    masterTasks: [],
+    levels: [],
     error: null,
     loading: false,
     isLoggedIn: false,
@@ -195,15 +237,15 @@ const settingsSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      .addCase(departmentDetails.pending, (state) => {
+      .addCase(shopDetails.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
-      .addCase(departmentDetails.fulfilled, (state, action) => {
+      .addCase(shopDetails.fulfilled, (state, action) => {
         state.loading = false;
-        state.department = action.payload;
+        state.shops = action.payload;
       })
-      .addCase(departmentDetails.rejected, (state, action) => {
+      .addCase(shopDetails.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })
@@ -217,15 +259,15 @@ const settingsSlice = createSlice({
           state.userData.push(action.payload);
         }
       })
-      .addCase(departmentOnlyDetails.pending, (state) => {
+      .addCase(shopOnlyDetails.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
-      .addCase(departmentOnlyDetails.fulfilled, (state, action) => {
+      .addCase(shopOnlyDetails.fulfilled, (state, action) => {
         state.loading = false;
-        state.departmentsOnly = action.payload;
+        state.shopsOnly = action.payload;
       })
-      .addCase(departmentOnlyDetails.rejected, (state, action) => {
+      .addCase(shopOnlyDetails.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })
@@ -271,37 +313,37 @@ const settingsSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      .addCase(createDepartment.pending, (state) => {
+      .addCase(createShop.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
-      .addCase(createDepartment.fulfilled, (state, action) => {
+      .addCase(createShop.fulfilled, (state, action) => {
         state.loading = false;
-        state.department.push({
+        state.shops.push({
           id: action.payload.id,
-          department: action.payload.name,
+          shop: action.payload.name,
           given_by: action.payload.given_by || ""
         });
       })
-      .addCase(createDepartment.rejected, (state, action) => {
+      .addCase(createShop.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })
-      .addCase(updateDepartment.pending, (state) => {
+      .addCase(updateShop.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
-      .addCase(updateDepartment.fulfilled, (state, action) => {
+      .addCase(updateShop.fulfilled, (state, action) => {
         state.loading = false;
-        state.department = state.department.map((dept) =>
-          dept.id === action.payload.id ? {
+        state.shops = state.shops.map((shop) =>
+          shop.id === action.payload.id ? {
             id: action.payload.id,
-            department: action.payload.name,
+            shop: action.payload.name,
             given_by: action.payload.given_by || ""
-          } : dept
+          } : shop
         );
       })
-      .addCase(updateDepartment.rejected, (state, action) => {
+      .addCase(updateShop.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })
@@ -364,14 +406,14 @@ const settingsSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      .addCase(deleteDepartment.pending, (state) => {
+      .addCase(deleteShop.pending, (state) => {
         state.loading = true;
       })
-      .addCase(deleteDepartment.fulfilled, (state, action) => {
+      .addCase(deleteShop.fulfilled, (state, action) => {
         state.loading = false;
-        state.department = state.department.filter((dept) => dept.id !== action.payload);
+        state.shops = state.shops.filter((shop) => shop.id !== action.payload);
       })
-      .addCase(deleteDepartment.rejected, (state, action) => {
+      .addCase(deleteShop.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })
@@ -398,6 +440,32 @@ const settingsSlice = createSlice({
       .addCase(createMachineEntries.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      // Master Tasks
+      .addCase(fetchMasterTasksAll.fulfilled, (state, action) => {
+        state.masterTasks = action.payload;
+      })
+      .addCase(createMasterTask.fulfilled, (state, action) => {
+        state.masterTasks.push(action.payload);
+      })
+      .addCase(updateMasterTask.fulfilled, (state, action) => {
+        state.masterTasks = state.masterTasks.map(t => t.id === action.payload.id ? action.payload : t);
+      })
+      .addCase(deleteMasterTask.fulfilled, (state, action) => {
+        state.masterTasks = state.masterTasks.filter(t => t.id !== action.payload);
+      })
+      // Levels
+      .addCase(fetchLevelsAll.fulfilled, (state, action) => {
+        state.levels = action.payload;
+      })
+      .addCase(createLevel.fulfilled, (state, action) => {
+        state.levels.push(action.payload);
+      })
+      .addCase(updateLevel.fulfilled, (state, action) => {
+        state.levels = state.levels.map(l => l.id === action.payload.id ? action.payload : l);
+      })
+      .addCase(deleteLevel.fulfilled, (state, action) => {
+        state.levels = state.levels.filter(l => l.id !== action.payload);
       });
 
   },

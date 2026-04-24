@@ -4,7 +4,7 @@ import { Settings, Calendar, CheckCircle, Clock, AlertTriangle, IndianRupee, Fil
 import AudioPlayer from "../../../../components/AudioPlayer"
 import { useDispatch } from "react-redux"
 import { updateMaintenanceTask } from "../../../../redux/slice/maintenanceSlice"
-import { fetchUniqueDepartmentDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../../../../redux/api/assignTaskApi"
+import { fetchUniqueShopDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../../../../redux/api/assignTaskApi"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
 
 import RenderDescription, { MediaViewer } from "../../../../components/RenderDescription"
@@ -68,8 +68,8 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
     const handleInputChange = async (field, value) => {
         setEditFormData(prev => ({ ...prev, [field]: value }));
 
-        // If department changes (even if not in this view, good to have), refresh doers list
-        if (field === 'department') {
+        // If shop changes, refresh doers list
+        if (field === 'shop') {
             const doers = await fetchUniqueDoerNameDataApi(value);
             setDoersList(doers);
         }
@@ -141,7 +141,7 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
             totalCost: 0,
             freqData: [],
             costData: [],
-            deptCostData: [],
+            shopCostData: [],
             completedCount: 0,
             pendingCount: 0,
             overdueCount: 0
@@ -199,7 +199,7 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
             const month = date.toLocaleString('default', { month: 'short' });
             monthlyCost[month] = (monthlyCost[month] || 0) + cost;
 
-            // Department Cost Logic
+            // Shop Cost Logic
         });
 
         const freqData = Object.keys(freqCounts).map(key => ({ name: key, count: freqCounts[key] }));
@@ -216,7 +216,7 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
             totalCost,
             freqData,
             costData,
-            deptCostData: [], // distinct department data needed if available
+            shopCostData: [], // distinct shop data needed if available
             completedCount,
             pendingCount,
             overdueCount
@@ -226,7 +226,7 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
     // Use passed chartData or calculated or defaults
     const costData = processedData.costData;
 
-    const deptCostData = [
+    const shopCostData = [
         { name: "Logistics", value: 400, color: "#3B82F6" },
         { name: "Packaging", value: 300, color: "#10B981" },
         { name: "SMS", value: 300, color: "#F59E0B" },
@@ -273,14 +273,14 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
 
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-base font-bold text-gray-800">Department Cost Analysis</h3>
-                            <span className="text-[10px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-md">By Department</span>
+                            <h3 className="text-base font-bold text-gray-800">Shop Cost Analysis</h3>
+                            <span className="text-[10px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-md">By Shop</span>
                         </div>
                         <div className="h-56">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
-                                        data={deptCostData}
+                                        data={shopCostData}
                                         cx="50%"
                                         cy="50%"
                                         innerRadius={50}
@@ -288,7 +288,7 @@ export default function MaintenanceView({ stats: originalStats, chartData, tasks
                                         paddingAngle={8}
                                         dataKey="value"
                                     >
-                                        {deptCostData.map((entry, index) => (
+                                        {shopCostData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
                                         ))}
                                     </Pie>

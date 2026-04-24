@@ -148,8 +148,6 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       syncProfileImage();
     }
 
-    console.log("AdminLayout - Profile Image URL (Cached):", cachedImage);
-
     // Check if this is the super admin (username = 'admin')
     const normalizedUsername = (storedUsername || "").toLowerCase();
     setIsSuperAdmin(normalizedUsername === "admin");
@@ -194,7 +192,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     },
     {
       href: "/dashboard/notifications",
-      label: "Notifications",
+      label: "Announcements",
       icon: Bell,
       active: location.pathname === "/dashboard/notifications",
       showFor: ["admin", "user", "hod"],
@@ -284,7 +282,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     },
   ];
 
-  const getAccessibleDepartments = () => {
+  const getAccessibleShops = () => {
     return [];
   };
 

@@ -4,7 +4,7 @@ import { BellRing, FileCheck, Calendar, Wrench, X, Mic, Square, Trash2, Plus, Sa
 import { ReactMediaRecorder } from "react-media-recorder";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { useDispatch, useSelector } from "react-redux";
-import { uniqueDepartmentData, uniqueDoerNameData, uniqueGivenByData } from "../../redux/slice/assignTaskSlice";
+import { uniqueShopData, uniqueDoerNameData, uniqueGivenByData } from "../../redux/slice/assignTaskSlice";
 import { customDropdownDetails } from "../../redux/slice/settingSlice";
 import { maintenanceData } from "../../redux/slice/maintenanceSlice";
 import supabase from "../../SupabaseClient";
@@ -37,7 +37,7 @@ const defaultTask = () => ({
     machineName: "",
     machineArea: "",
     partName: [],
-    doerDepartment: "",
+    doerShop: "",
     doerName: "",
     givenBy: "",
     needSoundTest: "",
@@ -59,7 +59,7 @@ const defaultTask = () => ({
 
 // Single Maintenance Task Card
 const MaintenanceTaskCard = ({
-    task, index, total, department, doerName, givenBy,
+    task, index, total, shops, doerName, givenBy,
     customDropdowns, onUpdate, onRemove, dispatch
 }) => {
     const [lightboxImage, setLightboxImage] = useState(null); // { url, name }
@@ -320,20 +320,20 @@ const MaintenanceTaskCard = ({
                         })()}
                     </div>
 
-                    {/* Doer's Department */}
+                    {/* Doer's Shop */}
                     <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Doer's Department</label>
+                        <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Doer's Shop</label>
                         <select
-                            name="doerDepartment"
-                            value={task.doerDepartment}
+                            name="doerShop"
+                            value={task.doerShop}
                             onChange={(e) => {
                                 handleChange(e);
                                 dispatch(uniqueDoerNameData(e.target.value));
                             }}
                             className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm"
                         >
-                            <option value="">Select Department</option>
-                            {department.map((dept, i) => { const val = typeof dept === 'object' ? dept.department : dept; return <option key={i} value={val}>{val}</option>; })}
+                            <option value="">Select Shop</option>
+                            {shops.map((s, i) => { const val = typeof s === 'object' ? (s.shop || s.shop) : s; return <option key={i} value={val}>{val}</option>; })}
                         </select>
                     </div>
 
@@ -508,7 +508,7 @@ export default function MaintenanceTask() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const { showToast } = useMagicToast();
-    const { department, doerName, givenBy } = useSelector((state) => state.assignTask);
+    const { shops, doerName, givenBy } = useSelector((state) => state.assignTask);
     const { customDropdowns = [] } = useSelector((state) => state.setting || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
@@ -528,7 +528,7 @@ export default function MaintenanceTask() {
             if (data) setHolidays(data.map(h => h.holiday_date));
         };
         fetchHolidays();
-        dispatch(uniqueDepartmentData());
+        dispatch(uniqueShopData());
         dispatch(uniqueGivenByData());
         dispatch(uniqueDoerNameData("Maintenance"));
         dispatch(maintenanceData(1));
@@ -541,7 +541,7 @@ export default function MaintenanceTask() {
         return [...prev, {
             ...defaultTask(),
             givenBy: (localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? localStorage.getItem("user-name") : (lastTask?.givenBy || ""),
-            doerDepartment: lastTask?.doerDepartment || "",
+            doerShop: lastTask?.doerShop || "",
             doerName: lastTask?.doerName || ""
         }];
     });
@@ -561,7 +561,7 @@ export default function MaintenanceTask() {
 
         const addEntry = (date, description) => {
             generatedList.push({
-                department: "Maintenance",
+                shop: "Maintenance",
                 name: task.doerName,
                 given_by: task.givenBy,
                 task_start_date: `${getLocalDateString(date)}T${task.startTime}:00`,
@@ -573,16 +573,14 @@ export default function MaintenanceTask() {
                 freq: task.frequency,
                 duration: task.duration || null,
                 status: "Pending",
-                require_attachment: task.requireAttachment, // Ensure it's passed here
+                require_attachment: task.requireAttachment,
                 submission_date: null,
             });
         };
 
         if (freq === 'one-time') {
             const dateStr = getLocalDateString(startDate);
-            if (holidays.includes(dateStr)) {
-                return []; // Prevent assignment on holiday
-            }
+            if (holidays.includes(dateStr)) return [];
             addEntry(startDate, task.workDescription);
             return generatedList;
         }
@@ -615,16 +613,11 @@ export default function MaintenanceTask() {
             let attempts = 0;
             while (current <= endDate && attempts < 1000) {
                 attempts++;
-
-                // For other frequencies, shift to next working day if current is bad
                 let target = new Date(current);
                 while (target <= endDate && (isHoliday(target) || !isWorkingDay(target))) {
                     target.setDate(target.getDate() + 1);
                 }
-
-                if (target <= endDate) {
-                    addEntry(target, task.workDescription);
-                }
+                if (target <= endDate) addEntry(target, task.workDescription);
 
                 if (freq === 'weekly') current = addDays(current, 7);
                 else if (freq === 'fortnight') current = addDays(current, 14);
@@ -637,7 +630,6 @@ export default function MaintenanceTask() {
         }
         return generatedList;
     };
-
     const handlePreview = async () => {
         setIsSubmitting(true);
         try {
@@ -779,7 +771,7 @@ export default function MaintenanceTask() {
                                 taskType: 'maintenance',
                                 machineName: task.machine_name,
                                 partName: task.part_name,
-                                department: task.department,
+                                shop: task.shop,
                             };
                             if (task.priority?.toLowerCase() === 'high') await sendUrgentTaskNotification(notificationData);
                             else await sendTaskAssignmentNotification(notificationData);
@@ -841,7 +833,7 @@ export default function MaintenanceTask() {
                             task={task}
                             index={index}
                             total={tasks.length}
-                            department={department}
+                            shops={shops}
                             doerName={doerName}
                             givenBy={givenBy}
                             customDropdowns={customDropdowns}

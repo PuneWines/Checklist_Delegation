@@ -29,13 +29,13 @@ function DelegationPage({
   searchTerm = "",
   freqFilter = "",
   setFreqFilter,
-  departmentFilter = "",
+  shopFilter = "",
   showLayout = true,
   externalSelectedTasks = null,
   onSelectionChange = null,
   onDelete = null,
   isExternalDeleting = false,
-  departments = [],
+  shops = [],
   givenByList = [],
   doersList = [],
   onEdit = null
@@ -134,7 +134,7 @@ function DelegationPage({
       setEditingTaskId(task.id);
       setEditFormData({
         id: task.id,
-        department: task.department || '',
+        shop: task.shop || task.shop_name || '',
         given_by: task.given_by || '',
         name: task.name || '',
         task_description: task.task_description || '',
@@ -213,7 +213,7 @@ function DelegationPage({
       await dispatch(updateDelegationTask({
         updatedTask: finalEditData,
         originalTask: originalTask ? {
-          department: originalTask.department,
+          shop: originalTask.shop || originalTask.shop_name,
           name: originalTask.name,
           task_description: originalTask.task_description
         } : null
@@ -326,8 +326,8 @@ function DelegationPage({
       filtered = filtered.filter(task => task.frequency === freqFilter)
     }
 
-    if (departmentFilter) {
-      filtered = filtered.filter(task => task.department?.toLowerCase().includes(departmentFilter.toLowerCase()))
+    if (shopFilter) {
+      filtered = filtered.filter(task => (task.shop || task.shop_name || '').toLowerCase().includes(shopFilter.toLowerCase()))
     }
 
     const now = new Date();
@@ -352,7 +352,7 @@ function DelegationPage({
 
       return { ...task, timeStatus };
     });
-  }, [delegationTasks, searchTerm, freqFilter, departmentFilter])
+  }, [delegationTasks, searchTerm, freqFilter, shopFilter])
 
   return (
     <>
@@ -362,10 +362,10 @@ function DelegationPage({
           <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-4 flex justify-between items-center">
             <div>
               <h2 className="text-purple-700 font-medium">
-                {departmentFilter ? `${departmentFilter} Tasks` : "Delegation Tasks"}
+                {shopFilter ? `${shopFilter} Tasks` : "Delegation Tasks"}
               </h2>
               <p className="text-purple-600 text-sm">
-                Manage your {departmentFilter ? departmentFilter.toLowerCase() : "delegation"} tasks ({filteredTasks.length})
+                Manage your {shopFilter ? shopFilter.toLowerCase() : "delegation"} tasks ({filteredTasks.length})
               </p>
             </div>
 
@@ -407,18 +407,21 @@ function DelegationPage({
                     Task ID
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[300px]">
-                    {departmentFilter ? "Work Description" : "Task Description"}
+                    {shopFilter ? "Work Description" : "Task Description"}
                   </th>
-                  {!departmentFilter && (
+                  {!shopFilter && (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      Department
+                      Shop Name
                     </th>
                   )}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                    Level
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Given By
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                    {departmentFilter ? "Doer Name" : "Name"}
+                    {shopFilter ? "Doer Name" : "Name"}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-yellow-50 whitespace-nowrap">
                     Start Date
@@ -485,11 +488,18 @@ function DelegationPage({
                           instructionType={task.instruction_attachment_type}
                         />
                       </td>
-                      {!departmentFilter && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {task.department || "—"}
+                      {!shopFilter && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                          {task.shop_name || task.shop || "—"}
                         </td>
                       )}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {task.task_level ? (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-tighter">
+                            {task.task_level}
+                          </span>
+                        ) : "—"}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {task.given_by || "—"}
                       </td>
@@ -577,8 +587,16 @@ function DelegationPage({
                           </div>
                           <div className="grid grid-cols-2 gap-4 border-t border-gray-50 pt-4">
                             <div className="space-y-1">
-                              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Dept</span>
-                              <div className="text-[11px] font-bold text-gray-700 truncate">{task.department || '—'}</div>
+                              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Shop Name</span>
+                              <div className="text-[11px] font-bold text-gray-700 truncate">{task.shop_name || task.shop || '—'}</div>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Level</span>
+                              <div className="text-[11px] font-bold text-gray-700 truncate">
+                                {task.task_level ? (
+                                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-black uppercase tracking-tighter">{task.task_level}</span>
+                                ) : '—'}
+                              </div>
                             </div>
                             <div className="space-y-1">
                               <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">From</span>

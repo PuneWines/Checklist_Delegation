@@ -6,7 +6,7 @@ import { fetchStaffTasksDataApi, getStaffTasksCountApi, getTotalUsersCountApi } 
 export default function StaffTasksTable({
   dashboardType,
   dashboardStaffFilter,
-  departmentFilter,
+  shopFilter,
   parseTaskStartDate
 }) {
   const [currentPage, setCurrentPage] = useState(1)
@@ -48,7 +48,7 @@ export default function StaffTasksTable({
     setStaffMembers([])
     setHasMoreData(true)
     setTotalStaffCount(0)
-  }, [dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth])
+  }, [dashboardType, dashboardStaffFilter, shopFilter, selectedMonth])
 
   // Function to load staff data from server
   const loadStaffData = useCallback(async (page = 1, append = false) => {
@@ -61,7 +61,7 @@ export default function StaffTasksTable({
       const data = await fetchStaffTasksDataApi(
         dashboardType,
         dashboardStaffFilter,
-        departmentFilter,
+        shopFilter,
         page,
         itemsPerPage,
         selectedMonth
@@ -70,8 +70,8 @@ export default function StaffTasksTable({
       // Get total counts for both staff with tasks and total users
       if (page === 1) {
         const [staffCount, usersCount] = await Promise.all([
-          getStaffTasksCountApi(dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth),
-          getTotalUsersCountApi(departmentFilter) // Pass department filter to users count API
+          getStaffTasksCountApi(dashboardType, dashboardStaffFilter, shopFilter, selectedMonth),
+          getTotalUsersCountApi(shopFilter) // Pass shop filter to users count API
         ]);
         setTotalStaffCount(staffCount)
         setTotalUsersCount(usersCount)
@@ -100,14 +100,14 @@ export default function StaffTasksTable({
     } finally {
       setIsLoadingMore(false)
     }
-  }, [dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth, isLoadingMore])
+  }, [dashboardType, dashboardStaffFilter, shopFilter, selectedMonth, isLoadingMore])
 
   // Initial load when component mounts or dependencies change
   useEffect(() => {
     if (selectedMonth) {
       loadStaffData(1, false)
     }
-  }, [dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth])
+  }, [dashboardType, dashboardStaffFilter, shopFilter, selectedMonth])
 
   // Function to load more data when scrolling
   const loadMoreData = () => {
@@ -196,10 +196,10 @@ export default function StaffTasksTable({
                 Staff: {dashboardStaffFilter}
               </div>
             )}
-            {departmentFilter !== "all" && (
+            {shopFilter !== "all" && (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200/50 rounded-md text-[11px] font-bold text-gray-600 tracking-wide">
                 <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
-                Dept: {departmentFilter}
+                Shop: {shopFilter}
               </div>
             )}
           </div>
@@ -230,7 +230,7 @@ export default function StaffTasksTable({
             <table className="min-w-full divide-y divide-gray-100">
               <thead className="bg-blue-50/80 backdrop-blur-md sticky top-0 z-10 border-b border-blue-100">
                 <tr>
-                  {["Seq", "Staff Performance Detail", "Department", "Total", "Done", "On-Time", "Done Score"].map((header, i) => (
+                  {["Seq", "Staff Performance Detail", "Shop", "Total", "Done", "On-Time", "Done Score"].map((header, i) => (
                     <th key={header} scope="col" className={`px-4 py-4 text-left text-[11px] font-black text-blue-900 uppercase tracking-widest ${i === 1 ? 'min-w-[220px]' : ''}`}>
                       {header}
                     </th>
@@ -282,7 +282,7 @@ export default function StaffTasksTable({
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <span className="px-2 py-1 bg-gray-100 text-gray-600 text-[10px] font-black uppercase rounded-md border border-gray-200">
-                          {staff.department}
+                          {(staff.shop || staff.shop)}
                         </span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm font-black text-gray-700">{staff.total_tasks}</td>

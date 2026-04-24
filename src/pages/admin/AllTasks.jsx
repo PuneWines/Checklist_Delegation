@@ -282,7 +282,7 @@ const AllTasks = () => {
               { id: "time_status", label: "Time" },
               { id: "id", label: "ID" },
               { id: "task_description", label: "Description" },
-              { id: "department", label: "Dept" },
+              { id: "shop", label: "Shop" },
               { id: "machine_name", label: "Machine" },
               { id: "part_name", label: "Part" },
               { id: "part_area", label: "Area" },
@@ -297,7 +297,7 @@ const AllTasks = () => {
               { id: "time_status", label: "Time" },
               { id: "id", label: "ID" },
               { id: "task_description", label: "Description" },
-              { id: "department", label: "Dept" },
+              { id: "shop", label: "Shop" },
               { id: "machine_name", label: "Machine" },
               { id: "part_name", label: "Part" },
               { id: "part_area", label: "Area" },
@@ -359,7 +359,7 @@ const AllTasks = () => {
             { id: "time_status", label: "Time" },
             { id: "task_id", label: "ID" },
             { id: "task_description", label: "Description" },
-            { id: "department", label: "Dept" },
+            { id: "shop", label: "Shop" },
             { id: "doer_name", label: "Name" },
             { id: "phone_number", label: "Phone" },
             { id: "planned_date", label: "Planned" },
@@ -379,7 +379,8 @@ const AllTasks = () => {
             { id: "time_status", label: "Time" },
             { id: "id", label: "ID" },
             { id: "task_description", label: "Description" },
-            { id: "department", label: "Dept" },
+            { id: "shop", label: "Shop" },
+            { id: "task_level", label: "Level" },
             { id: "given_by", label: "Given By" },
             { id: "name", label: "Name" },
             { id: "planned_date", label: "Planned" },
@@ -474,7 +475,7 @@ const AllTasks = () => {
           ...item,
           id: item.id || item.task_id,
           _table: item._table || tableName,
-          department: item.department || (activeTab === "ea" ? "EA" : "-")
+          shop: item.shop || item.shop_name || (activeTab === "ea" ? "EA" : "-")
         }));
 
         if (showHistory) {
@@ -1018,7 +1019,7 @@ const AllTasks = () => {
           taskType: activeTab,
           machineName: task.machine_name,
           partName: task.part_name,
-          department: task.department || task.assigned_dept
+          shop: task.shop || task.assigned_shop || task.shop_name
         });
       }
 
@@ -1689,10 +1690,16 @@ const AllTasks = () => {
                               <p className="text-[10px] text-gray-400 uppercase font-semibold">Planned Date</p>
                               <p className="text-sm font-bold text-purple-700">{formatDate(task.planned_date || task.task_start_date || task.created_at)}</p>
                             </div>
-                            {task.department && (
+                            {(task.shop || task.shop_name) && (
                               <div className="space-y-1">
-                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Department</p>
-                                <p className="text-sm text-gray-800 uppercase text-[11px] font-bold">{task.department}</p>
+                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Shop</p>
+                                <p className="text-sm text-gray-800 uppercase text-[11px] font-bold">{task.shop || task.shop_name}</p>
+                              </div>
+                            )}
+                            {task.task_level && (
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Level</p>
+                                <p className="text-sm font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md w-fit uppercase text-[11px]">{task.task_level}</p>
                               </div>
                             )}
                           </div>

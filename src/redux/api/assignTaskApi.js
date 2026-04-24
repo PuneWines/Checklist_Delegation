@@ -1,8 +1,8 @@
 import supabase from "../../SupabaseClient";
 
-export const fetchUniqueDepartmentDataApi = async () => {
+export const fetchUniqueShopDataApi = async () => {
   try {
-    console.log("🔍 Fetching unique departments from users table...");
+    console.log("🔍 Fetching unique shops from users table...");
 
     // Fetch all user_access values for active users
     const { data, error } = await supabase
@@ -13,25 +13,16 @@ export const fetchUniqueDepartmentDataApi = async () => {
 
     if (error) throw error;
 
-    const role = localStorage.getItem('role');
-    const userAccess = localStorage.getItem('user_access');
-
     // Filter out nulls/empties and get unique values
-    let uniqueDepartments = [...new Set(data
+    let uniqueShops = [...new Set(data
       .map(item => item.user_access)
-      .filter(dept => dept && dept.trim() !== "")
+      .filter(shop => shop && shop.trim() !== "")
     )].sort();
 
-    // HODs should see all departments now per user request
-    // if (role === 'HOD' && userAccess && userAccess !== 'all') {
-    //   const allowedDepts = userAccess.split(',').map(d => d.trim().toLowerCase());
-    //   uniqueDepartments = uniqueDepartments.filter(d => allowedDepts.includes(d.toLowerCase()));
-    // }
-
-    console.log("✅ Unique departments found:", uniqueDepartments);
-    return uniqueDepartments;
+    console.log("✅ Unique shops found:", uniqueShops);
+    return uniqueShops;
   } catch (error) {
-    console.error("❌ Error fetching departments from users table:", error);
+    console.error("❌ Error fetching shops from users table:", error);
     return [];
   }
 };
@@ -45,7 +36,7 @@ export const fetchUniqueGivenByDataApi = async () => {
 
     const { data, error } = await supabase
       .from('assign_from')
-      .select('*') // Fetch all to be safe and check column names
+      .select('*')
       .order('id', { ascending: true });
 
     if (error) {
@@ -58,25 +49,18 @@ export const fetchUniqueGivenByDataApi = async () => {
       return [];
     }
 
-    // Handle different possible column names (name, given_by, etc.)
     const extractedNames = data.map(item => {
       let val = item.name || item.given_by || item.value || (typeof item === 'string' ? item : null);
-
-      // Patch: if the value is a JSON string (due to previous bug), parse it
       if (typeof val === 'string' && val.trim().startsWith('{')) {
         try {
           const parsed = JSON.parse(val);
           return parsed.given_by || parsed.name || val;
-        } catch (e) {
-          // Not valid JSON, keep as is
-        }
+        } catch (e) {}
       }
       return val;
     }).filter(val => val && val.toString().trim() !== "");
 
-    // Get unique values and sort
     const uniqueNames = [...new Set(extractedNames)].sort();
-
     console.log("✅ API: Loaded Assigners:", uniqueNames);
     return uniqueNames;
   } catch (error) {
@@ -85,22 +69,20 @@ export const fetchUniqueGivenByDataApi = async () => {
   }
 };
 
-export const fetchUniqueDoerNameDataApi = async (department) => {
+export const fetchUniqueDoerNameDataApi = async (shop) => {
   try {
-    console.log("🔍 Fetching doer data for department:", department);
+    console.log("🔍 Fetching doer data for shop:", shop);
 
     let query = supabase
       .from("users")
       .select("user_name, user_access, status, leave_date, leave_end_date, reported_by, can_self_assign")
       .order("user_name", { ascending: true });
 
-    if (department) {
-      // Fetch users where user_access matches or contains the department
-      query = query.ilike("user_access", `%${department}%`);
+    if (shop) {
+      query = query.ilike("user_access", `%${shop}%`);
     }
 
     const { data, error } = await query;
-
     if (error) {
       console.error("Error when fetching user data", error);
       return [];
@@ -109,24 +91,16 @@ export const fetchUniqueDoerNameDataApi = async (department) => {
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = (localStorage.getItem('user-name') || "").toLowerCase();
 
-    // Filter unique by user_name just in case there are duplicates
     const uniqueUsers = [];
     const seenNames = new Set();
 
     data?.forEach(user => {
       const uName = (user.user_name || "").toLowerCase();
       if (uName && !seenNames.has(uName)) {
-        // Apply HOD filtering: only show themselves or their reports
         if (role === 'HOD' && username) {
           const reportedBy = (user.reported_by || "").toLowerCase();
-          if (reportedBy !== username && uName !== username) {
-            return;
-          }
-
-          // If it's the HOD themselves, check if they have self-assign rights
-          if (uName === username && !user.can_self_assign) {
-            return;
-          }
+          if (reportedBy !== username && uName !== username) return;
+          if (uName === username && !user.can_self_assign) return;
         }
 
         uniqueUsers.push({
@@ -154,7 +128,7 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
   // If targetTable is explicitly provided, use it for all tasks (legacy behavior or forced override)
   if (targetTable) {
     const tasksData = generatedTasks.map((task) => ({
-      department: task.department,
+      shop_name: (task.shop || task.shop_name),
       given_by: task.givenBy,
       name: task.doer,
       task_description: task.task_description || task.description || null, // Support both naming conventions
@@ -168,6 +142,7 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
       audio_url: task.audio_url || null,
       instruction_attachment_url: task.instruction_attachment_url || null,
       instruction_attachment_type: task.instruction_attachment_type || null,
+      task_level: task.task_level || null,
       status: targetTable === 'checklist' ? null : (task.status || 'pending')
     }));
 
@@ -192,7 +167,7 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
       freq.includes("no recurrence");
 
     const taskData = {
-      department: task.department,
+      shop_name: (task.shop || task.shop_name),
       given_by: task.givenBy,
       name: task.doer,
       task_description: task.task_description || task.description || null, // Support both naming conventions
@@ -206,6 +181,7 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
       audio_url: task.audio_url || null,
       instruction_attachment_url: task.instruction_attachment_url || null,
       instruction_attachment_type: task.instruction_attachment_type || null,
+      task_level: task.task_level || null,
     };
 
     if (isOneTime) {
@@ -236,11 +212,36 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
       if (data) results.push(...data);
     }
 
-    console.log("Tasks distributed successfully. Results:", results);
     return results;
   } catch (error) {
     console.error("Error during distributed task assignment:", error);
     throw error;
+  }
+};
+
+export const fetchMasterTasksApi = async (shop, level) => {
+  try {
+    let query = supabase.from('master_tasks').select('*');
+    if (shop) query = query.eq('shop_name', shop);
+    if (level) query = query.eq('level_name', level);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error("Error fetching master tasks:", error);
+    return [];
+  }
+};
+
+export const fetchLevelsApi = async () => {
+  try {
+    const { data, error } = await supabase.from('levels').select('*').order('level_name', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error("Error fetching levels:", error);
+    return [];
   }
 };
 

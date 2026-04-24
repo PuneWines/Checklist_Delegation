@@ -715,7 +715,7 @@ function DelegationDataPage() {
 
         return {
           id: item.id,
-          department: item.department || '',
+          shop: item.shop || '',
           given_by: item.given_by || '',
           name: item.name,
           task_description: item.task_description,
@@ -808,7 +808,7 @@ function DelegationDataPage() {
           dueDate: formatDateTimeForDisplay(task.planned_date || task.task_start_date),
           givenBy: task.given_by || username,
           taskType: 'delegation',
-          department: task.department
+          shop: task.shop
         });
       }
 
@@ -1035,6 +1035,9 @@ function DelegationDataPage() {
                       <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         Task ID
                       </th>
+                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Level
+                      </th>
                       <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
                         Task
                       </th>
@@ -1070,6 +1073,11 @@ function DelegationDataPage() {
                           <td className="px-3 sm:px-6 py-2 sm:py-4">
                             <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
                               {history.id || "—"}
+                            </div>
+                          </td>
+                          <td className="px-3 sm:px-6 py-2 sm:py-4">
+                            <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                              {history.task_level || "—"}
                             </div>
                           </td>
                           <td className="px-3 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
@@ -1179,7 +1187,14 @@ function DelegationDataPage() {
                   paginatedTasks.map((history, index) => (
                     <div key={index} className="bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden">
                       <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
-                        <span className="text-xs font-bold text-purple-800">#{history.id || index}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-purple-800">#{history.id || index}</span>
+                          {history.task_level && (
+                            <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                              {history.task_level}
+                            </span>
+                          )}
+                        </div>
                         <span
                           className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${history.status?.toLowerCase() === "done"
                             ? (history.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
@@ -1269,11 +1284,14 @@ function DelegationDataPage() {
                       <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         Task ID
                       </th>
+                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Level
+                      </th>
                       <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
                         Task Description
                       </th>
                       <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Department
+                        Shop
                       </th>
                       <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                         Given By
@@ -1356,6 +1374,11 @@ function DelegationDataPage() {
                                 {task.id || "—"}
                               </div>
                             </td>
+                            <td className="px-2 sm:px-6 py-2 sm:py-4">
+                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                {task.task_level || "—"}
+                              </div>
+                            </td>
                             <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
                               <div
                                 className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
@@ -1365,7 +1388,7 @@ function DelegationDataPage() {
                             </td>
                             <td className="px-2 sm:px-6 py-2 sm:py-4">
                               <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                                {task.department || "—"}
+                                {task.shop || task.shop_name || "—"}
                               </div>
                             </td>
                             <td className="px-2 sm:px-6 py-2 sm:py-4">
@@ -1588,6 +1611,11 @@ function DelegationDataPage() {
                               onChange={(e) => handleCheckboxClick(e, task.id)}
                             />
                             <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">#{task.id}</span>
+                            {task.task_level && (
+                              <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                                {task.task_level}
+                              </span>
+                            )}
                           </div>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${task.timeStatus === "Overdue" ? "bg-red-100 text-red-700" :
                             task.timeStatus === "Today" ? "bg-amber-100 text-amber-700" :
@@ -1607,8 +1635,8 @@ function DelegationDataPage() {
 
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
-                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Department</p>
-                              <p className="text-xs font-bold text-gray-700">{task.department || "—"}</p>
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Shop</p>
+                              <p className="text-xs font-bold text-gray-700">{task.shop || "—"}</p>
                             </div>
                             <div className="space-y-1">
                               <p className="text-[10px] text-gray-400 uppercase font-semibold">Given By</p>

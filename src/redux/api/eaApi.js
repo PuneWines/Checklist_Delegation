@@ -50,7 +50,7 @@ export const fetchEATasksHistory = async () => {
                     ? (doneItem.next_extend_date || detail?.planned_date)
                     : (doneItem.planned_date || detail?.planned_date),
                 id: doneItem.task_id,
-                department: "EA"
+                shop: "EA"
             };
         });
     } catch (err) {
@@ -241,7 +241,7 @@ export const fetchPendingEAApprovals = async () => {
                     : (doneItem.planned_date || detail?.planned_date),
                 done_id: doneItem.id, // Record the entry ID from ea_tasks_done
                 id: doneItem.task_id,
-                department: "EA"
+                shop: "EA"
             };
         });
     } catch (error) {
@@ -331,7 +331,7 @@ export const fetchApprovedEA = async () => {
             .order('updated_at', { ascending: false });
 
         if (error) throw error;
-        return (data || []).map(row => ({ ...row, id: row.task_id, department: "EA" }));
+        return (data || []).map(row => ({ ...row, id: row.task_id, shop: "EA" }));
     } catch (error) {
         console.error("Error fetching approved EA tasks:", error);
         return [];

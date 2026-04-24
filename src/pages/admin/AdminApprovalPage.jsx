@@ -576,11 +576,14 @@ export default function AdminApprovalPage() {
                                         </th>
                                     )}
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                    {(activeTab === 'checklist' || activeTab === 'delegation') && (
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Level</th>
+                                    )}
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         {activeTab === "delegation" || activeTab === "ea" || activeTab === "checklist" ? "Task Description" :
                                             activeTab === "maintenance" ? "Task/Machine" : "Issue/Machine"}
                                     </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shop</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         {viewMode === "pending" ? "Submission Time" : "Approval Data"}
                                     </th>
@@ -621,6 +624,11 @@ export default function AdminApprovalPage() {
                                                 <div className="text-sm font-bold text-gray-900">{task.doer_name || task.name || task.filled_by}</div>
                                                 <div className="text-[10px] text-gray-500 font-medium uppercase tracking-tight">By: {task.given_by || '-'}</div>
                                             </td>
+                                            {(activeTab === 'checklist' || activeTab === 'delegation') && (
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span className="text-sm text-gray-600">{task.task_level || '-'}</span>
+                                                </td>
+                                            )}
                                             <td className="px-6 py-4">
                                                     <RenderDescription 
                                                         text={task.task_description || task.issue_description} 
@@ -655,7 +663,7 @@ export default function AdminApprovalPage() {
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">{task.department || '-'}</span>
+                                                <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">{task.shop || task.shop_name || '-'}</span>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {viewMode === 'pending' ? (
@@ -850,9 +858,16 @@ export default function AdminApprovalPage() {
                                                 </div>
                                             </div>
                                         </div>
-                                        <span className="text-[10px] font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
-                                            {task.department || 'No Dept'}
-                                        </span>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className="text-[10px] font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full uppercase tracking-tighter whitespace-nowrap">
+                                                {task.shop || task.shop_name || 'No Shop'}
+                                            </span>
+                                            {task.task_level && (activeTab === 'checklist' || activeTab === 'delegation') && (
+                                                <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-tighter whitespace-nowrap">
+                                                    {task.task_level}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Task Content */}

@@ -11,9 +11,9 @@ export default function DashboardHeader({
     availableStaff,
     userRole,
     username,
-    departmentFilter,
-    setDepartmentFilter,
-    availableDepartments,
+    shopFilter,
+    setShopFilter,
+    availableShops,
     isLoadingMore,
     onDateRangeChange, // Add this prop to handle date range selection
     mainTab
@@ -30,8 +30,8 @@ export default function DashboardHeader({
     useEffect(() => {
         const fetchTotalUsers = async () => {
             try {
-                // Pass departmentFilter to the API
-                const count = await getTotalUsersCountApi(departmentFilter)
+                // Pass shopFilter to the API
+                const count = await getTotalUsersCountApi(shopFilter)
                 setTotalUsersCount(count)
             } catch (error) {
                 console.error('Error fetching total users count:', error)
@@ -39,7 +39,7 @@ export default function DashboardHeader({
         }
 
         fetchTotalUsers()
-    }, [departmentFilter]) // Add departmentFilter as dependency
+    }, [shopFilter]) // Add shopFilter as dependency
 
     // Apply date range filter
     const applyDateRange = () => {
@@ -71,7 +71,7 @@ export default function DashboardHeader({
                 {isAdmin && mainTab === "default" && (
                     <div className="flex items-center gap-2 ml-auto mr-5">
                         <div className="text-sm text-gray-600">
-                            {departmentFilter !== "all" ? `Users in ${departmentFilter}` : "Total Users"}
+                            {shopFilter !== "all" ? `Users in ${shopFilter}` : "Total Users"}
                         </div>
                         <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center">
                             <span className="text-white font-bold text-sm">
@@ -167,18 +167,18 @@ export default function DashboardHeader({
                                 </div>
                             </div>
 
-                            {/* Department Filter - Show for checklist and delegation */}
+                            {/* Shop Filter - Show for checklist and delegation */}
                             {(dashboardType === "checklist" || dashboardType === "delegation") && isAdmin && (
                                 <div className="relative">
                                     <select
-                                        value={departmentFilter}
-                                        onChange={(e) => setDepartmentFilter(e.target.value)}
+                                        value={shopFilter}
+                                        onChange={(e) => setShopFilter(e.target.value)}
                                         className="w-full appearance-none rounded-lg border border-purple-200 p-3 pr-8 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
                                     >
-                                        <option value="all">All Departments</option>
-                                        {availableDepartments.map((dept) => (
-                                            <option key={dept} value={dept}>
-                                                {dept}
+                                        <option value="all">All Shops</option>
+                                        {availableShops.map((shop) => (
+                                            <option key={shop} value={shop}>
+                                                {shop}
                                             </option>
                                         ))}
                                     </select>
@@ -291,17 +291,17 @@ export default function DashboardHeader({
                             <option value="delegation">Delegation</option>
                         </select>
 
-                        {/* Department Filter - Show for checklist and delegation */}
+                        {/* Shop Filter - Show for checklist and delegation */}
                         {(dashboardType === "checklist" || dashboardType === "delegation") && isAdmin && (
                             <select
-                                value={departmentFilter}
-                                onChange={(e) => setDepartmentFilter(e.target.value)}
+                                value={shopFilter}
+                                onChange={(e) => setShopFilter(e.target.value)}
                                 className="w-[110px] sm:w-[160px] rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
                             >
-                                <option value="all">All Departments</option>
-                                {availableDepartments.map((dept) => (
-                                    <option key={dept} value={dept}>
-                                        {dept}
+                                <option value="all">All Shops</option>
+                                {availableShops.map((shop) => (
+                                    <option key={shop} value={shop}>
+                                        {shop}
                                     </option>
                                 ))}
                             </select>

@@ -7,7 +7,7 @@ import { ReactMediaRecorder } from "react-media-recorder";
 import AdminLayout from "../../components/layout/AdminLayout";
 import AudioPlayer from "../../components/AudioPlayer";
 import { useDispatch, useSelector } from "react-redux";
-import { assignTaskInTable, uniqueDepartmentData, uniqueDoerNameData, uniqueGivenByData } from "../../redux/slice/assignTaskSlice";
+import { assignTaskInTable, uniqueShopData, uniqueDoerNameData, uniqueGivenByData, fetchMasterTasks, fetchLevels } from "../../redux/slice/assignTaskSlice";
 import { customDropdownDetails } from "../../redux/slice/settingSlice";
 import supabase from "../../SupabaseClient";
 import CalendarComponent from "../../components/CalendarComponent";
@@ -30,16 +30,17 @@ const FREQUENCY_OPTIONS = [
 
 const defaultTask = () => ({
     id: Date.now() + Math.random(),
-    department: "",
+    shop: "",
     givenBy: "",
     doer: "",
     description: "",
-    frequency: "One Time (No Recurrence)",
+    frequency: "",
     duration: "",
     enableReminders: true,
     requireAttachment: false,
     date: null,
     time: "09:00",
+    task_level: "",
     recordedAudio: null,
     showCalendar: false,
     references: [],
@@ -64,7 +65,7 @@ const getYouTubeId = (url) => {
 
 
 // Single Task Card
-function TaskCard({ task, index, total, department, doerName, givenBy, dispatch, onUpdate, onRemove }) {
+function TaskCard({ task, index, total, shops, doerName, givenBy, levels, dispatch, onUpdate, onRemove }) {
     const handleChange = (e) => {
         onUpdate(task.id, { [e.target.name]: e.target.value });
     };
@@ -123,33 +124,38 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                     <span className="text-sm font-bold text-purple-800">Task {index + 1}</span>
                     {task.doer && <span className="text-xs text-purple-500 font-medium">— {task.doer}</span>}
                 </div>
-                {total > 1 && (
-                    <button type="button" onClick={() => onRemove(task.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
-                        <Trash2 className="w-4 h-4" />
-                    </button>
-                )}
+                <button type="button" onClick={() => onRemove(task.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
+                    <Trash2 className="w-4 h-4" />
+                </button>
             </div>
 
             <div className="p-5 space-y-4">
-                {/* Department & Assign From */}
+                {/* Shop & Assign From */}
                 <div className="grid grid-cols-2 gap-3">
                     <div>
                         <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-                            Department <span className="text-red-500">*</span>
+                            Shop Name <span className="text-red-500">*</span>
                         </label>
                         <select
-                            name="department"
-                            value={task.department}
+                            name="shop"
+                            value={task.shop}
                             onChange={(e) => {
-                                onUpdate(task.id, { department: e.target.value, doer: "" });
-                                dispatch(uniqueDoerNameData(e.target.value));
+                                const newShop = e.target.value;
+                                // Hierarchy: Shop Name -> Assign From -> Doer's Name -> Task Level
+                                onUpdate(task.id, { 
+                                    shop: newShop, 
+                                    givenBy: "", 
+                                    doer: "", 
+                                    task_level: "" 
+                                });
+                                dispatch(uniqueDoerNameData(newShop));
                             }}
                             className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
                         >
-                            <option value="">Select Department</option>
-                            {department.map((d, i) => (
-                                <option key={i} value={typeof d === 'string' ? d : d.department}>
-                                    {typeof d === 'string' ? d : d.department}
+                            <option value="">Select Shop</option>
+                            {shops.map((d, i) => (
+                                <option key={i} value={typeof d === 'string' ? d : d.shop || d.shop_name}>
+                                    {typeof d === 'string' ? d : d.shop || d.shop_name}
                                 </option>
                             ))}
                         </select>
@@ -161,7 +167,15 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                         <select
                             name="givenBy"
                             value={task.givenBy}
-                            onChange={handleChange}
+                            onChange={(e) => {
+                                const newGivenBy = e.target.value;
+                                // Hierarchy: Assign From -> Doer's Name -> Task Level
+                                onUpdate(task.id, { 
+                                    givenBy: newGivenBy, 
+                                    doer: "", 
+                                    task_level: "" 
+                                });
+                            }}
                             disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin"))}
                             className={`w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm ${(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? 'opacity-70 cursor-not-allowed' : ''}`}
                         >
@@ -171,31 +185,56 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                     </div>
                 </div>
 
-                {/* Doer */}
-                <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-                        Doer's Name <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                        name="doer"
-                        value={task.doer}
-                        onChange={handleChange}
-                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
-                    >
-                        <option value="">Select Doer</option>
-                        {getFilteredDoers().map((d, i) => (
-                            <option key={i} value={typeof d === 'string' ? d : d.user_name}>
-                                {typeof d === 'string' ? d : d.user_name}
-                            </option>
-                        ))}
-                    </select>
+                {/* Doer & Task Level */}
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
+                            Doer's Name <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                            name="doer"
+                            value={task.doer}
+                            onChange={(e) => {
+                                const newDoer = e.target.value;
+                                // Hierarchy: Doer's Name -> Task Level
+                                onUpdate(task.id, { 
+                                    doer: newDoer, 
+                                    task_level: "" 
+                                });
+                            }}
+                            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
+                        >
+                            <option value="">Select Doer</option>
+                            {getFilteredDoers().map((d, i) => (
+                                <option key={i} value={typeof d === 'string' ? d : d.user_name}>
+                                    {typeof d === 'string' ? d : d.user_name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
+                            Task Level
+                        </label>
+                        <select
+                            name="task_level"
+                            value={task.task_level}
+                            onChange={handleChange}
+                            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
+                        >
+                            <option value="">Select Level</option>
+                            {levels && levels.map((l, i) => (
+                                <option key={i} value={l.level_name}>{l.level_name}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 {/* Description, Reference & Voice Note */}
                 <div className="space-y-3">
                     <div className="flex justify-between items-center -mb-1">
                         <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide flex items-center gap-2">
-                            Task Description <span className="text-red-500">*</span>
+                            Task Description {task.task_level ? <span className="text-gray-400 normal-case font-medium">(Optional)</span> : <span className="text-red-500">*</span>}
                         </label>
                         <select
                             value="none"
@@ -367,13 +406,14 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                             disabled={task.frequencyLocked}
                             className={`w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-xs ${task.frequencyLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
                         >
+                            <option value="" disabled>Select Frequency</option>
                             {FREQUENCY_OPTIONS.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                         </select>
                     </div>
 
                     <div>
                         <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> Duration <span className="text-red-500">*</span>
+                            <Clock className="w-3 h-3" /> Duration
                         </label>
                         <input
                             type="text"
@@ -418,10 +458,12 @@ export default function ChecklistTask() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const { showToast } = useMagicToast();
-    const { department, doerName, givenBy } = useSelector((state) => state.assignTask);
+    const { shops, doerName, givenBy, automatedTasks, levels } = useSelector((state) => state.assignTask);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
     const [holidays, setHolidays] = useState([]);
+    const [selectedShop, setSelectedShop] = useState("");
+    const [selectedLevel, setSelectedLevel] = useState("");
 
     // Per-task list
     const [tasks, setTasks] = useState([
@@ -432,6 +474,8 @@ export default function ChecklistTask() {
     ]);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [allGeneratedTasks, setAllGeneratedTasks] = useState([]);
+    const [totalExpandedCount, setTotalExpandedCount] = useState(0);
+    const [modalLevelFilter, setModalLevelFilter] = useState("all");
 
     useEffect(() => {
         const fetchHolidays = async () => {
@@ -439,8 +483,9 @@ export default function ChecklistTask() {
             if (data) setHolidays(data.map(h => h.holiday_date));
         };
         fetchHolidays();
-        dispatch(uniqueDepartmentData());
+        dispatch(uniqueShopData());
         dispatch(uniqueGivenByData());
+        dispatch(fetchLevels());
         dispatch(customDropdownDetails());
 
         // Handle URL parameters for pre-filling
@@ -466,13 +511,28 @@ export default function ChecklistTask() {
             });
         }
     }, [dispatch]);
+    
+    // Banner count fetch only
+    useEffect(() => {
+        if (selectedShop && selectedLevel) {
+            dispatch(fetchMasterTasks({ shop: selectedShop, level: selectedLevel }));
+            dispatch(uniqueDoerNameData(selectedShop));
+        }
+    }, [selectedShop, selectedLevel, dispatch]);
 
-    const updateTask = (id, updates) => setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    const updateTask = (id, updates) => {
+        setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+        if (tasks.length > 0 && id === tasks[0].id) {
+            if (updates.shop !== undefined) setSelectedShop(updates.shop);
+            if (updates.task_level !== undefined) setSelectedLevel(updates.task_level);
+        }
+    };
     const addTask = () => setTasks(prev => {
         const lastTask = prev[prev.length - 1];
         return [...prev, {
             ...defaultTask(),
-            department: lastTask?.department || "",
+            shop: selectedShop || lastTask?.shop || "",
+            task_level: selectedLevel || lastTask?.task_level || "",
             givenBy: (localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? localStorage.getItem("user-name") : (lastTask?.givenBy || ""),
             doer: lastTask?.doer || ""
         }];
@@ -499,8 +559,8 @@ export default function ChecklistTask() {
         return `${year}-${month}-${day}`;
     };
 
-    const generateDatesForTask = async (task) => {
-        const freqKey = freqMap[task.frequency] || "one-time";
+    const generateDatesForTask = async (task, overrideFrequency = null) => {
+        const freqKey = freqMap[overrideFrequency || task.frequency] || "one-time";
         const dates = [];
         const startDate = task.date;
         const time = task.time;
@@ -579,14 +639,19 @@ export default function ChecklistTask() {
         try {
             // Parallel Validation
             const validationResults = await Promise.all(tasks.map(async (t, i) => {
-                if (!t.department || !t.givenBy) {
-                    return { success: false, message: `Task ${i + 1}: Please select Department and Assign From.` };
+                if (!t.shop || !t.givenBy) {
+                    return { success: false, message: `Task ${i + 1}: Please select Shop and Assign From.` };
                 }
-                if (!t.doer || !t.date || (!t.description && !t.recordedAudio && (!t.references || t.references.length === 0))) {
-                    return { success: false, message: `Task ${i + 1}: Please fill in Doer, Date, and at least one instructional detail (Desc, Voice Note, or Reference).` };
+                if (!t.doer || !t.date) {
+                    return { success: false, message: `Task ${i + 1}: Please fill in Doer and Date.` };
                 }
-                if (!t.duration) {
-                    return { success: false, message: `Task ${i + 1}: Please specify the task duration.` };
+                // Frequency is required for manual tasks (no task level)
+                if (!t.task_level && !t.frequency) {
+                    return { success: false, message: `Task ${i + 1}: Please select a Frequency.` };
+                }
+                // If no task level selected, at least one instructional detail is required
+                if (!t.task_level && !t.description && !t.recordedAudio && (!t.references || t.references.length === 0)) {
+                    return { success: false, message: `Task ${i + 1}: Please enter a Task Description (or select a Task Level to use pre-stored tasks).` };
                 }
                 if (t.references && t.references.length > 0) {
                     for (const ref of t.references) {
@@ -618,25 +683,85 @@ export default function ChecklistTask() {
                 return;
             }
 
-            // Task Generation in Parallel
-            const generationPromises = tasks.map(async (task) => {
-                const dates = await generateDatesForTask(task);
-                const freqKey = freqMap[task.frequency] || "one-time";
-                return dates.map(dueDate => ({
-                    ...task,
-                    dueDate,
-                    frequency: freqKey
-                }));
-            });
+            // Task Generation — unique tasks only (dates expanded on confirm)
+            const uniqueTasks = [];
+            let totalCount = 0;
+            const dateCountCache = {}; // cache per formTaskId+freq
 
-            const allResultsArrays = await Promise.all(generationPromises);
-            const allTasks = allResultsArrays.flat();
+            for (const task of tasks) {
+                // 1. Level Expansion — one entry per master task
+                if (task.task_level) {
+                    const { data: masters } = await supabase
+                        .from('master_tasks')
+                        .select('*')
+                        .eq('shop_name', task.shop)
+                        .eq('level_name', task.task_level);
 
-            if (allTasks.length === 0) {
+                    if (masters && masters.length > 0) {
+                        for (const m of masters) {
+                            const mFreq = m.frequency || task.frequency;
+                            const cacheKey = `${task.id}_${mFreq}`;
+                            if (!dateCountCache[cacheKey]) {
+                                const dates = await generateDatesForTask(task, mFreq);
+                                dateCountCache[cacheKey] = dates.length;
+                            }
+                            const count = dateCountCache[cacheKey];
+                            totalCount += count;
+                            uniqueTasks.push({
+                                ...task,
+                                description: m.task_description,
+                                frequency: mFreq,
+                                duration: m.duration || task.duration,
+                                requireAttachment: m.require_attachment || task.requireAttachment,
+                                isTemplate: true,
+                                occurrenceCount: count
+                            });
+                        }
+                    }
+                }
+
+                // 2. Manual Task
+                if (task.description && task.description.trim() !== '') {
+                    const cacheKey = `${task.id}_${task.frequency}`;
+                    if (!dateCountCache[cacheKey]) {
+                        const dates = await generateDatesForTask(task, task.frequency);
+                        dateCountCache[cacheKey] = dates.length;
+                    }
+                    const count = dateCountCache[cacheKey];
+                    totalCount += count;
+                    uniqueTasks.push({
+                        ...task,
+                        frequency: task.frequency,
+                        isManual: true,
+                        occurrenceCount: count
+                    });
+                }
+
+                // 3. Audio/Reference fallback
+                if (!task.task_level && (!task.description || task.description.trim() === '') && (task.recordedAudio || (task.references && task.references.length > 0))) {
+                    const cacheKey = `${task.id}_${task.frequency}`;
+                    if (!dateCountCache[cacheKey]) {
+                        const dates = await generateDatesForTask(task, task.frequency);
+                        dateCountCache[cacheKey] = dates.length;
+                    }
+                    const count = dateCountCache[cacheKey];
+                    totalCount += count;
+                    uniqueTasks.push({
+                        ...task,
+                        frequency: task.frequency,
+                        isManual: true,
+                        occurrenceCount: count
+                    });
+                }
+            }
+
+            if (uniqueTasks.length === 0) {
                 showToast("No valid tasks generated based on calendar and holidays. If assigning for future dates, please ensure the Working Day Calendar is filled for that month.", "error");
                 return;
             }
-            setAllGeneratedTasks(allTasks);
+            setAllGeneratedTasks(uniqueTasks);
+            setTotalExpandedCount(totalCount);
+            setModalLevelFilter("all");
             setShowPreviewModal(true);
         } catch (err) {
             console.error(err);
@@ -649,16 +774,17 @@ export default function ChecklistTask() {
     const confirmSubmission = async () => {
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i];
-            if (!t.department || !t.givenBy) {
-                alert(`Task ${i + 1}: Please select Department and Assign From.`);
+            if (!t.shop || !t.givenBy) {
+                alert(`Task ${i + 1}: Please select Shop and Assign From.`);
                 return;
             }
-            if (!t.doer || !t.date || (!t.description && !t.recordedAudio && (!t.references || t.references.length === 0))) {
-                alert(`Task ${i + 1}: Please fill in Doer, Date, and at least one instructional detail (Desc, Voice Note, or Reference).`);
+            if (!t.doer || !t.date) {
+                alert(`Task ${i + 1}: Please fill in Doer and Date.`);
                 return;
             }
-            if (!t.duration) {
-                alert(`Task ${i + 1}: Please specify the task duration.`);
+            // If no task level selected, at least one instructional detail is required
+            if (!t.task_level && !t.description && !t.recordedAudio && (!t.references || t.references.length === 0)) {
+                alert(`Task ${i + 1}: Please enter a Task Description (or select a Task Level to use pre-stored tasks).`);
                 return;
             }
             if (t.references && t.references.length > 0) {
@@ -762,31 +888,44 @@ export default function ChecklistTask() {
                 return map;
             }, {});
 
-            // 2. Generate all occurrences
+            // 2. Expand from preview unique tasks (respects removals)
             const allTasksToSubmit = [];
-            for (const task of tasks) {
-                const dates = await generateDatesForTask(task);
-                const freqKey = freqMap[task.frequency] || "one-time";
-                const audioUrl = audioUrlMap[task.id];
-                const instructionData = instructionUrlMap[task.id] || {};
+            const dateCache = {};
+
+            for (const previewTask of allGeneratedTasks) {
+                const formTaskId = previewTask.id;
+                const freq = previewTask.frequency;
+                const cacheKey = `${formTaskId}_${freq}`;
+                const originalTask = tasks.find(t => t.id === formTaskId);
+                if (!originalTask) continue;
+
+                const audioUrl = audioUrlMap[formTaskId];
+                const instructionData = instructionUrlMap[formTaskId] || {};
+
+                // Generate dates (cached per task+freq combo)
+                if (!dateCache[cacheKey]) {
+                    dateCache[cacheKey] = await generateDatesForTask(originalTask, freq);
+                }
+                const dates = dateCache[cacheKey];
+                const freqKey = freqMap[freq] || freq;
 
                 for (const dueDate of dates) {
                     allTasksToSubmit.push({
-                        department: task.department,
-                        givenBy: task.givenBy,
-                        doer: task.doer,
-                        task_description: task.description,
+                        shop: originalTask.shop,
+                        givenBy: originalTask.givenBy,
+                        doer: originalTask.doer,
                         audio_url: audioUrl,
                         instruction_attachment_url: instructionData.instructionUrl || null,
                         instruction_attachment_type: instructionData.instructionType || null,
+                        duration: previewTask.duration || originalTask.duration || null,
+                        enableReminders: originalTask.enableReminders,
+                        requireAttachment: previewTask.requireAttachment !== undefined ? previewTask.requireAttachment : originalTask.requireAttachment,
+                        task_level: originalTask.task_level || null,
+                        originalStartDate: formatDateISO(originalTask.date) + `T${originalTask.time || "09:00"}:00`,
+                        status: "pending",
+                        task_description: previewTask.description || "",
                         frequency: freqKey,
-                        duration: task.duration || null,
-                        enableReminders: task.enableReminders,
-                        requireAttachment: task.requireAttachment,
-                        dueDate,
-                        // originalStartDate = the admin-selected start date (same for all occurrences)
-                        originalStartDate: formatDateISO(task.date) + `T${task.time || "09:00"}:00`,
-                        status: "pending"
+                        dueDate
                     });
                 }
             }
@@ -835,7 +974,7 @@ export default function ChecklistTask() {
                                 audioUrl: t.audio_url,
                                 startDate: new Date(t.task_start_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
                                 givenBy: t.given_by,
-                                department: t.department,
+                                shop: t.shop,
                                 duration: t.duration,
                                 taskType: isOneTime ? 'delegation' : 'checklist'
                             });
@@ -889,6 +1028,17 @@ export default function ChecklistTask() {
                     </div>
                 )}
 
+                {/* Automation Banner - Global Hint */}
+                {automatedTasks.length > 0 && selectedShop && selectedLevel && tasks.length === 1 && (
+                    <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-100 rounded-xl">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-purple-500" />
+                        <span className="text-xs font-bold text-purple-700">
+                            Automation: {selectedLevel} in {selectedShop} has {automatedTasks.length} pre-selected tasks. 
+                            Click "Preview" to see them.
+                        </span>
+                    </div>
+                )}
+
                 {/* Task Cards */}
                 <div className="space-y-4">
                     {tasks.map((task, index) => (
@@ -897,9 +1047,10 @@ export default function ChecklistTask() {
                             task={task}
                             index={index}
                             total={tasks.length}
-                            department={department}
+                            shops={shops}
                             doerName={doerName}
                             givenBy={givenBy}
+                            levels={levels}
                             dispatch={dispatch}
                             onUpdate={updateTask}
                             onRemove={removeTask}
@@ -957,8 +1108,25 @@ export default function ChecklistTask() {
             {showPreviewModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
-                        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl">
-                            <h3 className="text-lg font-bold text-gray-800">Confirm Task Assignment</h3>
+                        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl gap-4">
+                            <div className="flex items-center gap-4 min-w-0">
+                                <h3 className="text-lg font-bold text-gray-800 truncate">Confirm Task Assignment</h3>
+                                <div className="relative group shrink-0">
+                                    <select
+                                        value={modalLevelFilter}
+                                        onChange={(e) => setModalLevelFilter(e.target.value)}
+                                        className="appearance-none pl-3 pr-8 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400 cursor-pointer shadow-sm min-w-[120px]"
+                                    >
+                                        <option value="all">All Levels</option>
+                                        {[...new Set(allGeneratedTasks.filter(t => t.task_level).map(t => t.task_level))].sort().map(level => (
+                                            <option key={level} value={level}>{level}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-purple-600 transition-colors">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                                    </div>
+                                </div>
+                            </div>
                             <button onClick={() => setShowPreviewModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-all">
                                 <X className="h-5 w-5 text-gray-500" />
                             </button>
@@ -968,45 +1136,59 @@ export default function ChecklistTask() {
                                 <FileCheck className="h-5 w-5 mt-0.5 flex-shrink-0" />
                                 <div>
                                     <p className="font-bold">Summary</p>
-                                    <p className="text-sm">You are about to assign <span className="font-bold">{allGeneratedTasks.length}</span> task(s) across {tasks.length} entries.</p>
-                                    <p className="text-xs mt-1 opacity-80">Recurring tasks are filtered based on holidays and working day calendar.</p>
+                                    <p className="text-sm"><span className="font-bold">{allGeneratedTasks.length}</span> unique task(s) → <span className="font-bold text-purple-700">{totalExpandedCount}</span> total records will be created.</p>
+                                    <p className="text-xs mt-1 opacity-80">Recurring tasks are expanded on submission based on frequency and working day calendar. Remove any tasks you don't need before confirming.</p>
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                {allGeneratedTasks.slice(0, 20).map((task, index) => (
-                                    <div key={index} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 text-sm">
-                                        <Calendar className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                                        <span className="font-medium text-gray-700">
-                                            {new Date(task.dueDate).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-                                        </span>
-                                        <span className="text-gray-400">—</span>
-                                        <div className="flex flex-col">
-                                            <span className="text-gray-600 text-xs font-bold">{task.doer}</span>
-                                            <div className="flex items-center gap-2">
-                                                {task.description && (
-                                                    <span className="text-[10px] text-gray-400 truncate max-w-[150px]">
-                                                        {task.description}
-                                                    </span>
+                                {allGeneratedTasks
+                                    .filter(task => modalLevelFilter === "all" || (!task.isManual && task.task_level === modalLevelFilter))
+                                    .map((task, index) => (
+                                    <div key={index} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 text-sm group">
+                                        <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                                            {index + 1}
+                                        </div>
+                                        <div className="flex flex-col flex-1 min-w-0">
+                                            <span className="text-gray-700 text-xs font-bold truncate">{task.description || '(Voice/Reference only)'}</span>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <span className="text-[10px] text-gray-400">{task.doer}</span>
+                                                {task.isTemplate && (
+                                                    <span className="text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded font-bold">Master</span>
+                                                )}
+                                                {task.isManual && (
+                                                    <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold">Manual</span>
+                                                )}
+                                                {task.task_level && !task.isManual && (
+                                                    <span className="text-[9px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded font-bold border border-amber-100 uppercase tracking-tighter">{task.task_level}</span>
                                                 )}
                                                 {task.recordedAudio && (
-                                                    <span className="inline-flex items-center gap-1 text-[10px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded">
+                                                    <span className="inline-flex items-center gap-1 text-[9px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded">
                                                         <Mic className="h-3 w-3" /> Voice
-                                                    </span>
-                                                )}
-                                                {task.instructionType !== 'none' && (
-                                                    <span className="inline-flex items-center gap-1 text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded">
-                                                        <FileCheck className="h-3 w-3" /> Refer
                                                     </span>
                                                 )}
                                             </div>
                                         </div>
-                                        <span className="ml-auto text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-500 uppercase font-black">
+                                        <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-500 uppercase font-black whitespace-nowrap">
                                             {task.frequency}
                                         </span>
+                                        <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded font-black flex-shrink-0">
+                                            ×{task.occurrenceCount}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            title="Remove this task"
+                                            onClick={() => {
+                                                setTotalExpandedCount(prev => prev - task.occurrenceCount);
+                                                setAllGeneratedTasks(prev => prev.filter((_, i) => i !== index));
+                                            }}
+                                            className="ml-1 p-1.5 rounded-full text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100 flex-shrink-0"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
                                     </div>
                                 ))}
-                                {allGeneratedTasks.length > 20 && (
-                                    <p className="text-center text-sm text-gray-400 py-2">...and {allGeneratedTasks.length - 20} more tasks</p>
+                                {allGeneratedTasks.length === 0 && (
+                                    <p className="text-center text-sm text-gray-400 py-6">All tasks removed. Add tasks or go back to edit.</p>
                                 )}
                             </div>
                         </div>

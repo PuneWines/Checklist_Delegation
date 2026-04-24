@@ -11,7 +11,7 @@ export default function DefaultView({
     setSearchQuery,
     filterStaff,
     setFilterStaff,
-    departmentData,
+    shopData,
     getTasksByView,
     getFrequencyColor,
     isLoadingMore,
@@ -21,7 +21,7 @@ export default function DefaultView({
     dateRange,
     activeTab,
     dashboardStaffFilter,
-    departmentFilter,
+    shopFilter,
     parseTaskStartDate,
     userRole,
 }) {
@@ -42,12 +42,12 @@ export default function DefaultView({
                 setTaskView={setTaskView}
                 dashboardType={dashboardType}
                 dashboardStaffFilter={dashboardStaffFilter}
-                departmentFilter={departmentFilter}
+                shopFilter={shopFilter}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 filterStaff={filterStaff}
                 setFilterStaff={setFilterStaff}
-                departmentData={departmentData}
+                shopData={shopData}
                 getTasksByView={getTasksByView}
                 getFrequencyColor={getFrequencyColor}
                 isLoadingMore={isLoadingMore}
@@ -66,7 +66,7 @@ export default function DefaultView({
                             <StaffTasksTable
                                 dashboardType={dashboardType}
                                 dashboardStaffFilter={dashboardStaffFilter}
-                                departmentFilter={departmentFilter}
+                                shopFilter={shopFilter}
                                 parseTaskStartDate={parseTaskStartDate}
                             />
                         </div>
