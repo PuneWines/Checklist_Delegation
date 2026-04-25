@@ -911,7 +911,7 @@ export default function ChecklistTask() {
 
                 for (const dueDate of dates) {
                     allTasksToSubmit.push({
-                        shop: originalTask.shop,
+                        shop_name: originalTask.shop,
                         givenBy: originalTask.givenBy,
                         doer: originalTask.doer,
                         audio_url: audioUrl,
@@ -974,7 +974,7 @@ export default function ChecklistTask() {
                                 audioUrl: t.audio_url,
                                 startDate: new Date(t.task_start_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
                                 givenBy: t.given_by,
-                                shop: t.shop,
+                                shop: t.shop_name,
                                 duration: t.duration,
                                 taskType: isOneTime ? 'delegation' : 'checklist'
                             });

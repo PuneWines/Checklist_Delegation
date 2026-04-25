@@ -561,7 +561,7 @@ export default function MaintenanceTask() {
 
         const addEntry = (date, description) => {
             generatedList.push({
-                shop: "Maintenance",
+                shop_name: "Maintenance",
                 name: task.doerName,
                 given_by: task.givenBy,
                 task_start_date: `${getLocalDateString(date)}T${task.startTime}:00`,
@@ -771,7 +771,7 @@ export default function MaintenanceTask() {
                                 taskType: 'maintenance',
                                 machineName: task.machine_name,
                                 partName: task.part_name,
-                                shop: task.shop,
+                                shop: task.shop_name,
                             };
                             if (task.priority?.toLowerCase() === 'high') await sendUrgentTaskNotification(notificationData);
                             else await sendTaskAssignmentNotification(notificationData);

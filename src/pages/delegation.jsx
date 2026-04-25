@@ -715,7 +715,7 @@ function DelegationDataPage() {
 
         return {
           id: item.id,
-          shop: item.shop || '',
+          shop_name: item.shop || '',
           given_by: item.given_by || '',
           name: item.name,
           task_description: item.task_description,

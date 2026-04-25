@@ -160,7 +160,7 @@ export const fetchDelegationDataSortByDate = async () => {
     } else if (role === 'admin' && userAccess && userAccess !== 'all') {
       const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(d => d && d !== 'all');
       if (allowedShops.length > 0) {
-        query = query.in('shop', allowedShops);
+        query = query.in('shop_name', allowedShops);
       }
     }
 
