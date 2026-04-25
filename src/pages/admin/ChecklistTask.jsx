@@ -11,7 +11,7 @@ import { assignTaskInTable, uniqueShopData, uniqueDoerNameData, uniqueGivenByDat
 import { customDropdownDetails } from "../../redux/slice/settingSlice";
 import supabase from "../../SupabaseClient";
 import CalendarComponent from "../../components/CalendarComponent";
-import { sendTaskAssignmentNotification } from "../../services/whatsappService";
+import { sendTaskAssignmentNotification, sendUrgentTaskNotification, sendMasterTaskAssignmentNotification } from "../../services/whatsappService";
 import { useMagicToast } from "../../context/MagicToastContext";
 
 const formatDate = (date) => date ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "";
@@ -951,40 +951,55 @@ export default function ChecklistTask() {
                 }
             }
 
-            /* WhatsApp notification disabled
             try {
                 if (insertedTasks && insertedTasks.length > 0) {
-                    for (const uiTask of tasks) {
-                        const freqKey = freqMap[uiTask.frequency]?.toLowerCase();
-                        const t = insertedTasks.find(it =>
-                            (it.name === uiTask.doer) &&
-                            (!it.frequency || it.frequency?.toLowerCase() === freqKey || freqKey === "one-time") &&
-                            ((it.task_description || "") === (uiTask.description || "") || (audioUrlMap[uiTask.id] && it.audio_url === audioUrlMap[uiTask.id]))
-                        );
-
-                        if (t) {
-                            const isOneTime = t.frequency?.toLowerCase().includes('one time') ||
-                                t.frequency?.toLowerCase().includes('one-time') ||
-                                t.frequency?.toLowerCase().includes('no recurrence');
-
-                            await sendTaskAssignmentNotification({
-                                doerName: t.name,
-                                taskId: t.task_id || t.id,
-                                description: t.task_description || (t.instruction_attachment_url ? `📎 Reference(s) Provided` : ''),
-                                audioUrl: t.audio_url,
-                                startDate: new Date(t.task_start_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-                                givenBy: t.given_by,
-                                shop: t.shop_name,
-                                duration: t.duration,
-                                taskType: isOneTime ? 'delegation' : 'checklist'
+                    if (selectedLevel) {
+                        // Master Task Summary Notification
+                        const doers = [...new Set(insertedTasks.map(t => t.name))];
+                        for (const doer of doers) {
+                            const doerTasks = insertedTasks.filter(t => t.name === doer);
+                            await sendMasterTaskAssignmentNotification({
+                                doerName: doer,
+                                shopName: selectedShop,
+                                taskLevel: selectedLevel,
+                                totalTasks: doerTasks.length,
+                                givenBy: doerTasks[0]?.given_by
                             });
+                        }
+                    } else {
+                        // Individual Task Notifications
+                        for (const uiTask of tasks) {
+                            const freqKey = freqMap[uiTask.frequency]?.toLowerCase();
+                            const t = insertedTasks.find(it =>
+                                (it.name === uiTask.doer) &&
+                                (!it.frequency || it.frequency?.toLowerCase() === freqKey || freqKey === "one-time") &&
+                                ((it.task_description || "") === (uiTask.description || "") || (audioUrlMap[uiTask.id] && it.audio_url === audioUrlMap[uiTask.id]))
+                            );
+
+                            if (t) {
+                                const isOneTime = t.frequency?.toLowerCase().includes('one time') ||
+                                    t.frequency?.toLowerCase().includes('one-time') ||
+                                    t.frequency?.toLowerCase().includes('no recurrence');
+
+                                await sendTaskAssignmentNotification({
+                                    doerName: t.name,
+                                    taskId: t.task_id || t.id,
+                                    description: t.task_description || (t.instruction_attachment_url ? `📎 Reference(s) Provided` : ''),
+                                    audioUrl: t.audio_url,
+                                    startDate: new Date(t.task_start_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+                                    givenBy: t.given_by,
+                                    shop_name: t.shop_name,
+                                    taskLevel: t.task_level,
+                                    duration: t.duration,
+                                    taskType: isOneTime ? 'delegation' : 'checklist'
+                                });
+                            }
                         }
                     }
                 }
             } catch (whatsappError) {
                 console.error('WhatsApp notification error:', whatsappError);
             }
-            */
 
             showToast(`Successfully assigned ${allTasksToSubmit.length} task(s)!`, 'success');
             setTasks([defaultTask()]);

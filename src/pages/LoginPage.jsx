@@ -201,11 +201,10 @@ const LoginPage = () => {
                           if (error || !data) return showToast("User not found", "error");
 
                           const otp = Math.floor(100000 + Math.random() * 900000).toString();
-                          // await sendPasswordResetOTP(forgotData.username, otp);
-                          console.log("OTP for", forgotData.username, ":", otp); // Log for debugging since WhatsApp is disabled
+                          await sendPasswordResetOTP(forgotData.username, otp);
                           setForgotData({ ...forgotData, generatedOtp: otp });
                           setForgotStep('otp');
-                          showToast("OTP generated (WhatsApp disabled, check console)", "success");
+                          showToast("OTP sent to Admin via WhatsApp", "success");
                         } catch (err) {
                           showToast("Error processing request", "error");
                         } finally {
@@ -225,7 +224,7 @@ const LoginPage = () => {
                   <div className="space-y-4">
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2">
                       <Smartphone className="text-amber-600 flex-shrink-0" size={16} />
-                      <p className="text-[10px] text-amber-800 font-medium">OTP has been sent to the admin number (9691207533). Please contact them for the code.</p>
+                      <p className="text-[10px] text-amber-800 font-medium">OTP has been sent to the admin number (9770532007). Please contact them for the code.</p>
                     </div>
                     <div className="relative">
                       <input

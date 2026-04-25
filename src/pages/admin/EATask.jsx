@@ -505,7 +505,8 @@ export default function EATask() {
                     duration: task.duration || null,
                     status: 'pending',
                     given_by: task.given_by,
-                    attachment: task.attachment
+                    attachment: task.attachment,
+                    shop_name: 'EA'
                 };
             });
 
@@ -520,7 +521,6 @@ export default function EATask() {
                 if (data) insertedData.push(...data);
             }
 
-            /* WhatsApp notification disabled
             try {
                 if (insertedData && insertedData.length > 0) {
                     for (const task of insertedData) {
@@ -530,6 +530,7 @@ export default function EATask() {
                             description: task.task_description,
                             startDate: new Date(task.planned_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
                             givenBy: task.given_by,
+                            shop_name: task.shop_name,
                             taskType: 'ea'
                         });
                     }
@@ -537,7 +538,6 @@ export default function EATask() {
             } catch (whatsappError) {
                 console.error('WhatsApp notification error:', whatsappError);
             }
-            */
 
             showToast(`${tasksToInsert.length} EA Task(s) assigned successfully!`, 'success');
             setTasks([defaultTask()]);

@@ -15,7 +15,7 @@ const WHATSAPP_ACCESS_TOKEN = import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN;
 const WHATSAPP_PRODUCT_ID = import.meta.env.VITE_WHATSAPP_PRODUCT_ID;
 
 // Global Toggle to Enable/Disable WhatsApp Feature
-const WHATSAPP_ENABLED = false;
+const WHATSAPP_ENABLED = true;
 
 
 /**
@@ -196,7 +196,8 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
             taskType,
             machineName,
             partName,
-            shop
+            shop_name,
+            taskLevel
         } = taskDetails;
 
         const phoneNumber = await getUserPhoneNumber(doerName);
@@ -218,7 +219,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
                     `Task ID: ${taskId}\n` +
                     `⚙️ Machine: ${machineName || 'N/A'}\n` +
                     `🧩 Part: ${partName || 'N/A'}\n` +
-                    `🏢 Shop: ${shop || 'N/A'}\n` +
+                    `🏢 Shop: ${shop_name || 'N/A'}\n` +
                     `📝 Task: ${displayDescription}\n` +
                     `🗓️ Planned: ${dueDate}\n` +
                     `🧑 Given By: ${givenBy}\n`;
@@ -228,7 +229,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
                 body = `Name: ${doerName}\n` +
                     `Task ID: ${taskId}\n` +
                     `⚙️ Machine: ${machineName || 'N/A'}\n` +
-                    `🏢 Shop: ${shop || 'N/A'}\n` +
+                    `🏢 Shop: ${shop_name || 'N/A'}\n` +
                     `📝 Issue: ${displayDescription}\n` +
                     `🗓️ Date: ${dueDate}\n` +
                     `🧑 Filled By: ${givenBy}\n`;
@@ -237,9 +238,20 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
             case 'checklist':
                 body = `Name: ${doerName}\n` +
                     `Task ID: ${taskId}\n` +
-                    `🏢 Shop: ${shop || 'N/A'}\n` +
+                    (taskLevel ? `📊 Level: ${taskLevel}\n` : '') +
+                    `🏢 Shop: ${shop_name || 'N/A'}\n` +
                     `📝 Task: ${displayDescription}\n` +
                     `⏳ Planned Date: ${dueDate}\n` +
+                    `🧑 Given By: ${givenBy}\n`;
+                break;
+            
+            case 'delegation':
+                body = `Name: ${doerName}\n` +
+                    `Task ID: ${taskId}\n` +
+                    (taskLevel ? `📊 Level: ${taskLevel}\n` : '') +
+                    `🏢 Shop: ${shop_name || 'N/A'}\n` +
+                    `📝 Task: ${displayDescription}\n` +
+                    `⏳ Deadline: ${dueDate}\n` +
                     `🧑 Given By: ${givenBy}\n`;
                 break;
 
@@ -247,6 +259,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
                 body = `Name: ${doerName}\n` +
                     `Task ID: ${taskId}\n` +
                     `💼 EA Task: ${displayDescription}\n` +
+                    `🏢 Shop: ${shop_name || 'EA'}\n` +
                     `⏳ Deadline: ${dueDate}\n` +
                     `🧑 Assigned By: ${givenBy}\n`;
                 break;
@@ -262,7 +275,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
         const message = `${header}\n\n` +
             body +
             `\n📌 Please take immediate action and update once completed.\n` +
-            `🔗 App Link: https://checklist-delegation-supabase-five.vercel.app/login`;
+            `🔗 App Link: https://checklist-delegation-five.vercel.app/login`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
         if (sent && audioUrl) {
@@ -281,7 +294,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
  */
 export const sendChecklistTaskNotification = async (taskDetails) => {
     try {
-        const { doerName, taskId, description, startDate, givenBy, shop, duration } = taskDetails;
+        const { doerName, taskId, description, startDate, givenBy, shop_name, taskLevel, duration } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
 
@@ -294,13 +307,14 @@ export const sendChecklistTaskNotification = async (taskDetails) => {
             `Dear ${doerName},\n\n` +
             `A new checklist task has been assigned to you.\n\n` +
             `📌 Task ID: ${taskId}\n` +
-            `🏢 Shop: ${shop || 'N/A'}\n` +
+            (taskLevel ? `📊 Level: ${taskLevel}\n` : '') +
+            `🏢 Shop: ${shop_name || 'N/A'}\n` +
             `📝 Task: ${displayDescription}\n` +
             `⏳ Planned Date: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
             `🧑 Given By: ${givenBy}\n\n` +
-            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
-            `Best regards,\nAcemark Stationers.`;
+            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `Best regards,\nDrinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
         if (sent && audioUrl) {
@@ -319,7 +333,7 @@ export const sendChecklistTaskNotification = async (taskDetails) => {
  */
 export const sendMaintenanceTaskNotification = async (taskDetails) => {
     try {
-        const { doerName, taskId, description, startDate, givenBy, machineName, partName, shop, duration } = taskDetails;
+        const { doerName, taskId, description, startDate, givenBy, machineName, partName, shop_name, duration } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
 
@@ -334,13 +348,13 @@ export const sendMaintenanceTaskNotification = async (taskDetails) => {
             `📌 Task ID: ${taskId}\n` +
             `⚙️ Machine: ${machineName || 'N/A'}\n` +
             `🧩 Part: ${partName || 'N/A'}\n` +
-            `🏢 Shop: ${shop || 'N/A'}\n` +
+            `🏢 Shop: ${shop_name || 'N/A'}\n` +
             `📝 Task: ${displayDescription}\n` +
             `🗓️ Planned Date: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
             `🧑 Given By: ${givenBy}\n\n` +
-            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
-            `Best regards,\nAcemark Stationers.`;
+            `✅ Link:https://checklist-delegation-five.vercel.app/login\n` +
+            `Best regards,\nDrinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
         if (sent && audioUrl) {
@@ -359,7 +373,7 @@ export const sendMaintenanceTaskNotification = async (taskDetails) => {
  */
 export const sendRepairTaskNotification = async (taskDetails) => {
     try {
-        const { doerName, taskId, description, startDate, givenBy, machineName, shop, duration } = taskDetails;
+        const { doerName, taskId, description, startDate, givenBy, machineName, shop_name, duration } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
 
@@ -373,13 +387,13 @@ export const sendRepairTaskNotification = async (taskDetails) => {
             `A repair request has been assigned to you.\n\n` +
             `📌 Task ID: ${taskId}\n` +
             `⚙️ Machine: ${machineName || 'N/A'}\n` +
-            `🏢 Shop: ${shop || 'N/A'}\n` +
+            `🏢 Shop: ${shop_name || 'N/A'}\n` +
             `📝 Issue: ${displayDescription}\n` +
             `🗓️ Date: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
             `🧑 Filled By: ${givenBy}\n\n` +
-            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
-            `Best regards,\nAcemark Stationers.`;
+            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `Best regards,\nDrinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
         if (sent && audioUrl) {
@@ -398,7 +412,7 @@ export const sendRepairTaskNotification = async (taskDetails) => {
  */
 export const sendEATaskNotification = async (taskDetails) => {
     try {
-        const { doerName, taskId, description, startDate, givenBy, duration } = taskDetails;
+        const { doerName, taskId, description, startDate, givenBy, shop_name, duration } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
 
@@ -411,12 +425,13 @@ export const sendEATaskNotification = async (taskDetails) => {
             `Dear ${doerName},\n\n` +
             `A new Executive Assistant task has been assigned.\n\n` +
             `📌 Task ID: ${taskId}\n` +
+            `🏢 Shop: ${shop_name || 'EA'}\n` +
             `📝 Description: ${displayDescription}\n` +
             `⏳ Planned Date: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
             `🧑 Requested By: ${givenBy}\n\n` +
-            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
-            `Best regards,\nAcemark Stationers.`;
+            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `Best regards,\nDrinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
         if (sent && audioUrl) {
@@ -435,7 +450,7 @@ export const sendEATaskNotification = async (taskDetails) => {
  */
 export const sendDelegationTaskNotification = async (taskDetails) => {
     try {
-        const { doerName, taskId, description, startDate, givenBy, shop, duration } = taskDetails;
+        const { doerName, taskId, description, startDate, givenBy, shop_name, taskLevel, duration } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
 
@@ -448,13 +463,14 @@ export const sendDelegationTaskNotification = async (taskDetails) => {
             `Dear ${doerName},\n\n` +
             `A new task has been delegated to you.\n\n` +
             `📌 Task ID: ${taskId}\n` +
-            `🏢 Shop: ${shop || 'N/A'}\n` +
+            (taskLevel ? `📊 Level: ${taskLevel}\n` : '') +
+            `🏢 Shop: ${shop_name || 'N/A'}\n` +
             `📝 Task: ${displayDescription}\n` +
             `⏳ Deadline: ${startDate}\n` +
             (duration ? `⏱ Duration: ${duration}\n` : '') +
             `🧑 Allocated By: ${givenBy}\n\n` +
-            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
-            `Best regards,\nAcemark Stationers.`;
+            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `Best regards,\nDrinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
         if (sent && audioUrl) {
@@ -495,10 +511,10 @@ export const sendTaskExtensionNotification = async (taskDetails) => {
             `🧑💼 Allocated By: ${givenBy}\n` +
             `📝 Task Description: ${displayDescription}\n\n\n` +
             `⏳ Updated Deadline: ${nextExtendDate}\n` +
-            `✅ Closure Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
+            `✅ Closure Link: https://checklist-delegation-five.vercel.app/login\n` +
             `Please ensure the task is completed within the new timeline. If you require any support, feel free to contact the concerned person.\n\n` +
             `Best regards,\n` +
-            `Acemark Stationers.`;
+            `Drinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
 
@@ -561,10 +577,10 @@ export const sendTaskAssignmentNotification = async (taskDetails) => {
                     `🧑 Allocated By: ${givenBy}\n` +
                     `📝 Task Description: ${displayDescription}\n\n\n` +
                     `⏳ Deadline: ${startDate}\n` +
-                    `✅ Closure Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
+                    `✅ Closure Link:https://checklist-delegation-five.vercel.app/login\n` +
                     `Please make sure the task is completed before the deadline. For any assistance, feel free to reach out.\n\n` +
                     `Best regards,\n` +
-                    `Acemark Stationers.`;
+                    `Drinqkart.`;
 
                 const sent = await sendWhatsAppMessage(phoneNumber, message);
                 if (sent && audioUrl) {
@@ -613,7 +629,7 @@ export const sendTaskReminderNotification = async (taskDetails) => {
             `📝 ${description}\n` +
             `📅 Due: ${formattedDate}\n\n` +
             `Please complete it as soon as possible.\n\n` +
-            `_Acemark Stationers_`;
+            `_Drinqkart_`;
 
         return await sendWhatsAppMessage(phoneNumber, message);
     } catch (error) {
@@ -647,7 +663,7 @@ export const sendTaskCompletionNotification = async (taskDetails) => {
             `${doerName} has completed the task:\n\n` +
             `📝 ${description}\n` +
             `⏱️ Completed at: ${formattedDate}\n\n` +
-            `_Acemark Stationers_`;
+            `_Drinqkart_`;
 
         return await sendWhatsAppMessage(phoneNumber, message);
     } catch (error) {
@@ -680,8 +696,8 @@ export const sendTaskRejectionNotification = async (taskDetails) => {
             `📝 Task: ${description || 'N/A'}\n` +
             (reason ? `❓ Reason: ${reason}\n` : '') +
             `\n⚠️ The task has been moved back to your pending list. Please review the issues and resubmit.\n\n` +
-            `🔗 App Link: https://checklist-delegation-supabase-five.vercel.app/login\n\n` +
-            `Best regards,\nAcemark Stationers.`;
+            `🔗 App Link: https://checklist-delegation-five.vercel.app/login\n\n` +
+            `Best regards,\nDrinqkart.`;
 
         return await sendWhatsAppMessage(phoneNumber, message);
     } catch (error) {
@@ -702,7 +718,8 @@ export const sendTaskReassignmentNotification = async (taskDetails) => {
             description,
             startDate,
             givenBy,
-            shop,
+            shop_name,
+            taskLevel,
             taskType
         } = taskDetails;
 
@@ -719,13 +736,14 @@ export const sendTaskReassignmentNotification = async (taskDetails) => {
             `A task has been reassigned to you from ${originalDoerName} (currently on leave).\n\n` +
             `📌 Task ID: ${taskId}\n` +
             `📋 Type: ${taskType ? taskType.toUpperCase() : 'TASK'}\n` +
-            `🏢 Shop: ${shop || 'N/A'}\n` +
+            (taskLevel ? `📊 Level: ${taskLevel}\n` : '') +
+            `🏢 Shop: ${shop_name || 'N/A'}\n` +
             `📝 Task: ${displayDescription}\n` +
             `⏳ Date: ${startDate}\n` +
             `🧑 Originally Given By: ${givenBy}\n\n` +
-            `✅ Link: https://checklist-delegation-supabase-five.vercel.app/login\n` +
+            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
             `Please ensure this task is completed on time.\n\n` +
-            `Best regards,\nAcemark Stationers.`;
+            `Best regards,\nDrinqkart.`;
 
         const sent = await sendWhatsAppMessage(phoneNumber, message);
         if (sent && audioUrl) {
@@ -740,17 +758,41 @@ export const sendTaskReassignmentNotification = async (taskDetails) => {
 };
 
 /**
+ * Send master task assignment notification
+ */
+export const sendMasterTaskAssignmentNotification = async (taskDetails) => {
+    try {
+        const { doerName, shopName, taskLevel, totalTasks, givenBy } = taskDetails;
+        const phoneNumber = await getUserPhoneNumber(doerName);
+        if (!phoneNumber) return false;
+
+        const message = `📋 *MASTER TASKS ASSIGNED*\n` +
+            `Dear ${doerName},\n\n` +
+            `You have received ${totalTasks || ''} new tasks of *Level: ${taskLevel || 'N/A'}* for *Shop: ${shopName || 'N/A'}*.\n\n` +
+            `🧑 Assigned By: ${givenBy || 'Admin'}\n\n` +
+            `📌 Please check the application to view and complete your tasks.\n\n` +
+            `✅ Link: https://checklist-delegation-five.vercel.app/login\n` +
+            `Best regards,\nDrinqkart.`;
+
+        return await sendWhatsAppMessage(phoneNumber, message);
+    } catch (error) {
+        console.error('Error sending master task notification:', error);
+        return false;
+    }
+};
+
+/**
  * Send Password Reset OTP to Admin
  */
 export const sendPasswordResetOTP = async (username, otp) => {
     try {
-        const adminNumber = "9131749390";
+        const adminNumber = "9770532007";
         const message = `🔐 *PASSWORD RESET REQUEST*\n\n` +
             `A password reset has been requested for:\n` +
             `👤 User: *${username}*\n` +
             `🔢 OTP Code: *${otp}*\n\n` +
             `Please provide this code to the user if the request is valid.\n\n` +
-            `_Acemark Stationers_`;
+            `_Drinqkart_`;
 
         return await sendWhatsAppMessage(adminNumber, message);
     } catch (error) {
@@ -775,8 +817,8 @@ export const sendAdminExtensionRemarkNotification = async (taskDetails) => {
             `📌 Task ID: ${taskId}\n` +
             `📋 Task: ${description || 'N/A'}\n` +
             `💬 Remark: *${remark}*\n\n` +
-            `🔗 App Link: https://checklist-delegation-supabase-five.vercel.app/login\n\n` +
-            `Best regards,\nAcemark Stationers.`;
+            `🔗 App Link: https://checklist-delegation-five.vercel.app/login\n\n` +
+            `Best regards,\nDrinqkart.`;
 
         return await sendWhatsAppMessage(phoneNumber, message);
     } catch (error) {
@@ -798,6 +840,7 @@ export default {
     sendTaskCompletionNotification,
     sendTaskRejectionNotification,
     sendTaskReassignmentNotification,
+    sendMasterTaskAssignmentNotification,
     sendPasswordResetOTP,
     sendAdminExtensionRemarkNotification
 };

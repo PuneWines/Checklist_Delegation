@@ -910,7 +910,6 @@ const AllTasks = () => {
             }).eq("task_id", id);
             if (updateError) throw updateError;
 
-            /* WhatsApp notification disabled
             if (task) {
               await sendTaskExtensionNotification({
                 doerName: task.doer_name,
@@ -923,7 +922,6 @@ const AllTasks = () => {
                 })
               });
             }
-            */
           } else if (taskStatus === "done") {
             // 1. Insert completion record into ea_tasks_done (Snapshot)
             const { error: doneError = null } = await supabase.from("ea_tasks_done").insert([{
@@ -996,7 +994,6 @@ const AllTasks = () => {
   };
 
   const handleSendUrgentWhatsApp = async () => {
-    /* Feature Disabled
     if (selectedItems.size === 0) return;
 
     setIsSubmitting(true);
@@ -1019,7 +1016,8 @@ const AllTasks = () => {
           taskType: activeTab,
           machineName: task.machine_name,
           partName: task.part_name,
-          shop: task.shop || task.assigned_shop || task.shop_name
+          shop_name: task.shop || task.assigned_shop || task.shop_name,
+          taskLevel: task.task_level
         });
       }
 
@@ -1031,7 +1029,6 @@ const AllTasks = () => {
     } finally {
       setIsSubmitting(false);
     }
-    */
   };
 
   const dateColumn = activeTab === "repair" ? "created_at" : (activeTab === "ea" ? (showHistory ? "updated_at" : "planned_date") : "task_start_date");

@@ -745,7 +745,6 @@ function DelegationDataPage() {
         const results = action.payload;
         const failedTasks = results.filter(r => r.status === 'error');
 
-        /* WhatsApp notification disabled
         for (const task of selectedData) {
           if (task.status === 'extend' && task.next_extend_date) {
             try {
@@ -761,7 +760,6 @@ function DelegationDataPage() {
             }
           }
         }
-        */
 
         if (failedTasks.length > 0) {
           console.error('Some tasks failed to submit:', failedTasks);
@@ -808,7 +806,8 @@ function DelegationDataPage() {
           dueDate: formatDateTimeForDisplay(task.planned_date || task.task_start_date),
           givenBy: task.given_by || username,
           taskType: 'delegation',
-          shop: task.shop
+          shop_name: task.shop_name,
+          taskLevel: task.task_level
         });
       }
 

@@ -751,7 +751,6 @@ export default function MaintenanceTask() {
                 if (data) insertedData.push(...data);
             }
 
-            /* WhatsApp notification disabled
             try {
                 if (insertedData && insertedData.length > 0) {
                     for (const uiTask of tasks) {
@@ -771,7 +770,7 @@ export default function MaintenanceTask() {
                                 taskType: 'maintenance',
                                 machineName: task.machine_name,
                                 partName: task.part_name,
-                                shop: task.shop_name,
+                                shop_name: task.shop_name,
                             };
                             if (task.priority?.toLowerCase() === 'high') await sendUrgentTaskNotification(notificationData);
                             else await sendTaskAssignmentNotification(notificationData);
@@ -781,7 +780,6 @@ export default function MaintenanceTask() {
             } catch (whatsappError) {
                 console.error('WhatsApp notification error:', whatsappError);
             }
-            */
 
             showToast(`${allTasksToSubmit.length} Maintenance Task(s) assigned successfully!`, 'success');
             setTasks([defaultTask()]);

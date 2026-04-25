@@ -391,7 +391,6 @@ const Setting = () => {
         if (eaError) console.error('Error updating EA tasks:', eaError);
       }
 
-      /* WhatsApp notification disabled
       if (tasksToShift.length > 0) {
         for (const task of tasksToShift) {
           await sendTaskReassignmentNotification({
@@ -401,12 +400,12 @@ const Setting = () => {
             description: task.task_description || task.tasks || task.title || task.issue_description,
             startDate: (task.task_start_date || task.planned_date || task.created_at) ? new Date(task.task_start_date || task.planned_date || task.created_at).toLocaleDateString('en-IN') : 'N/A',
             givenBy: task.given_by || task.filled_by || 'Admin',
-            shop: task.shop,
+            shop_name: task.shop_name,
+            taskLevel: task.task_level,
             taskType: task._table
           });
         }
       }
-      */
 
       // Filter out shifted tasks from the local view
       const remainingTasks = leaveTasks.filter(t => !selectedLeaveTaskIds.includes(t._uniqueId));
