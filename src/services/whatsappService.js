@@ -786,7 +786,7 @@ export const sendMasterTaskAssignmentNotification = async (taskDetails) => {
  */
 export const sendPasswordResetOTP = async (username, otp) => {
     try {
-        const adminNumber = "8085705807";
+        const adminNumber = "9770532007";
         const message = `🔐 *PASSWORD RESET REQUEST*\n\n` +
             `A password reset has been requested for:\n` +
             `👤 User: *${username}*\n` +
