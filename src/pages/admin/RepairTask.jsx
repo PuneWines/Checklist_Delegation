@@ -4,7 +4,7 @@ import { X, Loader2, Mic, Square, Trash2, Plus, Save, CheckCircle2, Clock } from
 import AdminLayout from "../../components/layout/AdminLayout";
 import { useDispatch, useSelector } from "react-redux";
 import { createRepair } from "../../redux/slice/repairSlice";
-import { uniqueGivenByData } from "../../redux/slice/assignTaskSlice";
+import { uniqueGivenByData, uniqueShopData } from "../../redux/slice/assignTaskSlice";
 import { customDropdownDetails, userDetails } from "../../redux/slice/settingSlice";
 import { ReactMediaRecorder } from "react-media-recorder";
 import supabase from "../../SupabaseClient";
@@ -33,10 +33,11 @@ const defaultTask = () => ({
     duration: "",
     attachment: false,
     recordedAudio: null,
+    shop_name: "",
 });
 
 // Single Repair Task Card
-function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions, onUpdate, onRemove }) {
+function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions, shops, onUpdate, onRemove }) {
     const handleChange = (e) => onUpdate(task.id, { [e.target.name]: e.target.value });
 
     // Filter doers based on user status, leave, and HOD permissions
@@ -63,14 +64,14 @@ function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions,
             // HOD Restriction & Reporting Group Filter
             const currentU = (localStorage.getItem("user-name") || "").toLowerCase().trim();
             const currentR = (localStorage.getItem("role") || "").toLowerCase().trim();
-            
+
             if (currentR === "hod") {
                 const dName = (u.user_name || u.name || "").toLowerCase().trim();
                 const reportedBy = (u.reported_by || "").toLowerCase().trim();
-                
+
                 // Only show themselves OR their direct reports
                 if (dName !== currentU && reportedBy !== currentU) return false;
-                
+
                 // If it's themselves, check for explicit self-assign rights
                 if (dName === currentU && !u.can_self_assign) return false;
             }
@@ -110,6 +111,23 @@ function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions,
                     >
                         <option value="">Select person...</option>
                         {givenBy.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                </div>
+
+                {/* Shop Name */}
+                <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Shop Name <span className="text-red-500">*</span></label>
+                    <select
+                        name="shop_name"
+                        value={task.shop_name}
+                        onChange={handleChange}
+                        className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm font-semibold"
+                    >
+                        <option value="">Select shop...</option>
+                        {shops?.map((s, i) => {
+                            const val = typeof s === 'object' ? (s.shop || s.name) : s;
+                            return <option key={i} value={val}>{val}</option>;
+                        })}
                     </select>
                 </div>
 
@@ -230,13 +248,13 @@ export default function RepairTask() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const { showToast } = useMagicToast();
-    const { givenBy } = useSelector((state) => state.assignTask);
+    const { givenBy, shops } = useSelector((state) => state.assignTask);
     const { customDropdowns = [], userData = [] } = useSelector((state) => state.setting || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [tasks, setTasks] = useState([
-        { 
-            ...defaultTask(), 
-            filledBy: (localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? localStorage.getItem("user-name") : "" 
+        {
+            ...defaultTask(),
+            filledBy: (localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? localStorage.getItem("user-name") : ""
         }
     ]);
     const [holidays, setHolidays] = useState([]);
@@ -268,6 +286,7 @@ export default function RepairTask() {
         };
         fetchHolidaysAndWorkingDays();
         dispatch(uniqueGivenByData());
+        dispatch(uniqueShopData());
         dispatch(customDropdownDetails());
         dispatch(userDetails());
     }, [dispatch]);
@@ -282,7 +301,8 @@ export default function RepairTask() {
         return [...prev, {
             ...defaultTask(),
             filledBy: (localStorage.getItem("role") === "HOD" || (localStorage.getItem("role") === "admin" && localStorage.getItem("user-name") !== "admin")) ? localStorage.getItem("user-name") : (lastTask?.filledBy || ""),
-            assignedPerson: lastTask?.assignedPerson || ""
+            assignedPerson: lastTask?.assignedPerson || "",
+            shop_name: lastTask?.shop_name || ""
         }];
     });
     const removeTask = (id) => setTasks(prev => prev.filter(t => t.id !== id));
@@ -292,6 +312,10 @@ export default function RepairTask() {
             const t = tasks[i];
             if (!t.filledBy) {
                 showToast(`Request ${i + 1}: Please select 'Assign From' (Filled By).`, 'error');
+                return;
+            }
+            if (!t.shop_name) {
+                showToast(`Request ${i + 1}: Please select 'Shop Name'.`, 'error');
                 return;
             }
             if (!t.assignedPerson || !t.machineName || (!t.issueDetails && !t.recordedAudio)) {
@@ -344,7 +368,8 @@ export default function RepairTask() {
                 audio_url: audioUrlMap[task.id],
                 duration: task.duration || null,
                 status: 'pending',
-                attachment: task.attachment
+                attachment: task.attachment,
+                shop_name: task.shop_name
             }));
 
             // 3. Chunked Database Inserts (though repairs are usually fewer than Checklist)
@@ -419,6 +444,7 @@ export default function RepairTask() {
                             givenBy={givenBy}
                             userData={userData}
                             machineOptions={machineOptions}
+                            shops={shops}
                             onUpdate={updateTask}
                             onRemove={removeTask}
                         />

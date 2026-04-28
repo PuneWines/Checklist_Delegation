@@ -69,14 +69,14 @@ function TaskCard({ task, index, total, allDoers, onUpdate, onRemove }) {
             // HOD Restriction & Reporting Group Filter
             const currentU = (localStorage.getItem("user-name") || "").toLowerCase().trim();
             const currentR = (localStorage.getItem("role") || "").toLowerCase().trim();
-            
+
             if (currentR === "hod") {
                 const dName = (d.user_name || d.name || "").toLowerCase().trim();
                 const reportedBy = (d.reported_by || "").toLowerCase().trim();
-                
+
                 // Only show themselves OR their direct reports
                 if (dName !== currentU && reportedBy !== currentU) return false;
-                
+
                 // If it's themselves, check for explicit self-assign rights
                 if (dName === currentU && !d.can_self_assign) return false;
             }
@@ -505,8 +505,7 @@ export default function EATask() {
                     duration: task.duration || null,
                     status: 'pending',
                     given_by: task.given_by,
-                    attachment: task.attachment,
-                    shop_name: 'EA'
+                    attachment: task.attachment
                 };
             });
 
@@ -530,7 +529,7 @@ export default function EATask() {
                             description: task.task_description,
                             startDate: new Date(task.planned_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
                             givenBy: task.given_by,
-                            shop_name: task.shop_name,
+                            shop_name: 'EA',
                             taskType: 'ea'
                         });
                     }
