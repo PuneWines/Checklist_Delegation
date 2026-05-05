@@ -333,7 +333,7 @@ const MaintenanceTaskCard = ({
                             className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm"
                         >
                             <option value="">Select Shop</option>
-                            {shops.map((s, i) => { const val = typeof s === 'object' ? (s.shop || s.shop) : s; return <option key={i} value={val}>{val}</option>; })}
+                            {shops.map((s, i) => { const val = typeof s === 'object' ? (s.shop || s.shop_name) : s; return <option key={i} value={val}>{val}</option>; })}
                         </select>
                     </div>
 

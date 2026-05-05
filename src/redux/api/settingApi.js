@@ -64,7 +64,7 @@ export const fetchShopDataApi = async () => {
     const { data, error } = await supabase
       .from('shop')
       .select('*')
-      .order('name', { ascending: true });
+      .order('shop_name', { ascending: true });
 
     if (error) {
       console.log("error when fetching shops", error);
@@ -72,10 +72,10 @@ export const fetchShopDataApi = async () => {
     }
 
     // Format to match old expectations if necessary, 
-    // though name is better than shop field name now
+    // though shop_name is better than shop field name now
     const formatted = data.map(d => ({
       id: d.id,
-      shop: d.name,
+      shop: d.shop_name,
       given_by: d.given_by || ""
     }));
 
@@ -235,7 +235,7 @@ export const createShopApi = async (newShop) => {
     const { data, error } = await supabase
       .from("shop")
       .insert([{
-        name: newShop.shop,
+        shop_name: newShop.shop,
         given_by: newShop.given_by
       }])
       .select()
@@ -254,7 +254,7 @@ export const updateShopDataApi = async ({ id, updatedShop }) => {
     const { data, error } = await supabase
       .from("shop")
       .update({
-        name: updatedShop.shop,
+        shop_name: updatedShop.shop,
         given_by: updatedShop.given_by
       })
       .eq("id", id)
@@ -359,11 +359,11 @@ export const fetchShopsOnlyApi = async () => {
   try {
     const { data, error } = await supabase
       .from('shop')
-      .select('name')
-      .order('name', { ascending: true });
+      .select('shop_name')
+      .order('shop_name', { ascending: true });
 
     if (error) throw error;
-    return data.map(d => ({ shop: d.name }));
+    return data.map(d => ({ shop: d.shop_name }));
   } catch (error) {
     console.log("error fetching shops", error);
     return [];

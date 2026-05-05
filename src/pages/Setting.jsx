@@ -2489,13 +2489,14 @@ const Setting = () => {
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
                       >
                         <option value="">Choose a shop...</option>
-                        {shops && shops.length > 0 ? (
-                          [...new Set(shops.map(s => s.shop))]
-                            .filter(Boolean)
-                            .map((shopName, index) => (
-                              <option key={index} value={shopName}>{shopName}</option>
-                            ))
-                        ) : null}
+                        {(shops?.length > 0 ? shops : (shopsOnly || []))
+                          .length > 0 ? (
+                            [...new Set((shops?.length > 0 ? shops : shopsOnly).map(s => s.shop || s.shop_name))]
+                              .filter(Boolean)
+                              .map((shopName, index) => (
+                                <option key={index} value={shopName}>{shopName}</option>
+                              ))
+                          ) : null}
                       </select>
                     </div>
 
@@ -2946,9 +2947,10 @@ const Setting = () => {
                         required
                       >
                         <option value="">Select Shop</option>
-                        {shops && [...new Set(shops.map(s => s.shop))].map((s, i) => (
-                          <option key={i} value={s}>{s}</option>
-                        ))}
+                        {(shops?.length > 0 ? shops : (shopsOnly || []))
+                          .length > 0 && [...new Set((shops?.length > 0 ? shops : shopsOnly).map(s => s.shop || s.shop_name))].map((s, i) => (
+                            <option key={i} value={s}>{s}</option>
+                          ))}
                       </select>
                     </div>
                     <div className="space-y-2">
