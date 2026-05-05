@@ -13,12 +13,13 @@ const parseJsonIfNeeded = (val) => {
   return val;
 };
 
-// Fetch unique checklist tasks — one row per unique task_description + name combination
+// Fetch unique checklist tasks — one row per unique task series
 export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all') => {
   try {
-    const FETCH_LIMIT = 10000;
+    const FETCH_LIMIT = 100000;
     const role = (localStorage.getItem("role") || "").toLowerCase();
     const username = localStorage.getItem("user-name");
+    console.log(`[QuickTask Identity] User: ${username} | Role: ${role}`);
 
     let query = supabase
       .from('checklist')
@@ -49,14 +50,29 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
       return { data: [], total: 0 };
     }
 
-    // Deduplicate: keep only first occurrence of each task_description + name combo
+    // Deduplicate: prioritize series_id, fallback to task_description + name combo
     const seen = new Set();
+    let missingIdCount = 0;
+    
     const uniqueRows = (data || []).filter(row => {
-      const key = `${(row.shop || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
+      // Track records without series_id for debugging
+      if (!row.series_id) missingIdCount++;
+
+      // Primary key: series_id
+      if (row.series_id) {
+        if (seen.has(row.series_id)) return false;
+        seen.add(row.series_id);
+        return true;
+      }
+      
+      // Fallback key: legacy grouping
+      const legacyKey = `${(row.shop || row.shop_name || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
+      if (seen.has(legacyKey)) return false;
+      seen.add(legacyKey);
       return true;
     });
+
+    console.log(`[QuickTask API Stats] Total Rows: ${data?.length || 0} | Unique Series: ${uniqueRows.length} | Rows missing series_id: ${missingIdCount}`);
 
     const mapped = uniqueRows.map(row => ({
       ...row,
@@ -83,7 +99,7 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
 // Fetch unique delegation tasks — one row per unique task_description + name combination
 export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all') => {
   try {
-    const FETCH_LIMIT = 10000;
+    const FETCH_LIMIT = 100000;
     const role = (localStorage.getItem("role") || "").toLowerCase();
     const username = localStorage.getItem("user-name");
 
@@ -116,10 +132,11 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
       return { data: [], total: 0 };
     }
 
-    // Deduplicate: keep only first occurrence of each task_description + name combo
+    // Deduplicate: prioritize series_id, fallback to task_description + name combo
     const seen = new Set();
     const uniqueRows = (data || []).filter(row => {
-      const key = `${(row.shop || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
+      // Use series_id if available, otherwise fallback to legacy grouping
+      const key = row.series_id || `${(row.shop || row.shop_name || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-    ClipboardList, Calendar, X, Mic, Square, Trash2, Plus, Save, Loader2, CheckCircle2, Clock, FileCheck, Play, Pause, ExternalLink
+    ClipboardList, Calendar, X, Mic, Square, Trash2, Plus, Save, Loader2, CheckCircle2, Clock, FileCheck, Play, Pause, ExternalLink, Database
 } from "lucide-react";
 import { ReactMediaRecorder } from "react-media-recorder";
 import AdminLayout from "../../components/layout/AdminLayout";
@@ -142,11 +142,11 @@ function TaskCard({ task, index, total, shops, doerName, givenBy, levels, dispat
                             onChange={(e) => {
                                 const newShop = e.target.value;
                                 // Hierarchy: Shop Name -> Assign From -> Doer's Name -> Task Level
-                                onUpdate(task.id, { 
-                                    shop: newShop, 
-                                    givenBy: "", 
-                                    doer: "", 
-                                    task_level: "" 
+                                onUpdate(task.id, {
+                                    shop: newShop,
+                                    givenBy: "",
+                                    doer: "",
+                                    task_level: ""
                                 });
                                 dispatch(uniqueDoerNameData(newShop));
                             }}
@@ -170,10 +170,10 @@ function TaskCard({ task, index, total, shops, doerName, givenBy, levels, dispat
                             onChange={(e) => {
                                 const newGivenBy = e.target.value;
                                 // Hierarchy: Assign From -> Doer's Name -> Task Level
-                                onUpdate(task.id, { 
-                                    givenBy: newGivenBy, 
-                                    doer: "", 
-                                    task_level: "" 
+                                onUpdate(task.id, {
+                                    givenBy: newGivenBy,
+                                    doer: "",
+                                    task_level: ""
                                 });
                             }}
                             disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin"))}
@@ -197,9 +197,9 @@ function TaskCard({ task, index, total, shops, doerName, givenBy, levels, dispat
                             onChange={(e) => {
                                 const newDoer = e.target.value;
                                 // Hierarchy: Doer's Name -> Task Level
-                                onUpdate(task.id, { 
-                                    doer: newDoer, 
-                                    task_level: "" 
+                                onUpdate(task.id, {
+                                    doer: newDoer,
+                                    task_level: ""
                                 });
                             }}
                             className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
@@ -511,7 +511,7 @@ export default function ChecklistTask() {
             });
         }
     }, [dispatch]);
-    
+
     // Banner count fetch only
     useEffect(() => {
         if (selectedShop && selectedLevel) {
@@ -578,9 +578,17 @@ export default function ChecklistTask() {
             .gte('working_date', getLocalDateString(startDate))
             .lte('working_date', getLocalDateString(endDate));
 
-        const workingDaySet = new Set(workingData?.map(d => d.working_date) || []);
+        const workingDaySet = new Set(
+            workingData?.map(d => {
+                const raw = d.working_date || "";
+                return raw.includes('T') ? raw.split('T')[0] : raw.split(' ')[0];
+            }).map(s => s.trim()).filter(Boolean) || []
+        );
         const isHoliday = (d) => holidays.includes(getLocalDateString(d));
-        const isWorkingDay = (d) => workingDaySet.has(getLocalDateString(d));
+        const isWorkingDay = (d) => {
+            if (workingDaySet.size === 0) return true; // Fallback: allow all if calendar is empty
+            return workingDaySet.has(getLocalDateString(d));
+        };
         const toLocalISO = (d) => `${getLocalDateString(d)}T${time}:00`;
         const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
 
@@ -901,6 +909,9 @@ export default function ChecklistTask() {
 
                 const audioUrl = audioUrlMap[formTaskId];
                 const instructionData = instructionUrlMap[formTaskId] || {};
+                
+                // Generate a unique series ID for this manual assignment series
+                const seriesId = `SER-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
                 // Generate dates (cached per task+freq combo)
                 if (!dateCache[cacheKey]) {
@@ -925,7 +936,8 @@ export default function ChecklistTask() {
                         status: "pending",
                         task_description: previewTask.description || "",
                         frequency: freqKey,
-                        dueDate
+                        dueDate,
+                        series_id: seriesId
                     });
                 }
             }
@@ -1027,9 +1039,18 @@ export default function ChecklistTask() {
                             <p className="text-sm text-gray-500 mt-0.5">Assign one or multiple checklist tasks at once</p>
                         </div>
                     </div>
-                    <button onClick={() => navigate('/dashboard/assign-task')} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
-                        <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => navigate('/dashboard/bulk-import')}
+                            className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-200 text-purple-700 rounded-xl text-xs font-black hover:bg-purple-50 transition-all shadow-sm active:scale-95"
+                        >
+                            <Database className="w-3.5 h-3.5" /> Bulk Import
+                        </button>
+                        <button onClick={() => navigate('/dashboard/assign-task')} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Success Message */}
@@ -1048,7 +1069,7 @@ export default function ChecklistTask() {
                     <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-100 rounded-xl">
                         <CheckCircle2 className="w-3.5 h-3.5 text-purple-500" />
                         <span className="text-xs font-bold text-purple-700">
-                            Automation: {selectedLevel} in {selectedShop} has {automatedTasks.length} pre-selected tasks. 
+                            Automation: {selectedLevel} in {selectedShop} has {automatedTasks.length} pre-selected tasks.
                             Click "Preview" to see them.
                         </span>
                     </div>
@@ -1159,49 +1180,49 @@ export default function ChecklistTask() {
                                 {allGeneratedTasks
                                     .filter(task => modalLevelFilter === "all" || (!task.isManual && task.task_level === modalLevelFilter))
                                     .map((task, index) => (
-                                    <div key={index} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 text-sm group">
-                                        <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-[10px] font-black flex-shrink-0">
-                                            {index + 1}
-                                        </div>
-                                        <div className="flex flex-col flex-1 min-w-0">
-                                            <span className="text-gray-700 text-xs font-bold truncate">{task.description || '(Voice/Reference only)'}</span>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                <span className="text-[10px] text-gray-400">{task.doer}</span>
-                                                {task.isTemplate && (
-                                                    <span className="text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded font-bold">Master</span>
-                                                )}
-                                                {task.isManual && (
-                                                    <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold">Manual</span>
-                                                )}
-                                                {task.task_level && !task.isManual && (
-                                                    <span className="text-[9px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded font-bold border border-amber-100 uppercase tracking-tighter">{task.task_level}</span>
-                                                )}
-                                                {task.recordedAudio && (
-                                                    <span className="inline-flex items-center gap-1 text-[9px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded">
-                                                        <Mic className="h-3 w-3" /> Voice
-                                                    </span>
-                                                )}
+                                        <div key={index} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 text-sm group">
+                                            <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                                                {index + 1}
                                             </div>
+                                            <div className="flex flex-col flex-1 min-w-0">
+                                                <span className="text-gray-700 text-xs font-bold truncate">{task.description || '(Voice/Reference only)'}</span>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <span className="text-[10px] text-gray-400">{task.doer}</span>
+                                                    {task.isTemplate && (
+                                                        <span className="text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded font-bold">Master</span>
+                                                    )}
+                                                    {task.isManual && (
+                                                        <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold">Manual</span>
+                                                    )}
+                                                    {task.task_level && !task.isManual && (
+                                                        <span className="text-[9px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded font-bold border border-amber-100 uppercase tracking-tighter">{task.task_level}</span>
+                                                    )}
+                                                    {task.recordedAudio && (
+                                                        <span className="inline-flex items-center gap-1 text-[9px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded">
+                                                            <Mic className="h-3 w-3" /> Voice
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-500 uppercase font-black whitespace-nowrap">
+                                                {task.frequency}
+                                            </span>
+                                            <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded font-black flex-shrink-0">
+                                                ×{task.occurrenceCount}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                title="Remove this task"
+                                                onClick={() => {
+                                                    setTotalExpandedCount(prev => prev - task.occurrenceCount);
+                                                    setAllGeneratedTasks(prev => prev.filter((_, i) => i !== index));
+                                                }}
+                                                className="ml-1 p-1.5 rounded-full text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100 flex-shrink-0"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                            </button>
                                         </div>
-                                        <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-500 uppercase font-black whitespace-nowrap">
-                                            {task.frequency}
-                                        </span>
-                                        <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded font-black flex-shrink-0">
-                                            ×{task.occurrenceCount}
-                                        </span>
-                                        <button
-                                            type="button"
-                                            title="Remove this task"
-                                            onClick={() => {
-                                                setTotalExpandedCount(prev => prev - task.occurrenceCount);
-                                                setAllGeneratedTasks(prev => prev.filter((_, i) => i !== index));
-                                            }}
-                                            className="ml-1 p-1.5 rounded-full text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100 flex-shrink-0"
-                                        >
-                                            <X className="h-3.5 w-3.5" />
-                                        </button>
-                                    </div>
-                                ))}
+                                    ))}
                                 {allGeneratedTasks.length === 0 && (
                                     <p className="text-center text-sm text-gray-400 py-6">All tasks removed. Add tasks or go back to edit.</p>
                                 )}

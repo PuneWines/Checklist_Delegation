@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { BellRing, FileCheck, Calendar, Wrench, X, Mic, Square, Trash2, Plus, Save, Loader2, CheckCircle2, Clock } from "lucide-react";
+import { BellRing, FileCheck, Calendar, Wrench, X, Mic, Square, Trash2, Plus, Save, Loader2, CheckCircle2, Clock, Database } from "lucide-react";
 import { ReactMediaRecorder } from "react-media-recorder";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { useDispatch, useSelector } from "react-redux";
@@ -846,7 +846,7 @@ export default function MaintenanceTask() {
                 <button
                     type="button"
                     onClick={addTask}
-                    className="mt-4 w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-purple-300 text-purple-600 font-bold rounded-2xl hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 group"
+                    className="mt-6 w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-purple-300 text-purple-600 font-bold rounded-2xl hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 group"
                 >
                     <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" />
                     Add Another Task

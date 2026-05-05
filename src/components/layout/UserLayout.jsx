@@ -1,5 +1,5 @@
 "use client"
-import aceLogo from "../assets/Ace_Logoo.jpg";
+import aceLogo from "../../assets/logo1.png";
 
 import { useState, useEffect } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"

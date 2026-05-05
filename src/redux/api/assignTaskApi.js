@@ -55,7 +55,7 @@ export const fetchUniqueGivenByDataApi = async () => {
         try {
           const parsed = JSON.parse(val);
           return parsed.given_by || parsed.name || val;
-        } catch (e) {}
+        } catch (e) { }
       }
       return val;
     }).filter(val => val && val.toString().trim() !== "");
@@ -182,6 +182,7 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
       instruction_attachment_url: task.instruction_attachment_url || null,
       instruction_attachment_type: task.instruction_attachment_type || null,
       task_level: task.task_level || null,
+      series_id: task.series_id || null,
     };
 
     if (isOneTime) {
