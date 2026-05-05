@@ -321,7 +321,7 @@ const settingsSlice = createSlice({
         state.loading = false;
         state.shops.push({
           id: action.payload.id,
-          shop: action.payload.name,
+          shop: action.payload.shop_name,
           given_by: action.payload.given_by || ""
         });
       })
@@ -338,7 +338,7 @@ const settingsSlice = createSlice({
         state.shops = state.shops.map((shop) =>
           shop.id === action.payload.id ? {
             id: action.payload.id,
-            shop: action.payload.name,
+            shop: action.payload.shop_name,
             given_by: action.payload.given_by || ""
           } : shop
         );

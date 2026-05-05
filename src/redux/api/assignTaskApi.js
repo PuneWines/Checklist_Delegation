@@ -2,27 +2,25 @@ import supabase from "../../SupabaseClient";
 
 export const fetchUniqueShopDataApi = async () => {
   try {
-    console.log("🔍 Fetching unique shops from users table...");
+    console.log("🔍 Fetching unique shops from shop table...");
 
-    // Fetch all user_access values for active users
     const { data, error } = await supabase
-      .from("users")
-      .select("user_access")
-      .eq("status", "active")
-      .not("user_access", "is", null);
+      .from("shop")
+      .select("shop_name")
+      .order("shop_name", { ascending: true });
 
     if (error) throw error;
 
     // Filter out nulls/empties and get unique values
     let uniqueShops = [...new Set(data
-      .map(item => item.user_access)
+      .map(item => item.shop_name)
       .filter(shop => shop && shop.trim() !== "")
     )].sort();
 
     console.log("✅ Unique shops found:", uniqueShops);
     return uniqueShops;
   } catch (error) {
-    console.error("❌ Error fetching shops from users table:", error);
+    console.error("❌ Error fetching shops from shop table:", error);
     return [];
   }
 };
