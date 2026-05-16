@@ -25,6 +25,7 @@ import {
   CrossIcon,
   X,
   Bell,
+  LayoutGrid,
 } from "lucide-react";
 
 export default function AdminLayout({ children, darkMode, toggleDarkMode, showLayout = true }) {
@@ -39,147 +40,10 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
   const [userRole, setUserRole] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [pageAccess, setPageAccess] = useState([]);
   const [profileImage, setProfileImage] = useState("");
 
   const [isUserPopupOpen, setIsUserPopupOpen] = useState(false);
-
-  // Check authentication on component mount
-  useEffect(() => {
-    const storedUsername = localStorage.getItem("user-name");
-    const storedRole = localStorage.getItem("role");
-    const storedEmail = localStorage.getItem("email_id");
-
-    if (!storedUsername) {
-      // Redirect to login if not authenticated
-      navigate("/login");
-      return;
-    }
-
-    setUsername(storedUsername);
-    setUserRole(storedRole || "user");
-    setUserEmail(storedEmail);
-    setIsSuperAdmin(storedUsername.toLowerCase() === "admin");
-
-    // Centralized Security Guard for User Role
-    const path = location.pathname;
-    const restrictedPages = [
-      "/dashboard/assign-task",
-      "/dashboard/admin-approval",
-      "/dashboard/checklist",
-      "/dashboard/maintenance",
-      "/dashboard/repair",
-      "/dashboard/ea-task",
-      "/dashboard/quick-task",
-      "/dashboard/holiday-list",
-      "/dashboard/working-day-calendar",
-      "/dashboard/setting"
-    ];
-
-    const storedRoleLower = (storedRole || "user").toLowerCase();
-
-    if (storedRoleLower === "user" && restrictedPages.some(p => path.startsWith(p))) {
-      navigate("/dashboard/admin");
-      return;
-    }
-
-    if (storedRoleLower === "hod") {
-      const designation = (localStorage.getItem("designation") || "").toLowerCase();
-      const isMachineOperator = designation.includes("machin") || designation.includes("operat") || designation.includes("oprat");
-      
-      const hodRestrictedPages = [
-        "/dashboard/maintenance",
-        "/dashboard/ea-task",
-        "/dashboard/quick-task",
-        "/dashboard/holiday-list",
-        "/dashboard/working-day-calendar",
-        "/dashboard/setting"
-      ];
-      
-      if (!isMachineOperator) {
-        hodRestrictedPages.push("/dashboard/repair");
-      }
-
-      if (hodRestrictedPages.some(p => path.startsWith(p))) {
-        navigate("/dashboard/admin");
-        return;
-      }
-    }
-
-    // Initial load from localStorage
-    const cachedImage = localStorage.getItem("profile_image");
-    setProfileImage(cachedImage || "");
-
-      // Fetch reporting users for HOD role check
-      let reportingUsers = [storedUsername?.toLowerCase()];
-      const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
-      if (currentUserRole === "hod") {
-          const fetchReportingUsers = async () => {
-              const { data: reports } = await supabase
-                  .from("users")
-                  .select("user_name")
-                  .eq("reported_by", storedUsername);
-              if (reports) {
-                  reportingUsers = [storedUsername.toLowerCase(), ...reports.map(r => (r.user_name || "").toLowerCase())];
-              }
-          };
-          fetchReportingUsers();
-      }
-
-    // Sync with database to get the latest image
-    const syncProfileImage = async () => {
-      try {
-        const { data } = await supabase
-          .from("users")
-          .select("profile_image")
-          .eq("user_name", storedUsername)
-          .single();
-
-        if (data && data.profile_image) {
-          setProfileImage(data.profile_image);
-          localStorage.setItem("profile_image", data.profile_image);
-          console.log("✅ Profile image synced from DB:", data.profile_image);
-        }
-      } catch (err) {
-        console.error("❌ Error syncing profile image:", err);
-      }
-    };
-
-    if (storedUsername) {
-      syncProfileImage();
-    }
-
-    // Check if this is the super admin (username = 'admin')
-    const normalizedUsername = (storedUsername || "").toLowerCase();
-    setIsSuperAdmin(normalizedUsername === "admin");
-  }, [navigate, location.pathname]);
-
-  // Fetch notifications globally for badge count
-  useEffect(() => {
-    const role = localStorage.getItem("role");
-    const userId = localStorage.getItem("user-id");
-    if (role) {
-      dispatch(fetchNotifications({ role: role.toLowerCase(), userId }));
-    }
-  }, [dispatch, location.pathname]);
-
-  // Set initial submenu state based on current location
-  useEffect(() => {
-    if (location.pathname.includes("/dashboard/holiday") || location.pathname.includes("/dashboard/working-day")) {
-      setIsHolidaySubmenuOpen(true);
-    }
-  }, [location.pathname]);
-
-  // Handle logout
-  const handleLogout = () => {
-    localStorage.removeItem("user-name");
-    localStorage.removeItem("role");
-    localStorage.removeItem("email_id");
-    localStorage.removeItem("token");
-    localStorage.removeItem("profile_image");
-    window.location.href = "/login";
-  };
-
-  // No data categories needed as Task is now a main route
 
   // Update the routes array based on user role and super admin status
   const routes = [
@@ -188,14 +52,14 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Dashboard",
       icon: Database,
       active: location.pathname === "/dashboard/admin",
-      showFor: ["admin", "user", "HOD"],
+      showFor: ["admin", "user", "HOD", "manager"],
     },
     {
       href: "/dashboard/notifications",
       label: "Announcements",
       icon: Bell,
       active: location.pathname === "/dashboard/notifications",
-      showFor: ["admin", "user", "hod"],
+      showFor: ["admin", "user", "hod", "manager"],
       badge: notifications.filter(n => !n.isRead).length || null,
     },
     {
@@ -214,6 +78,13 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       showFor: ["admin", "HOD"],
     },
     {
+      href: "/dashboard/work-details",
+      label: "Work Records",
+      icon: LayoutGrid,
+      active: location.pathname === "/dashboard/work-details",
+      showFor: ["admin", "HOD", "manager"],
+    },
+    {
       href: "/dashboard/delegation",
       label: "Delegation",
       icon: ClipboardList,
@@ -225,7 +96,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Task",
       icon: CalendarCheck,
       active: location.pathname === "/dashboard/task",
-      showFor: ["admin", "HOD", "user"],
+      showFor: ["admin", "HOD", "user", "manager"],
     },
     {
       href: "/dashboard/calendar",
@@ -264,14 +135,6 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       active: location.pathname === "/dashboard/admin-approval",
       showFor: ["admin", "HOD"],
     },
-    // {
-    //   href: "/dashboard/mis-report",
-    //   label: "MIS Report",
-    //   icon: CheckSquare,
-    //   active: location.pathname.includes("/dashboard/mis-report"),
-    //   // Only show for super admin (username = 'admin')
-    //   showFor: isSuperAdmin ? ["admin"] : [],
-    // },
     {
       href: "/dashboard/setting",
       label: "Settings",
@@ -281,6 +144,187 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       showFor: isSuperAdmin ? ["admin"] : [],
     },
   ];
+
+  // Check authentication on component mount
+  useEffect(() => {
+    const storedUsername = localStorage.getItem("user-name");
+    const storedRole = localStorage.getItem("role");
+    const storedEmail = localStorage.getItem("email_id");
+
+    if (!storedUsername) {
+      // Redirect to login if not authenticated
+      navigate("/login");
+      return;
+    }
+
+    setUsername(storedUsername);
+    setUserRole(storedRole || "user");
+    setUserEmail(storedEmail);
+    setIsSuperAdmin(storedUsername.toLowerCase() === "admin");
+
+    // Centralized Security Guard for User Role
+    const path = location.pathname;
+    const restrictedPages = [
+      "/dashboard/assign-task",
+      "/dashboard/admin-approval",
+      "/dashboard/checklist",
+      "/dashboard/maintenance",
+      "/dashboard/repair",
+      "/dashboard/ea-task",
+      "/dashboard/quick-task",
+      "/dashboard/holiday-list",
+      "/dashboard/working-day-calendar",
+      "/dashboard/setting"
+    ];
+
+    const storedRoleLower = (storedRole || "user").toLowerCase();
+    const isSuperAdminUser = storedUsername?.toLowerCase() === "admin";
+    const pageAccessRaw = localStorage.getItem("page_access");
+    let pageAccess = [];
+    try {
+      pageAccess = JSON.parse(pageAccessRaw) || [];
+    } catch (e) {
+      pageAccess = [];
+    }
+
+    // Dynamic Security Guard using page_access
+    if (!isSuperAdminUser && pageAccess.length > 0) {
+      // Find if current path is allowed
+      const isPathAllowed = (path) => {
+        // Dashboard and Notifications are generally allowed unless explicitly removed
+        if (path === "/dashboard/admin" || path === "/dashboard/notifications") return true;
+        
+        // Check main routes
+        const matchedRoute = routes.find(r => r.href === path || (r.subItems && r.subItems.some(s => s.href === path)));
+        if (!matchedRoute) return true; // If route not in our list, allow (could be public or new)
+
+        if (matchedRoute.isSubmenu) {
+           const matchedSub = matchedRoute.subItems.find(s => s.href === path);
+           return matchedSub ? pageAccess.includes(matchedSub.label) : false;
+        }
+        
+        return pageAccess.includes(matchedRoute.label);
+      };
+
+      if (!isPathAllowed(path)) {
+        console.warn(`🚫 Access denied to ${path}. Redirecting to dashboard.`);
+        navigate("/dashboard/admin");
+        return;
+      }
+    } else if (storedRoleLower === "user") {
+      // Fallback to hardcoded for legacy or if pageAccess is empty
+      const restrictedPages = ["/dashboard/assign-task", "/dashboard/admin-approval", "/dashboard/checklist", "/dashboard/maintenance", "/dashboard/repair", "/dashboard/ea-task", "/dashboard/quick-task", "/dashboard/holiday-list", "/dashboard/working-day-calendar", "/dashboard/setting"];
+      if (restrictedPages.some(p => path.startsWith(p))) {
+        navigate("/dashboard/admin");
+        return;
+      }
+    }
+
+    // Initial load from localStorage
+    const cachedImage = localStorage.getItem("profile_image");
+    setProfileImage(cachedImage || "");
+
+      // Fetch reporting users for HOD role check
+      let reportingUsers = [storedUsername?.toLowerCase()];
+      const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
+      if (currentUserRole === "hod") {
+          const fetchReportingUsers = async () => {
+              const { data: reports } = await supabase
+                  .from("users")
+                  .select("user_name")
+                  .eq("reported_by", storedUsername);
+              if (reports) {
+                  reportingUsers = [storedUsername.toLowerCase(), ...reports.map(r => (r.user_name || "").toLowerCase())];
+              }
+          };
+          fetchReportingUsers();
+      }
+
+    // Sync with database to get the latest image and permissions
+    const syncUserData = async () => {
+      try {
+        const { data } = await supabase
+          .from("users")
+          .select("profile_image, page_access")
+          .eq("user_name", storedUsername)
+          .single();
+
+        if (data) {
+          if (data.profile_image) {
+            setProfileImage(data.profile_image);
+            localStorage.setItem("profile_image", data.profile_image);
+          }
+          if (data.page_access) {
+            let finalAccess = data.page_access;
+            if (typeof finalAccess === 'string') {
+              try {
+                finalAccess = JSON.parse(finalAccess);
+              } catch (e) {
+                console.error("Error parsing page_access string:", e);
+                finalAccess = [];
+              }
+            }
+            localStorage.setItem("page_access", JSON.stringify(Array.isArray(finalAccess) ? finalAccess : []));
+            setPageAccess(Array.isArray(finalAccess) ? finalAccess : []);
+          }
+          console.log("✅ User data synced from DB");
+        }
+      } catch (err) {
+        console.error("❌ Error syncing user data:", err);
+      }
+    };
+
+    // Initial sync from localStorage to avoid flash of no content
+    const initPageAccess = () => {
+      const stored = localStorage.getItem("page_access");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setPageAccess(Array.isArray(parsed) ? parsed : (typeof parsed === 'string' ? JSON.parse(parsed) : []));
+        } catch (e) {
+          setPageAccess([]);
+        }
+      }
+    };
+    initPageAccess();
+
+    if (storedUsername) {
+      syncUserData();
+    }
+
+    // Check if this is the super admin (username = 'admin')
+    const normalizedUsername = (storedUsername || "").toLowerCase();
+    setIsSuperAdmin(normalizedUsername === "admin");
+  }, [navigate, location.pathname]);
+
+  // Fetch notifications globally for badge count
+  useEffect(() => {
+    const role = localStorage.getItem("role");
+    const userId = localStorage.getItem("user-id");
+    if (role) {
+      dispatch(fetchNotifications({ role: role.toLowerCase(), userId }));
+    }
+  }, [dispatch, location.pathname]);
+
+  // Set initial submenu state based on current location
+  useEffect(() => {
+    if (location.pathname.includes("/dashboard/holiday") || location.pathname.includes("/dashboard/working-day")) {
+      setIsHolidaySubmenuOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Handle logout
+  const handleLogout = () => {
+    localStorage.removeItem("user-name");
+    localStorage.removeItem("role");
+    localStorage.removeItem("email_id");
+    localStorage.removeItem("token");
+    localStorage.removeItem("profile_image");
+    window.location.href = "/login";
+  };
+
+  // No data categories needed as Task is now a main route
+
 
   const getAccessibleShops = () => {
     return [];
@@ -303,16 +347,33 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
         
         // Holiday submenu logic handled by showFor in routes
         if (route.label === "Holiday") {
-            return isSuperAdmin || userRoleNormalized === "admin";
+            // Show Holiday submenu if user has access to any of its subItems
+            if (isSuperAdmin || userRoleNormalized === "admin") return true;
+            return route.subItems.some(sub => pageAccess.includes(sub.label));
         }
-        return route.showFor.some(role => role.toLowerCase() === userRoleNormalized);
+
+        // Hardcoded role check first
+        const hasRoleAccess = route.showFor.some(role => role.toLowerCase() === userRoleNormalized);
+        
+        // If dynamic page access is set, it can override or act as a secondary filter
+        // But for "user" and "hod", let's follow the pageAccess if it's not empty
+        if (pageAccess.length > 0 && !isSuperAdmin) {
+          return pageAccess.includes(route.label);
+        }
+
+        return hasRoleAccess;
       })
       .map(route => {
         if (route.subItems) {
           const userRoleNormalized = (userRole || "user").toLowerCase();
           return {
             ...route,
-            subItems: route.subItems.filter(sub => sub.showFor.some(role => role.toLowerCase() === userRoleNormalized))
+            subItems: route.subItems.filter(sub => {
+              if (pageAccess.length > 0 && !isSuperAdmin) {
+                return pageAccess.includes(sub.label);
+              }
+              return sub.showFor.some(role => role.toLowerCase() === userRoleNormalized);
+            })
           };
         }
         return route;

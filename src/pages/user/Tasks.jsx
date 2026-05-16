@@ -1,93 +1,61 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { fetchWorkTasksForUserApi, submitWorkTaskApi } from "../../redux/api/workRecordsApi"
+import { useMagicToast } from "../../context/MagicToastContext"
+import supabase from "../../SupabaseClient"
+import { Loader2, CheckCircle2, Clock, AlertCircle, Search, Filter, Paperclip, MessageSquare } from "lucide-react"
 
 const UserTasks = () => {
+  const { showToast } = useMagicToast()
+  const [userTasks, setUserTasks] = useState([])
+  const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState("all")
-  const [filterFrequency, setFilterFrequency] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTasks, setSelectedTasks] = useState([])
   const [remarks, setRemarks] = useState({})
   const [selectedFiles, setSelectedFiles] = useState({})
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [toast, setToast] = useState({ show: false, message: "", type: "" })
 
-  // Sample tasks data
-  const tasks = [
-    {
-      id: 1,
-      title: "Complete weekly report",
-      description: "Prepare and submit the weekly progress report",
-      dueDate: "2023-05-15",
-      frequency: "weekly",
-      completed: false,
-      enableReminders: true,
-      requireAttachment: true,
-    },
-    {
-      id: 2,
-      title: "Update inventory records",
-      description: "Update the inventory records with the latest stock information",
-      dueDate: "2023-05-18",
-      frequency: "daily",
-      completed: false,
-      enableReminders: true,
-      requireAttachment: false,
-    },
-    {
-      id: 3,
-      title: "Monthly equipment maintenance",
-      description: "Perform routine maintenance checks on all equipment",
-      dueDate: "2023-05-20",
-      frequency: "monthly",
-      completed: false,
-      enableReminders: false,
-      requireAttachment: true,
-    },
-    {
-      id: 4,
-      title: "Client follow-up calls",
-      description: "Make follow-up calls to clients about recent orders",
-      dueDate: "2023-05-16",
-      frequency: "weekly",
-      completed: false,
-      enableReminders: true,
-      requireAttachment: false,
-    },
-    {
-      id: 5,
-      title: "Daily safety inspection",
-      description: "Conduct daily safety inspection of the work area",
-      dueDate: "2023-05-17",
-      frequency: "daily",
-      completed: false,
-      enableReminders: false,
-      requireAttachment: true,
-    },
-  ]
+  const currentUsername = localStorage.getItem("user-name") || ""
 
-  const [userTasks, setUserTasks] = useState(tasks)
+  const loadTasks = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await fetchWorkTasksForUserApi(currentUsername)
+      setUserTasks(data || [])
+    } catch (error) {
+      console.error("Error loading tasks:", error)
+      showToast("Failed to load tasks", "error")
+    } finally {
+      setLoading(false)
+    }
+  }, [currentUsername, showToast])
 
-  // Filter tasks based on the filter criteria
+  useEffect(() => {
+    if (currentUsername) {
+      loadTasks()
+    }
+  }, [loadTasks, currentUsername])
+
   const filteredTasks = userTasks.filter((task) => {
     // Filter by status
-    if (filterStatus === "completed" && !task.completed) return false
-    if (filterStatus === "pending" && task.completed) return false
+    if (filterStatus === "completed" && task.status !== "APPROVED") return false
+    if (filterStatus === "pending" && (task.status === "APPROVED" || task.status === "SUBMITTED")) return false
+    if (filterStatus === "submitted" && task.status !== "SUBMITTED") return false
     if (filterStatus === "overdue") {
-      const dueDate = new Date(task.dueDate)
+      const dueDate = new Date(task.current_date)
       const today = new Date()
-      if (dueDate >= today || task.completed) return false
+      today.setHours(0, 0, 0, 0)
+      if (dueDate >= today || task.status === "APPROVED" || task.status === "SUBMITTED") return false
     }
-
-    // Filter by frequency
-    if (filterFrequency !== "all" && task.frequency !== filterFrequency) return false
 
     // Filter by search query
     if (
       searchQuery &&
-      !task.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !task.description.toLowerCase().includes(searchQuery.toLowerCase())
+      !task.task_description?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !task.shop_name?.toLowerCase().includes(searchQuery.toLowerCase())
     ) {
       return false
     }
@@ -107,7 +75,6 @@ const UserTasks = () => {
 
   const handleRemarksChange = (taskId, value) => {
     setRemarks((prev) => ({ ...prev, [taskId]: value }))
-    // Clear error if user starts typing remarks
     if (errors[taskId]) {
       setErrors((prev) => {
         const newErrors = { ...prev }
@@ -120,7 +87,6 @@ const UserTasks = () => {
   const handleFileChange = (taskId, e) => {
     const file = e.target.files?.[0] || null
     setSelectedFiles((prev) => ({ ...prev, [taskId]: file }))
-    // Clear error if user selects a file
     if (errors[taskId]) {
       setErrors((prev) => {
         const newErrors = { ...prev }
@@ -130,29 +96,40 @@ const UserTasks = () => {
     }
   }
 
-  const showToast = (message, type) => {
-    setToast({ show: true, message, type })
-    setTimeout(() => {
-      setToast({ show: false, message: "", type: "" })
-    }, 3000)
+  const uploadFile = async (id, file) => {
+    if (!file) return null
+    try {
+      const fileExt = file.name.split(".").pop()
+      const fileName = `work-proofs/${id}-${Date.now()}.${fileExt}`
+      const { data, error } = await supabase.storage.from("task-proofs").upload(fileName, file)
+
+      if (error) throw error
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("task-proofs").getPublicUrl(fileName)
+
+      return publicUrl
+    } catch (error) {
+      console.error("Upload error:", error)
+      return null
+    }
   }
 
   const handleSubmitTasks = async () => {
+    if (selectedTasks.length === 0) return
     setIsSubmitting(true)
     const newErrors = {}
 
-    // Validate selected tasks
+    // Validation
     for (const taskId of selectedTasks) {
       const task = userTasks.find((t) => t.id === taskId)
       if (!task) continue
 
-      // Check if attachment is required but not provided
-      if (task.requireAttachment && !selectedFiles[taskId]) {
-        newErrors[taskId] = "This task requires an attachment. Please upload a file."
-      }
+      // In Work Detail, we might want to enforce image proof for all or based on master config
+      // For now, let's assume it's optional unless specified otherwise
     }
 
-    // If there are errors, show them and stop submission
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       setIsSubmitting(false)
@@ -161,254 +138,281 @@ const UserTasks = () => {
     }
 
     try {
-      // In a real app, you would make an API call to update the tasks
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      for (const taskId of selectedTasks) {
+        let imageUrl = null
+        if (selectedFiles[taskId]) {
+          imageUrl = await uploadFile(taskId, selectedFiles[taskId])
+        }
 
-      // Update the local state
-      setUserTasks((prev) =>
-        prev.map((task) => (selectedTasks.includes(task.id) ? { ...task, completed: true } : task)),
-      )
+        await submitWorkTaskApi(taskId, {
+          remark: remarks[taskId] || "",
+          image: imageUrl,
+        })
+      }
 
-      // Clear selections and form data
+      showToast(`${selectedTasks.length} tasks submitted for approval!`, "success")
+      
+      // Reset state
       setSelectedTasks([])
       setRemarks({})
       setSelectedFiles({})
       setErrors({})
-
-      showToast(`${selectedTasks.length} tasks have been marked as completed.`, "success")
+      
+      // Reload tasks
+      loadTasks()
     } catch (e) {
-      showToast("There was an error submitting the tasks. Please try again.", "error")
+      console.error("Submission error:", e)
+      showToast("Failed to submit tasks: " + e.message, "error")
     } finally {
       setIsSubmitting(false)
     }
   }
 
+  const getStatusBadge = (task) => {
+    const status = task.status
+    if (status === "APPROVED") return <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Approved</span>
+    if (status === "SUBMITTED") return <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Submitted</span>
+    if (status === "REJECTED") return <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Rejected</span>
+    
+    // Check database status first
+    if (status === "OVERDUE") return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Overdue</span>
+    if (status === "UPCOMING") return <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-full uppercase tracking-wider">Upcoming</span>
+    
+    // Fallback to time-based calculation for PENDING tasks that might have aged
+    const dueDate = new Date(task.current_date)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (dueDate < today) return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Overdue</span>
+    
+    return <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Pending</span>
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <h1 className="text-2xl font-bold tracking-tight text-green-700 dark:text-green-400">My Tasks</h1>
-        <button
-          onClick={handleSubmitTasks}
-          disabled={selectedTasks.length === 0 || isSubmitting}
-          className="btn btn-primary bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white"
-        >
-          {isSubmitting ? "Submitting..." : `Complete ${selectedTasks.length} Selected Tasks`}
-        </button>
+    <div className="max-w-7xl mx-auto px-4 py-8 space-y-8 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
+            <LayoutGrid className="text-purple-600" size={32} />
+            My <span className="text-purple-600">Work Detail</span>
+          </h1>
+          <p className="text-gray-500 font-medium">Manage and submit your routine assigned work tasks</p>
+        </div>
+        
+        {selectedTasks.length > 0 && (
+          <button
+            onClick={handleSubmitTasks}
+            disabled={isSubmitting}
+            className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-purple-700 disabled:opacity-50 transition-all shadow-xl shadow-purple-200"
+          >
+            {isSubmitting ? (
+              <Loader2 className="animate-spin" size={18} />
+            ) : (
+              <CheckCircle2 size={18} />
+            )}
+            Submit {selectedTasks.length} Tasks
+          </button>
+        )}
       </div>
 
-      <div className="card border-green-200 dark:border-green-800 shadow-md">
-        <div className="card-header bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-950 dark:to-teal-950">
-          <h2 className="text-lg font-medium text-green-700 dark:text-green-300">Task Management</h2>
-          <p className="text-sm text-green-600 dark:text-green-400">View, filter, and manage your assigned tasks</p>
-        </div>
-        <div className="card-body space-y-6">
-          <div className="flex flex-col gap-4 md:flex-row">
-            <div className="flex-1 space-y-2">
-              <label htmlFor="search" className="flex items-center text-green-700 dark:text-green-300">
-                <i className="fas fa-search h-4 w-4 mr-2"></i>
-                Search Tasks
-              </label>
-              <input
-                id="search"
-                placeholder="Search by task title or description"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="input border-green-200 dark:border-green-800"
-              />
-            </div>
-            <div className="space-y-2 md:w-[180px]">
-              <label htmlFor="status-filter" className="flex items-center text-green-700 dark:text-green-300">
-                <i className="fas fa-filter h-4 w-4 mr-2"></i>
-                Filter by Status
-              </label>
+      <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-6">
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="relative flex-grow">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search by description or shop..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-purple-400 font-medium transition-all"
+            />
+          </div>
+          
+          <div className="flex gap-2">
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
               <select
-                id="status-filter"
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="select border-green-200 dark:border-green-800"
+                className="pl-10 pr-8 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-purple-400 font-bold text-xs uppercase tracking-wider appearance-none"
               >
                 <option value="all">All Tasks</option>
                 <option value="pending">Pending</option>
-                <option value="completed">Completed</option>
+                <option value="submitted">Submitted</option>
+                <option value="completed">Approved</option>
                 <option value="overdue">Overdue</option>
               </select>
             </div>
-            <div className="space-y-2 md:w-[180px]">
-              <label htmlFor="frequency-filter" className="flex items-center text-green-700 dark:text-green-300">
-                <i className="fas fa-filter h-4 w-4 mr-2"></i>
-                Filter by Frequency
-              </label>
-              <select
-                id="frequency-filter"
-                value={filterFrequency}
-                onChange={(e) => setFilterFrequency(e.target.value)}
-                className="select border-green-200 dark:border-green-800"
-              >
-                <option value="all">All Frequencies</option>
-                <option value="one-time">One Time</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="fortnightly">Fortnightly</option>
-                <option value="monthly">Monthly</option>
-                <option value="quarterly">Quarterly</option>
-                <option value="yearly">Yearly</option>
-              </select>
-            </div>
           </div>
+        </div>
 
-          {filteredTasks.length === 0 ? (
-            <div className="text-center p-8 text-gray-500 dark:text-gray-400">
-              <p>No tasks found matching your filters.</p>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 space-y-4">
+            <div className="w-12 h-12 border-4 border-purple-100 border-t-purple-600 rounded-full animate-spin" />
+            <p className="text-purple-600 font-black uppercase tracking-widest text-xs">Fetching your tasks...</p>
+          </div>
+        ) : filteredTasks.length === 0 ? (
+          <div className="text-center py-20 space-y-4">
+            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto text-gray-300">
+              <LayoutGrid size={40} />
             </div>
-          ) : (
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-green-700 dark:text-green-300">Task List</h3>
-                {filteredTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`card ${task.completed ? "opacity-60" : ""} border-l-4 ${
-                      task.completed
-                        ? "border-l-green-500"
-                        : selectedTasks.includes(task.id)
-                          ? "border-l-blue-500"
-                          : "border-l-gray-300"
-                    } transition-all hover:shadow-md`}
-                  >
-                    <div className="p-4 pb-2 bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-950 dark:to-teal-950 border-b border-green-200 dark:border-green-800">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <input
-                            id={`task-${task.id}`}
-                            type="checkbox"
-                            checked={selectedTasks.includes(task.id) || task.completed}
-                            onChange={() => !task.completed && handleTaskSelection(task.id)}
-                            disabled={task.completed}
-                            className="checkbox"
-                          />
-                          <h3
-                            className={`text-lg text-green-700 dark:text-green-300 ${task.completed ? "line-through" : ""}`}
-                          >
-                            {task.title}
-                          </h3>
-                        </div>
-                        <span className="badge badge-blue">
-                          {task.frequency.charAt(0).toUpperCase() + task.frequency.slice(1)}
+            <p className="text-gray-400 font-medium">No tasks found matching your filters.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+              {filteredTasks.map((task) => (
+                <div
+                  key={task.id}
+                  onClick={() => task.status !== "APPROVED" && task.status !== "SUBMITTED" && handleTaskSelection(task.id)}
+                  className={`group relative p-5 rounded-3xl border-2 transition-all cursor-pointer ${
+                    selectedTasks.includes(task.id)
+                      ? "border-purple-600 bg-purple-50/30"
+                      : "border-gray-50 bg-white hover:border-purple-200"
+                  } ${task.status === "APPROVED" || task.status === "SUBMITTED" ? "opacity-60 cursor-default" : ""}`}
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${
+                        selectedTasks.includes(task.id) ? "bg-purple-600 border-purple-600" : "border-gray-200"
+                      }`}>
+                        {selectedTasks.includes(task.id) && <CheckCircle2 className="text-white" size={14} />}
+                      </div>
+                      <span className="font-black text-gray-900 tracking-tight">{task.shop_name}</span>
+                    </div>
+                    {getStatusBadge(task)}
+                  </div>
+                  
+                  <p className="text-gray-600 text-sm font-medium leading-relaxed mb-4">
+                    {task.task_description}
+                  </p>
+                  
+                  <div className="flex items-center justify-between mt-auto">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1.5 text-gray-400">
+                        <Clock size={14} />
+                        <span className="text-[10px] font-bold uppercase tracking-wider">
+                          {new Date(task.current_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                         </span>
                       </div>
-                      <p className="text-sm text-green-600 dark:text-green-400">Due: {task.dueDate}</p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {task.enableReminders && (
-                          <span className="badge badge-blue">
-                            <i className="fas fa-bell h-3 w-3 mr-1"></i> Reminders
-                          </span>
-                        )}
-                        {task.requireAttachment && (
-                          <span className="badge badge-yellow">
-                            <i className="fas fa-paperclip h-3 w-3 mr-1"></i> Attachment Required
-                          </span>
-                        )}
+                      <div className="flex items-center gap-1.5 text-gray-400">
+                        <Loader2 size={14} className="animate-spin-slow" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider">{task.duration} Mins</span>
                       </div>
                     </div>
-                    <div className="p-4">
-                      <p className="text-sm text-gray-600 dark:text-gray-300">{task.description}</p>
-                    </div>
+                    {task.rejection_reason && (
+                      <div className="flex items-center gap-1 text-red-500" title={task.rejection_reason}>
+                        <AlertCircle size={14} />
+                        <span className="text-[10px] font-bold uppercase">Rejected</span>
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
+            </div>
 
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-green-700 dark:text-green-300">Task Completion Form</h3>
-                {selectedTasks.length === 0 ? (
-                  <div className="card border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 p-6 text-center">
-                    <p className="text-green-600 dark:text-green-400">Select tasks from the list to complete them.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {selectedTasks.map((taskId) => {
-                      const task = userTasks.find((t) => t.id === taskId)
-                      if (!task) return null
+            <div className="space-y-6">
+              <h3 className="text-sm font-black text-gray-400 uppercase tracking-[0.2em]">Completion Details</h3>
+              {selectedTasks.length === 0 ? (
+                <div className="bg-gray-50 rounded-[2.5rem] p-10 text-center border-2 border-dashed border-gray-100">
+                  <p className="text-gray-400 font-medium">Select tasks from the list to enter submission details</p>
+                </div>
+              ) : (
+                <div className="space-y-6 overflow-y-auto max-h-[550px] pr-2 custom-scrollbar">
+                  {selectedTasks.map((taskId) => {
+                    const task = userTasks.find((t) => t.id === taskId)
+                    if (!task) return null
 
-                      return (
-                        <div key={taskId} className="card border-green-200 dark:border-green-800">
-                          <div className="card-header bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-950 dark:to-teal-950">
-                            <h3 className="text-md text-green-700 dark:text-green-300">{task.title}</h3>
-                          </div>
-                          <div className="card-body space-y-4">
-                            <div className="space-y-2">
-                              <label
-                                htmlFor={`remarks-${task.id}`}
-                                className="block text-green-700 dark:text-green-300"
-                              >
-                                Remarks
-                              </label>
-                              <textarea
-                                id={`remarks-${task.id}`}
-                                placeholder="Add your remarks or comments here"
-                                value={remarks[task.id] || ""}
-                                onChange={(e) => handleRemarksChange(task.id, e.target.value)}
-                                className="input border-green-200 dark:border-green-800"
-                                rows={3}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label
-                                htmlFor={`file-${task.id}`}
-                                className={`block ${task.requireAttachment ? "text-amber-700 dark:text-amber-300 font-medium" : "text-green-700 dark:text-green-300"}`}
-                              >
-                                {task.requireAttachment ? "Upload Proof (Required)" : "Upload Proof (Optional)"}
-                              </label>
-                              <input
-                                id={`file-${task.id}`}
-                                type="file"
-                                onChange={(e) => handleFileChange(task.id, e)}
-                                className={`input ${
-                                  task.requireAttachment
-                                    ? "border-amber-300 dark:border-amber-700"
-                                    : "border-green-200 dark:border-green-800"
-                                }`}
-                              />
-                              {selectedFiles[task.id] && (
-                                <p className="text-xs text-green-600 dark:text-green-400">
-                                  Selected file: {selectedFiles[task.id]?.name}
-                                </p>
+                    return (
+                      <div key={taskId} className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-6">
+                        <div className="flex items-center justify-between border-b border-gray-50 pb-4">
+                          <h4 className="font-black text-gray-900 text-sm">{task.task_description.substring(0, 40)}...</h4>
+                          <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-3 py-1 rounded-full uppercase">ID: {task.id}</span>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-xs font-black text-gray-500 uppercase tracking-widest ml-1">
+                            <MessageSquare size={14} />
+                            Remarks
+                          </label>
+                          <textarea
+                            placeholder="Describe your work..."
+                            value={remarks[task.id] || ""}
+                            onChange={(e) => handleRemarksChange(task.id, e.target.value)}
+                            className="w-full p-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-purple-400 transition-all min-h-[80px] text-sm font-medium"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-xs font-black text-gray-500 uppercase tracking-widest ml-1">
+                            <Paperclip size={14} />
+                            Proof Attachment
+                          </label>
+                          <div className="relative group">
+                            <input
+                              type="file"
+                              onChange={(e) => handleFileChange(task.id, e)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            />
+                            <div className={`p-4 bg-gray-50 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all ${
+                              selectedFiles[task.id] ? "border-purple-600 bg-purple-50" : "border-gray-100 group-hover:border-purple-200"
+                            }`}>
+                              {selectedFiles[task.id] ? (
+                                <>
+                                  <CheckCircle2 className="text-purple-600 mb-2" size={20} />
+                                  <p className="text-xs font-bold text-purple-600 truncate max-w-full px-4">
+                                    {selectedFiles[task.id].name}
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <Paperclip className="text-gray-300 mb-2" size={20} />
+                                  <p className="text-xs font-bold text-gray-400 uppercase">Click to upload photo</p>
+                                </>
                               )}
                             </div>
-
-                            {errors[task.id] && (
-                              <div className="bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 p-3 rounded-md">
-                                <div className="flex items-center">
-                                  <i className="fas fa-exclamation-circle h-4 w-4 mr-2"></i>
-                                  <h4 className="font-medium">Error</h4>
-                                </div>
-                                <p className="mt-1 ml-6">{errors[task.id]}</p>
-                              </div>
-                            )}
                           </div>
                         </div>
-                      )
-                    })}
-                    <button
-                      onClick={handleSubmitTasks}
-                      disabled={isSubmitting}
-                      className="w-full btn btn-primary bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white"
-                    >
-                      {isSubmitting ? "Submitting..." : `Complete ${selectedTasks.length} Selected Tasks`}
-                    </button>
-                  </div>
-                )}
-              </div>
+
+                        {errors[task.id] && (
+                          <div className="flex items-center gap-2 p-3 bg-red-50 text-red-600 rounded-2xl text-xs font-bold">
+                            <AlertCircle size={14} />
+                            {errors[task.id]}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {toast.show && (
-        <div className={`toast ${toast.type === "success" ? "toast-success" : "toast-error"}`}>{toast.message}</div>
-      )}
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #f1f1f1;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #e2e8f0;
+        }
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+          animation: spin-slow 8s linear infinite;
+        }
+      `}</style>
     </div>
   )
 }
 
 export default UserTasks
-

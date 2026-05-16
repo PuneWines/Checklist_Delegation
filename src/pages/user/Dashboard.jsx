@@ -1,259 +1,251 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Link } from "react-router-dom"
+import { fetchWorkTasksForUserApi } from "../../redux/api/workRecordsApi"
+import { useMagicToast } from "../../context/MagicToastContext"
+import { 
+  LayoutGrid, 
+  CheckCircle2, 
+  Clock, 
+  AlertTriangle, 
+  TrendingUp, 
+  ArrowRight,
+  ClipboardList,
+  Calendar,
+  Zap
+} from "lucide-react"
 
 const UserDashboard = () => {
+  const { showToast } = useMagicToast()
+  const [tasks, setTasks] = useState([])
+  const [loading, setLoading] = useState(true)
   const [taskView, setTaskView] = useState("recent")
-  const [activeTab, setActiveTab] = useState("tasks")
+  
+  const currentUsername = localStorage.getItem("user-name") || ""
+
+  const loadStats = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await fetchWorkTasksForUserApi(currentUsername)
+      setTasks(data || [])
+    } catch (error) {
+      console.error("Error loading dashboard stats:", error)
+      showToast("Failed to refresh dashboard data", "error")
+    } finally {
+      setLoading(false)
+    }
+  }, [currentUsername, showToast])
+
+  useEffect(() => {
+    if (currentUsername) {
+      loadStats()
+    }
+  }, [loadStats, currentUsername])
+
+  const stats = {
+    total: tasks.length,
+    completed: tasks.filter(t => t.status === "APPROVED").length,
+    pending: tasks.filter(t => t.status === "PENDING" || !t.status || t.status === "REJECTED").length,
+    overdue: tasks.filter(t => {
+      const dueDate = new Date(t.current_date)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      return dueDate < today && t.status !== "APPROVED" && t.status !== "SUBMITTED"
+    }).length,
+  }
+
+  const completionRate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0
+
+  const getFilteredTasks = () => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    if (taskView === "recent") {
+      return tasks.slice(0, 5) // Last 5 tasks
+    }
+    if (taskView === "upcoming") {
+      return tasks.filter(t => new Date(t.current_date) >= today && t.status !== "APPROVED").slice(0, 5)
+    }
+    if (taskView === "overdue") {
+      return tasks.filter(t => new Date(t.current_date) < today && t.status !== "APPROVED" && t.status !== "SUBMITTED")
+    }
+    return tasks
+  }
+
+  const filteredTasks = getFilteredTasks()
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <h1 className="text-2xl font-bold tracking-tight text-green-700 dark:text-green-400">My Dashboard</h1>
+    <div className="max-w-7xl mx-auto px-4 py-8 space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-2">
+          <h1 className="text-4xl font-black text-gray-900 tracking-tight flex items-center gap-4">
+            <Zap className="text-amber-500 fill-amber-500" size={36} />
+            My <span className="text-purple-600">Performance</span>
+          </h1>
+          <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">
+            Welcome back, <span className="text-purple-600">{currentUsername}</span> • {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+        </div>
         <Link
-          to="/user/tasks"
-          className="btn btn-primary bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white"
+          to="/dashboard/task"
+          className="group flex items-center gap-2 px-8 py-4 bg-gray-900 text-white rounded-[2rem] font-black uppercase tracking-widest hover:bg-purple-600 transition-all shadow-2xl shadow-gray-200"
         >
-          View All Tasks
+          Manage All Tasks
+          <ArrowRight className="group-hover:translate-x-1 transition-transform" size={18} />
         </Link>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className="card border-l-4 border-l-blue-500 shadow-md hover:shadow-lg transition-all">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 rounded-tr-lg p-4 border-b border-blue-200 dark:border-blue-800">
-            <h3 className="text-sm font-medium text-blue-700 dark:text-blue-300">Total Tasks</h3>
-            <i className="fas fa-clipboard-list h-4 w-4 text-blue-500"></i>
-          </div>
-          <div className="p-4">
-            <div className="text-3xl font-bold text-blue-700 dark:text-blue-300">24</div>
-            <p className="text-xs text-blue-600 dark:text-blue-400">Assigned to you</p>
-          </div>
-        </div>
-
-        <div className="card border-l-4 border-l-green-500 shadow-md hover:shadow-lg transition-all">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 rounded-tr-lg p-4 border-b border-green-200 dark:border-green-800">
-            <h3 className="text-sm font-medium text-green-700 dark:text-green-300">Completed</h3>
-            <i className="fas fa-check-circle h-4 w-4 text-green-500"></i>
-          </div>
-          <div className="p-4">
-            <div className="text-3xl font-bold text-green-700 dark:text-green-300">18</div>
-            <p className="text-xs text-green-600 dark:text-green-400">75% completion rate</p>
-          </div>
-        </div>
-
-        <div className="card border-l-4 border-l-amber-500 shadow-md hover:shadow-lg transition-all">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-r from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 rounded-tr-lg p-4 border-b border-amber-200 dark:border-amber-800">
-            <h3 className="text-sm font-medium text-amber-700 dark:text-amber-300">Pending</h3>
-            <i className="fas fa-clock h-4 w-4 text-amber-500"></i>
-          </div>
-          <div className="p-4">
-            <div className="text-3xl font-bold text-amber-700 dark:text-amber-300">5</div>
-            <p className="text-xs text-amber-600 dark:text-amber-400">Tasks to be completed</p>
-          </div>
-        </div>
-
-        <div className="card border-l-4 border-l-red-500 shadow-md hover:shadow-lg transition-all">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 rounded-tr-lg p-4 border-b border-red-200 dark:border-red-800">
-            <h3 className="text-sm font-medium text-red-700 dark:text-red-300">Overdue</h3>
-            <i className="fas fa-exclamation-triangle h-4 w-4 text-red-500"></i>
-          </div>
-          <div className="p-4">
-            <div className="text-3xl font-bold text-red-700 dark:text-red-300">1</div>
-            <p className="text-xs text-red-600 dark:text-red-400">Requires immediate attention</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Task Navigation Tabs */}
-      <div className="w-full overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-        <div className="grid grid-cols-3">
-          <button
-            className={`py-3 text-center font-medium transition-colors ${taskView === "recent"
-              ? "bg-blue-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-              }`}
-            onClick={() => setTaskView("recent")}
-          >
-            Recent Tasks
-          </button>
-          <button
-            className={`py-3 text-center font-medium transition-colors ${taskView === "upcoming"
-              ? "bg-blue-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-              }`}
-            onClick={() => setTaskView("upcoming")}
-          >
-            Upcoming Tasks
-          </button>
-          <button
-            className={`py-3 text-center font-medium transition-colors ${taskView === "overdue"
-              ? "bg-blue-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-              }`}
-            onClick={() => setTaskView("overdue")}
-          >
-            Overdue Tasks
-          </button>
-        </div>
-
-        <div className="p-4">
-          {taskView === "recent" && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-green-700 dark:text-green-300">Recently Assigned Tasks</h3>
-              <TasksList filter="recent" />
-            </div>
-          )}
-
-          {taskView === "upcoming" && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-blue-700 dark:text-blue-300">Upcoming Tasks</h3>
-              <TasksList filter="upcoming" />
-            </div>
-          )}
-
-          {taskView === "overdue" && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-red-700 dark:text-red-300">Overdue Tasks</h3>
-              <TasksList filter="overdue" />
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex border-b border-gray-200 dark:border-gray-700">
-          <button
-            className={`py-2 px-4 font-medium ${activeTab === "tasks"
-              ? "border-b-2 border-green-600 text-green-600 dark:text-green-400"
-              : "text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-              }`}
-            onClick={() => setActiveTab("tasks")}
-          >
-            My Tasks
-          </button>
-          <button
-            className={`py-2 px-4 font-medium ${activeTab === "overview"
-              ? "border-b-2 border-green-600 text-green-600 dark:text-green-400"
-              : "text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-              }`}
-            onClick={() => setActiveTab("overview")}
-          >
-            Overview
-          </button>
-        </div>
-
-        {activeTab === "tasks" && (
-          <div className="card border-green-200 dark:border-green-800 shadow-md">
-            <div className="card-header bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-950 dark:to-teal-950">
-              <h3 className="text-lg font-medium text-green-700 dark:text-green-300">Pending Tasks</h3>
-              <p className="text-sm text-green-600 dark:text-green-400">Tasks that require your attention</p>
-            </div>
-            <div className="card-body">
-              <TasksList />
-            </div>
-          </div>
-        )}
-
-        {activeTab === "overview" && (
-          <div className="card border-green-200 dark:border-green-800 shadow-md">
-            <div className="card-header bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-950 dark:to-teal-950">
-              <h3 className="text-lg font-medium text-green-700 dark:text-green-300">Task Completion</h3>
-              <p className="text-sm text-green-600 dark:text-green-400">Your task completion over time</p>
-            </div>
-            <div className="card-body">
-              <div className="h-[350px] w-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-md">
-                <p className="text-gray-500 dark:text-gray-400">Task completion chart would be displayed here</p>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[
+          { label: "Total Assignments", value: stats.total, icon: ClipboardList, color: "blue", sub: "All time assigned" },
+          { label: "Tasks Approved", value: stats.completed, icon: CheckCircle2, color: "green", sub: `${completionRate}% Success Rate` },
+          { label: "Pending Action", value: stats.pending, icon: Clock, color: "purple", sub: "Awaiting submission" },
+          { label: "Overdue Alerts", value: stats.overdue, icon: AlertTriangle, color: "red", sub: "Needs urgent attention" },
+        ].map((item, idx) => (
+          <div key={idx} className={`group relative bg-white p-8 rounded-[2.5rem] border-2 border-gray-50 shadow-sm hover:shadow-xl hover:border-${item.color}-100 transition-all duration-500 overflow-hidden`}>
+            <div className={`absolute top-0 right-0 w-32 h-32 bg-${item.color}-50 rounded-full -mr-16 -mt-16 opacity-40 group-hover:scale-150 transition-transform duration-700`} />
+            <div className="relative z-10 space-y-4">
+              <div className={`w-12 h-12 bg-${item.color}-50 rounded-2xl flex items-center justify-center text-${item.color}-600`}>
+                <item.icon size={24} />
               </div>
+              <div>
+                <div className={`text-4xl font-black text-gray-900`}>{loading ? "..." : item.value}</div>
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mt-1">{item.label}</p>
+              </div>
+              <p className={`text-[10px] font-bold text-${item.color}-500 flex items-center gap-1`}>
+                <TrendingUp size={12} />
+                {item.sub}
+              </p>
             </div>
           </div>
-        )}
+        ))}
       </div>
-    </div>
-  )
-}
 
-// Simple TasksList component
-const TasksList = ({ filter }) => {
-  const tasks = [
-    {
-      id: 1,
-      title: "Complete weekly report",
-      description: "Prepare and submit the weekly progress report",
-      dueDate: "2023-05-15",
-      frequency: "weekly",
-      completed: false,
-    },
-    {
-      id: 2,
-      title: "Update inventory records",
-      description: "Update the inventory records with the latest stock information",
-      dueDate: "2023-05-18",
-      frequency: "daily",
-      completed: false,
-    },
-    {
-      id: 3,
-      title: "Monthly equipment maintenance",
-      description: "Perform routine maintenance checks on all equipment",
-      dueDate: "2023-05-20",
-      frequency: "monthly",
-      completed: false,
-    },
-  ]
+      {/* Main Content Area */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
+        {/* Task List Section */}
+        <div className="xl:col-span-2 space-y-6">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-xl font-black text-gray-900 tracking-tight">Work Records</h3>
+            <div className="flex bg-gray-100/80 p-1 rounded-2xl border border-gray-200/50">
+              {["recent", "upcoming", "overdue"].map((view) => (
+                <button
+                  key={view}
+                  onClick={() => setTaskView(view)}
+                  className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                    taskView === view ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  {view}
+                </button>
+              ))}
+            </div>
+          </div>
 
-  // Filter tasks based on the filter prop
-  const filteredTasks = filter
-    ? tasks.filter((task) => {
-      if (filter === "recent") return true // Show all for demo
-      if (filter === "upcoming") return !task.completed
-      if (filter === "overdue") return false // No overdue tasks in this demo
-      return true
-    })
-    : tasks
-
-  return (
-    <div className="space-y-4">
-      {filteredTasks.length === 0 ? (
-        <div className="text-center p-8 text-gray-500 dark:text-gray-400">
-          <p>No tasks found.</p>
-        </div>
-      ) : (
-        filteredTasks.map((task) => (
-          <div
-            key={task.id}
-            className={`card ${task.completed ? "opacity-60" : ""} border-l-4 ${task.completed ? "border-l-green-500" : "border-l-blue-500"
-              } transition-all hover:shadow-md`}
-          >
-            <div className="p-4 pb-2 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 border-b border-blue-200 dark:border-blue-800">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id={`task-${task.id}`}
-                    checked={task.completed}
-                    className="checkbox"
-                    readOnly
-                  />
-                  <h3 className={`text-lg text-blue-700 dark:text-blue-300 ${task.completed ? "line-through" : ""}`}>
-                    {task.title}
-                  </h3>
+          <div className="space-y-4 min-h-[400px]">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[3rem] border border-gray-50">
+                <div className="w-12 h-12 border-4 border-purple-100 border-t-purple-600 rounded-full animate-spin mb-4" />
+                <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Loading tasks...</p>
+              </div>
+            ) : filteredTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 bg-gray-50/50 rounded-[3rem] border-2 border-dashed border-gray-100">
+                <Calendar className="text-gray-200 mb-4" size={48} />
+                <p className="text-gray-400 font-medium italic">No tasks found in this view</p>
+              </div>
+            ) : (
+              filteredTasks.map((task, idx) => (
+                <div 
+                  key={task.id} 
+                  className="group bg-white p-6 rounded-[2rem] border-2 border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-purple-100 hover:shadow-lg transition-all duration-300"
+                >
+                  <div className="flex items-center gap-6">
+                    <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center font-black text-gray-400 group-hover:bg-purple-50 group-hover:text-purple-600 transition-colors">
+                      {idx + 1}
+                    </div>
+                    <div>
+                      <h4 className="font-black text-gray-900 group-hover:text-purple-600 transition-colors">{task.shop_name}</h4>
+                      <p className="text-sm text-gray-500 font-medium line-clamp-1">{task.task_description}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-8 px-4">
+                    <div className="text-right">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Scheduled For</p>
+                      <p className="font-bold text-gray-900 text-sm">
+                        {new Date(task.current_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                      </p>
+                    </div>
+                    <div className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+                      task.status === "APPROVED" ? "bg-green-50 text-green-600" : 
+                      task.status === "SUBMITTED" ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"
+                    }`}>
+                      {task.status || "PENDING"}
+                    </div>
+                  </div>
                 </div>
-                <span className="badge badge-blue">
-                  {task.frequency.charAt(0).toUpperCase() + task.frequency.slice(1)}
-                </span>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Sidebar Activity Section */}
+        <div className="space-y-8">
+          <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-[3rem] p-10 text-white shadow-2xl shadow-purple-200 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -mr-20 -mt-20 blur-2xl" />
+            <div className="relative z-10 space-y-6">
+              <h3 className="text-2xl font-black tracking-tight">Your Weekly Focus</h3>
+              <div className="space-y-4">
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold uppercase tracking-widest text-purple-100">Task Completion</span>
+                    <span className="text-xs font-black">{completionRate}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-white transition-all duration-1000" 
+                      style={{ width: `${completionRate}%` }}
+                    />
+                  </div>
+                </div>
+                <p className="text-sm text-purple-100 leading-relaxed font-medium">
+                  You've completed <span className="font-black text-white">{stats.completed}</span> out of <span className="font-black text-white">{stats.total}</span> tasks this period. Keep up the momentum!
+                </p>
               </div>
-              <p className="text-sm text-blue-600 dark:text-blue-400">Due: {task.dueDate}</p>
-            </div>
-            <div className="p-4">
-              <p className="text-sm text-gray-600 dark:text-gray-300">{task.description}</p>
+              <Link
+                to="/user/tasks"
+                className="block w-full py-4 bg-white text-purple-600 rounded-2xl font-black uppercase tracking-widest text-center hover:bg-gray-50 transition-colors shadow-lg"
+              >
+                Go to My Tasks
+              </Link>
             </div>
           </div>
-        ))
-      )}
+
+          <div className="bg-white rounded-[3rem] border border-gray-100 p-8 space-y-6 shadow-sm">
+            <h3 className="text-lg font-black text-gray-900 tracking-tight">Quick Insights</h3>
+            <div className="space-y-6">
+              {[
+                { icon: Zap, label: "Next Due", val: stats.pending > 0 ? "Today" : "None" },
+                { icon: ArrowRight, label: "Efficiency", val: "High" },
+              ].map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
+                      <item.icon size={18} />
+                    </div>
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">{item.label}</span>
+                  </div>
+                  <span className="text-sm font-black text-gray-900">{item.val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
 
 export default UserDashboard
-

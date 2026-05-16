@@ -17,6 +17,8 @@ import Demo from "./pages/user/Demo"
 import Setting from "./pages/Setting"
 import MisReport from "./pages/MisReport"
 import BulkImport from "./pages/BulkImport"
+import WorkDetails from "./pages/WorkDetails"
+import MasterWorkBulkImport from "./pages/MasterWorkBulkImport"
 
 // --- Data & Delegation Imports ---
 import DataPage from "./pages/admin/DataPage"
@@ -253,6 +255,22 @@ function App() {
                         element={
                             <ProtectedRoute allowedRoles={["admin"]}>
                                 <BulkImport />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/work-details"
+                        element={
+                            <ProtectedRoute allowedRoles={["admin", "HOD", "manager"]}>
+                                <WorkDetails />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/work-records/bulk-import"
+                        element={
+                            <ProtectedRoute allowedRoles={["admin"]}>
+                                <MasterWorkBulkImport />
                             </ProtectedRoute>
                         }
                     />

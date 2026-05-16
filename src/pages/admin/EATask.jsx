@@ -1,3 +1,4 @@
+// Triggering HMR update
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../components/layout/AdminLayout";
@@ -10,6 +11,7 @@ import { userDetails } from "../../redux/slice/settingSlice";
 import CalendarComponent from "../../components/CalendarComponent";
 import { sendTaskAssignmentNotification } from "../../services/whatsappService";
 import { useMagicToast } from "../../context/MagicToastContext";
+import { fetchUniqueDoerNameDataApi, fetchUniqueGivenByDataApi } from "../../redux/api/assignTaskApi";
 
 
 
@@ -22,11 +24,11 @@ const formatDateISO = (date) => {
     return `${year}-${month}-${day}`;
 };
 
-const DEFAULT_DOER_NAME = "Sonali Dutta";
+
 
 const defaultTask = () => ({
     id: Date.now() + Math.random(),
-    doer_name: DEFAULT_DOER_NAME,
+    doer_name: "",
     phone_number: "",
     given_by: (localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? localStorage.getItem("user-name") : "",
     planned_date: "",
@@ -38,10 +40,12 @@ const defaultTask = () => ({
     showCalendar: false,
     showSuggestions: false,
     doerSuggestions: [],
+    showGivenBySuggestions: false,
+    givenBySuggestions: [],
 });
 
 // Single Task Card Component
-function TaskCard({ task, index, total, allDoers, onUpdate, onRemove }) {
+function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRemove }) {
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         onUpdate(task.id, { [name]: value });
@@ -50,6 +54,19 @@ function TaskCard({ task, index, total, allDoers, onUpdate, onRemove }) {
             const filtered = getFilteredDoers(value);
             onUpdate(task.id, { doerSuggestions: filtered, showSuggestions: true });
         }
+        
+        if (name === "given_by") {
+            const filtered = getFilteredAssignFrom(value);
+            onUpdate(task.id, { givenBySuggestions: filtered, showGivenBySuggestions: true });
+        }
+    };
+
+    const getFilteredAssignFrom = (searchValue = "") => {
+        if (!allAssignFrom || !Array.isArray(allAssignFrom)) return [];
+        if (!searchValue.trim()) return allAssignFrom;
+        return allAssignFrom.filter(name => 
+            name.toLowerCase().includes(searchValue.toLowerCase())
+        );
     };
 
     // Filter doers based on task date and leave status
@@ -133,17 +150,42 @@ function TaskCard({ task, index, total, allDoers, onUpdate, onRemove }) {
 
             <div className="p-5 space-y-4">
                 {/* Assign From */}
-                <div>
+                <div className="relative">
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Assign From (Given By) <span className="text-red-500">*</span></label>
                     <input
                         type="text"
                         name="given_by"
                         value={task.given_by}
-                        onChange={(e) => onUpdate(task.id, { given_by: e.target.value })}
+                        onChange={handleInputChange}
+                        onFocus={() => {
+                            const filtered = getFilteredAssignFrom(task.given_by);
+                            onUpdate(task.id, { givenBySuggestions: filtered, showGivenBySuggestions: true });
+                        }}
+                        onBlur={() => setTimeout(() => onUpdate(task.id, { showGivenBySuggestions: false }), 200)}
                         disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin"))}
                         className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? 'opacity-70 cursor-not-allowed' : ''}`}
                         placeholder="Enter assigner name"
+                        autoComplete="off"
                     />
+                    {task.showGivenBySuggestions && task.givenBySuggestions.length > 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+                            {task.givenBySuggestions.map((name, i) => (
+                                <div
+                                    key={i}
+                                    onMouseDown={() => {
+                                        onUpdate(task.id, { 
+                                            given_by: name, 
+                                            showGivenBySuggestions: false,
+                                            givenBySuggestions: []
+                                        });
+                                    }}
+                                    className="px-4 py-2.5 hover:bg-purple-50 cursor-pointer flex justify-between items-center border-b border-gray-50 last:border-0"
+                                >
+                                    <span className="font-semibold text-gray-800 text-sm">{name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Doer Name with Autocomplete */}
@@ -338,7 +380,7 @@ export default function EATask() {
     const [successMessage, setSuccessMessage] = useState("");
     const [tasks, setTasks] = useState([defaultTask()]);
     const [allDoers, setAllDoers] = useState([]);
-    const [historicalDoers, setHistoricalDoers] = useState([]);
+    const [allAssignFrom, setAllAssignFrom] = useState([]);
     const [holidays, setHolidays] = useState([]);
 
     useEffect(() => {
@@ -348,6 +390,7 @@ export default function EATask() {
         };
         fetchHolidays();
         fetchUniqueDoers();
+        fetchAssignFrom();
         dispatch(userDetails());
 
         // Handle URL parameters for pre-filling
@@ -369,47 +412,32 @@ export default function EATask() {
         }
     }, [dispatch]);
 
-    useEffect(() => {
-        const combined = [...historicalDoers];
-        const existingNames = new Set(combined.map(d => d.name));
-        if (userData && Array.isArray(userData)) {
-            userData.forEach(user => {
-                if (user.user_name && !existingNames.has(user.user_name)) {
-                    combined.push({
-                        name: user.user_name,
-                        phone: user.phone || user.number ? String(user.phone || user.number) : "",
-                        status: user.status,
-                        leave_date: user.leave_date,
-                        leave_end_date: user.leave_end_date,
-                        reported_by: user.reported_by
-                    });
-                    existingNames.add(user.user_name);
-                }
-            });
-        }
-        combined.sort((a, b) => a.name.localeCompare(b.name));
-        if (combined.length !== allDoers.length || allDoers.length === 0) {
-            setAllDoers(combined);
-            // Auto-fill phone for tasks that have the default doer but no phone yet
-            const defaultDoer = combined.find(d => d.name === DEFAULT_DOER_NAME);
-            if (defaultDoer) {
-                setTasks(prev => prev.map(t =>
-                    t.doer_name === DEFAULT_DOER_NAME && !t.phone_number
-                        ? { ...t, phone_number: defaultDoer.phone }
-                        : t
-                ));
-            }
-        }
-    }, [historicalDoers, userData]);
-
     const fetchUniqueDoers = async () => {
         try {
-            const { data, error } = await supabase.from('ea_tasks').select('doer_name, phone_number').order('created_at', { ascending: false });
-            if (error) throw error;
-            const doersMap = {};
-            data?.forEach(task => { if (task.doer_name && !doersMap[task.doer_name]) doersMap[task.doer_name] = task.phone_number || ""; });
-            setHistoricalDoers(Object.keys(doersMap).map(name => ({ name, phone: doersMap[name] })));
-        } catch (err) { console.error("Error fetching doers:", err); }
+            const users = await fetchUniqueDoerNameDataApi();
+            const formatted = users.map(u => ({
+                name: u.user_name,
+                user_name: u.user_name,
+                phone: u.phone || "",
+                status: u.status,
+                leave_date: u.leave_date,
+                leave_end_date: u.leave_end_date,
+                reported_by: u.reported_by,
+                can_self_assign: u.can_self_assign
+            }));
+            setAllDoers(formatted);
+        } catch (err) {
+            console.error("Error fetching doers:", err);
+        }
+    };
+
+    const fetchAssignFrom = async () => {
+        try {
+            const names = await fetchUniqueGivenByDataApi();
+            setAllAssignFrom(names || []);
+        } catch (err) {
+            console.error("Error fetching assign from:", err);
+        }
     };
 
     const updateTask = (id, updates) => {
@@ -421,7 +449,7 @@ export default function EATask() {
             const lastTask = prev[prev.length - 1];
             return [...prev, {
                 ...defaultTask(),
-                doer_name: lastTask?.doer_name || DEFAULT_DOER_NAME,
+                doer_name: lastTask?.doer_name || "",
                 phone_number: lastTask?.phone_number || ""
             }];
         });
@@ -589,6 +617,7 @@ export default function EATask() {
                             index={index}
                             total={tasks.length}
                             allDoers={allDoers}
+                            allAssignFrom={allAssignFrom}
                             onUpdate={updateTask}
                             onRemove={removeTask}
                         />

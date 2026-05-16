@@ -20,6 +20,21 @@ const formatDateISO = (date) => {
   return `${year}-${month}-${day}`;
 };
 
+const ALL_PAGES = [
+  { id: 'dashboard', label: 'Dashboard', path: '/dashboard/admin' },
+  { id: 'announcements', label: 'Announcements', path: '/dashboard/notifications' },
+  { id: 'quick_task', label: 'Quick Task', path: '/dashboard/quick-task' },
+  { id: 'assign_task', label: 'Assign Task', path: '/dashboard/assign-task' },
+  { id: 'work_records', label: 'Work Records', path: '/dashboard/work-details' },
+  { id: 'delegation', label: 'Delegation', path: '/dashboard/delegation' },
+  { id: 'task', label: 'Task', path: '/dashboard/task' },
+  { id: 'calendar', label: 'Calendar', path: '/dashboard/calendar' },
+  { id: 'holiday', label: 'Holiday List', path: '/dashboard/holiday-list' },
+  { id: 'working_day', label: 'Working Day Calendar', path: '/dashboard/working-day-calendar' },
+  { id: 'admin_approval', label: 'Admin Approval', path: '/dashboard/admin-approval' },
+  { id: 'settings', label: 'Settings', path: '/dashboard/setting' },
+];
+
 const Setting = () => {
   const { showToast } = useMagicToast();
   const [activeTab, setActiveTab] = useState('users');
@@ -518,7 +533,8 @@ const Setting = () => {
     profile_image: '',
     reported_by: '',
     can_self_assign: false,
-    task_level: ''
+    task_level: '',
+    page_access: []
   });
 
   const [shopForm, setShopForm] = useState({
@@ -638,7 +654,8 @@ const Setting = () => {
       remark: userForm.remark || null,
       reported_by: userForm.reported_by,
       can_self_assign: userForm.can_self_assign,
-      task_level: userForm.task_level
+      task_level: userForm.task_level,
+      page_access: userForm.page_access
     };
 
     try {
@@ -923,7 +940,36 @@ const Setting = () => {
   // User form handlers
   const handleUserInputChange = (e) => {
     const { name, value } = e.target;
-    setUserForm(prev => ({ ...prev, [name]: value }));
+    
+    if (name === 'role') {
+      let defaultAccess = [];
+      const roleLower = value.toLowerCase();
+      
+      if (roleLower === 'admin') {
+        defaultAccess = ALL_PAGES.map(p => p.label);
+      } else if (roleLower === 'hod') {
+        defaultAccess = ['Dashboard', 'Announcements', 'Assign Task', 'Work Records', 'Delegation', 'Task', 'Calendar', 'Admin Approval'];
+      } else if (roleLower === 'manager') {
+        defaultAccess = ['Dashboard', 'Announcements', 'Work Records', 'Task'];
+      } else { // user
+        defaultAccess = ['Dashboard', 'Announcements', 'Delegation', 'Task', 'Calendar'];
+      }
+      
+      setUserForm(prev => ({ ...prev, [name]: value, page_access: defaultAccess }));
+    } else {
+      setUserForm(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const handlePageAccessToggle = (pageLabel) => {
+    setUserForm(prev => {
+      const currentAccess = prev.page_access || [];
+      if (currentAccess.includes(pageLabel)) {
+        return { ...prev, page_access: currentAccess.filter(p => p !== pageLabel) };
+      } else {
+        return { ...prev, page_access: [...currentAccess, pageLabel] };
+      }
+    });
   };
 
   // const handleAddUser = (e) => {
@@ -959,7 +1005,8 @@ const Setting = () => {
       remark: user.remark || '',
       reported_by: user.reported_by || '',
       can_self_assign: user.can_self_assign || false,
-      task_level: user.task_level || ''
+      task_level: user.task_level || '',
+      page_access: user.page_access || []
     });
     setProfilePreview(user.profile_image || null);
     setProfileFile(null);
@@ -1028,7 +1075,8 @@ const Setting = () => {
       remark: '',
       reported_by: '',
       can_self_assign: false,
-      task_level: ''
+      task_level: '',
+      page_access: []
     });
     setProfileFile(null);
     setProfilePreview(null);
@@ -2456,6 +2504,7 @@ const Setting = () => {
                       >
                         <option value="admin">Admin</option>
                         <option value="HOD">HOD</option>
+                        <option value="manager">Manager</option>
                         <option value="user">User</option>
                       </select>
                     </div>
@@ -2512,6 +2561,31 @@ const Setting = () => {
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
                         placeholder="e.g. Senior Technician, Supervisor..."
                       />
+                    </div>
+
+                    <div className="md:col-span-2 border-t border-gray-100 pt-6 mt-4">
+                      <h4 className="text-sm font-bold text-purple-900 mb-4 px-1 flex items-center gap-2">
+                        <Layers size={16} />
+                        Page Access Permissions
+                      </h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+                        {ALL_PAGES.map((page) => (
+                          <label key={page.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white transition-all cursor-pointer group">
+                            <div className="relative">
+                              <input
+                                type="checkbox"
+                                checked={(userForm.page_access || []).includes(page.label)}
+                                onChange={() => handlePageAccessToggle(page.label)}
+                                className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                              />
+                            </div>
+                            <span className={`text-xs font-bold transition-colors ${ (userForm.page_access || []).includes(page.label) ? 'text-purple-700' : 'text-gray-500 group-hover:text-gray-700' }`}>
+                              {page.label}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-3 px-2 italic">* Defaults are applied when you change the User Role</p>
                     </div>
 
                     {isEditing && (
@@ -2591,7 +2665,18 @@ const Setting = () => {
                         type="checkbox" 
                         name="can_self_assign"
                         checked={userForm.can_self_assign}
-                        onChange={(e) => setUserForm(prev => ({ ...prev, can_self_assign: e.target.checked }))}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setUserForm(prev => {
+                            let newPageAccess = [...(prev.page_access || [])];
+                            if (checked) {
+                              if (!newPageAccess.includes('Assign Task')) {
+                                newPageAccess.push('Assign Task');
+                              }
+                            }
+                            return { ...prev, can_self_assign: checked, page_access: newPageAccess };
+                          });
+                        }}
                         className="sr-only peer" 
                       />
                       <div className="w-12 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>

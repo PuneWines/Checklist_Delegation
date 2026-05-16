@@ -230,11 +230,11 @@ export default function StaffTasksTable({
             <table className="min-w-full divide-y divide-gray-100">
               <thead className="bg-blue-50/80 backdrop-blur-md sticky top-0 z-10 border-b border-blue-100">
                 <tr>
-                  {["Seq", "Staff Performance Detail", "Shop", "Total", "Done", "On-Time", "Done Score"].map((header, i) => (
+                  {["Seq", "Staff Performance Detail", "Shop", "Total", "Done", "On-Time", "Done Score", "On-Time Score"].map((header, i) => (
                     <th key={header} scope="col" className={`px-4 py-4 text-left text-[11px] font-black text-blue-900 uppercase tracking-widest ${i === 1 ? 'min-w-[220px]' : ''}`}>
                       {header}
                     </th>
-                  ) || null)}
+                  ))}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-50">
@@ -307,6 +307,26 @@ export default function StaffTasksTable({
                               <div
                                 className={`h-full rounded-full transition-all duration-1000 ${score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}
                                 style={{ width: `${score}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <div className="flex flex-col gap-1 items-start min-w-[90px]">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border shadow-sm ${staff.ontime_score >= 80 ? 'bg-indigo-100 text-indigo-800 border-indigo-200' : staff.ontime_score >= 50 ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-slate-100 text-slate-800 border-slate-200'}`}>
+                                {staff.ontime_score}%
+                              </span>
+                              <span className="text-[10px] font-black text-gray-500 tracking-wide">
+                                {staff.total_done_on_time} on-time
+                              </span>
+                            </div>
+                            <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden mt-1">
+                              <div
+                                className={`h-full rounded-full transition-all duration-1000 ${staff.ontime_score >= 80 ? 'bg-indigo-500' : staff.ontime_score >= 50 ? 'bg-blue-500' : 'bg-slate-400'}`}
+                                style={{ width: `${staff.ontime_score}%` }}
                               ></div>
                             </div>
                           </div>

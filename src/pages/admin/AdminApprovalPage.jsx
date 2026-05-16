@@ -7,7 +7,8 @@ import { fetchPendingMaintenanceApprovals, approveMaintenanceTask, rejectMainten
 import { fetchPendingRepairApprovals, approveRepairTask, rejectRepairTask, fetchApprovedRepairs } from "../../redux/api/repairApi";
 import { fetchPendingEAApprovals, approveEATaskV2, rejectEATask, fetchApprovedEA } from "../../redux/api/eaApi";
 import { fetchPendingChecklistApprovals, approveChecklistTask, rejectChecklistTask, fetchChecklistHistory } from "../../redux/api/quickTaskApi";
-import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase, XCircle, History, Clock, User, Loader2, MessageSquare } from "lucide-react";
+import { fetchPendingWorkApprovalsApi, fetchWorkTaskHistoryApi, approveWorkTaskApi, rejectWorkTaskApi } from "../../redux/api/workRecordsApi";
+import { CheckCircle2, Search, Play, Pause, AlertCircle, BookCheck, Wrench, Hammer, Briefcase, XCircle, History, Clock, User, Loader2, MessageSquare, LayoutGrid } from "lucide-react";
 import { sendTaskRejectionNotification, sendAdminExtensionRemarkNotification } from "../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../context/MagicToastContext";
@@ -87,6 +88,7 @@ export default function AdminApprovalPage() {
                 else if (activeTab === "repair") data = await fetchPendingRepairApprovals();
                 else if (activeTab === "ea") data = await fetchPendingEAApprovals();
                 else if (activeTab === "checklist") data = await fetchPendingChecklistApprovals();
+                else if (activeTab === "work") data = await fetchPendingWorkApprovalsApi();
             } else {
                 // History Mode
                 if (activeTab === "delegation") data = await fetchDelegationHistory();
@@ -94,13 +96,14 @@ export default function AdminApprovalPage() {
                 else if (activeTab === "repair") data = await fetchApprovedRepairs();
                 else if (activeTab === "ea") data = await fetchApprovedEA();
                 else if (activeTab === "checklist") data = await fetchChecklistHistory();
+                else if (activeTab === "work") data = await fetchWorkTaskHistoryApi();
             }
 
             // Deduplicate data to ensure each task only shows once
             const seenIds = new Set();
             const uniqueData = (data || []).filter(task => {
-                // Use task_id or original_task_id as the primary key for deduplication
-                const baseId = task.task_id || task.original_task_id || task.id;
+                // For Work Detail, every daily record is unique. For others, we might deduplicate by template ID.
+                const baseId = activeTab === 'work' ? task.id : (task.task_id || task.original_task_id || task.id);
                 if (!baseId || seenIds.has(baseId)) return false;
                 seenIds.add(baseId);
                 return true;
@@ -122,7 +125,7 @@ export default function AdminApprovalPage() {
         if (!isSystemAdmin) {
             // HOD and Users cannot approve their own tasks
             filteredData = (data || []).filter(task => {
-                const doerName = (task.doer_name || task.name || task.filled_by || "").toLowerCase();
+                const doerName = (task.name || task.doer_name || task.filled_by || "").toLowerCase();
                 return doerName !== currentUsername;
             });
 
@@ -138,7 +141,7 @@ export default function AdminApprovalPage() {
             }
             
             filteredData = filteredData.filter(task => {
-                const doerName = (task.doer_name || task.name || task.filled_by || "").toLowerCase();
+                const doerName = (task.name || task.doer_name || task.filled_by || "").toLowerCase();
                 return reportingUsers.includes(doerName);
             });
         }
@@ -207,6 +210,8 @@ export default function AdminApprovalPage() {
                 await approveEATaskV2(task.id, task.done_id);
             } else if (activeTab === "checklist") {
                 await approveChecklistTask(task.id);
+            } else if (activeTab === "work") {
+                await approveWorkTaskApi(task.id);
             }
 
             // Remove from list
@@ -285,6 +290,8 @@ export default function AdminApprovalPage() {
                     await approveEATaskV2(task.id, task.done_id);
                 } else if (activeTab === "checklist") {
                     await approveChecklistTask(task.id);
+                } else if (activeTab === "work") {
+                    await approveWorkTaskApi(task.id);
                 }
                 successCount++;
             } catch (error) {
@@ -360,6 +367,8 @@ export default function AdminApprovalPage() {
                 await rejectEATask(task.id, task.done_id, reason);
             } else if (activeTab === "checklist") {
                 await rejectChecklistTask(task.id, reason);
+            } else if (activeTab === "work") {
+                await rejectWorkTaskApi(task.id, reason);
             }
 
             await sendTaskRejectionNotification({
@@ -494,6 +503,7 @@ export default function AdminApprovalPage() {
                                     { id: 'maintenance', label: 'Maintenance', icon: Wrench, color: 'bg-blue-600' },
                                     { id: 'repair', label: 'Repair', icon: Hammer, color: 'bg-amber-600' },
                                     { id: 'ea', label: 'EA Tasks', icon: Briefcase, color: 'bg-emerald-600' },
+                                    { id: 'work', label: 'Work Detail', icon: LayoutGrid, color: 'bg-blue-600' },
                                 ].map((tab) => (
                                     <button
                                         key={tab.id}
@@ -617,8 +627,8 @@ export default function AdminApprovalPage() {
                                                 </td>
                                             )}
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-bold text-gray-900">{task.doer_name || task.name || task.filled_by}</div>
-                                                <div className="text-[10px] text-gray-500 font-medium uppercase tracking-tight">By: {task.given_by || '-'}</div>
+                                                <div className="text-sm font-bold text-gray-900">{task.name || task.doer_name || task.filled_by}</div>
+                                                <div className="text-[10px] text-gray-500 font-medium uppercase tracking-tight">By: {task.manager_name || task.given_by || '-'}</div>
                                             </td>
                                             {(activeTab === 'checklist' || activeTab === 'delegation') && (
                                                 <td className="px-6 py-4 whitespace-nowrap">

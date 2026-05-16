@@ -244,7 +244,7 @@ export default function TaskNavigationTabs({
         // Use task_start_date for others (maintenance, repair, etc.)
         const dateToUse = (dashboardType === 'checklist' || dashboardType === 'delegation')
           ? (task.planned_date || task.task_start_date)
-          : task.task_start_date;
+          : (dashboardType === 'work' ? task.current_date : task.task_start_date);
 
         const taskStartDate = parseTaskStartDate(dateToUse)
         const completionDate = task.submission_date ? parseTaskStartDate(task.submission_date) : null

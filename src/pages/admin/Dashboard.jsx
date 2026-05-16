@@ -22,7 +22,8 @@ import {
   getUniqueShopsApi,
   getStaffNamesByShopApi,
   fetchChecklistDataByDateRangeApi,
-  getChecklistDateRangeStatsApi
+  getChecklistDateRangeStatsApi,
+  getDashboardSummaryApi
 } from "../../redux/api/dashboardApi.js"
 import { fetchMaintenanceDataSortByDate, fetchAllMaintenanceTasksForDashboard } from "../../redux/api/maintenanceApi.js"
 import { fetchRepairDataSortByDate, fetchAllRepairTasks } from "../../redux/api/repairApi.js"
@@ -102,14 +103,29 @@ export default function AdminDashboard() {
       // Fetch data with date range filter
       try {
         setIsLoadingMore(true);
+        
+        // Fetch summary statistics first for instant card update
+        const summary = await getDashboardSummaryApi(
+          dashboardType, 
+          dashboardStaffFilter === 'all' ? null : dashboardStaffFilter, 
+          shopFilter === 'all' ? null : shopFilter, 
+          startDate, 
+          endDate
+        );
+        
+        setFilteredDateStats({
+          totalTasks: summary.totalTasks,
+          completedTasks: summary.completedTasks,
+          pendingTasks: summary.pendingTasks,
+          overdueTasks: summary.overdueTasks,
+          completionRate: summary.completionRate,
+        });
 
         if (mainTab === 'maintenance' || shopFilter === 'Maintenance') {
-          // For maintenance, we'll fetch all and filter in processFilteredData or use specific API
-          // For now, let's use the standard fetch but it will be filtered by processFilteredData
           const result = await fetchAllMaintenanceTasksForDashboard(1, batchSize);
           const data = result.data || [];
 
-          // Filter data by date range on client side
+          // Filter data by date range on client side for the table view
           const start = new Date(startDate);
           start.setHours(0, 0, 0, 0);
           const end = new Date(endDate);
@@ -120,7 +136,7 @@ export default function AdminDashboard() {
             return taskDate && taskDate >= start && taskDate <= end;
           });
 
-          await processFilteredData(filteredData, null);
+          await processFilteredData(filteredData, summary);
         } else if (mainTab === 'repair' || shopFilter === 'Repair') {
           const result = await fetchAllRepairTasks(1, batchSize);
           const data = result.data || [];
@@ -132,9 +148,9 @@ export default function AdminDashboard() {
             const taskDate = parseTaskStartDate(task.planned_date || task.task_start_date);
             return taskDate && taskDate >= start && taskDate <= end;
           });
-          await processFilteredData(filteredData, null);
+          await processFilteredData(filteredData, summary);
         } else if (dashboardType === "checklist") {
-          // Use the new date range API for checklist
+          // Use the date range API for checklist tasks (first page)
           const filteredData = await fetchChecklistDataByDateRangeApi(
             startDate,
             endDate,
@@ -145,16 +161,8 @@ export default function AdminDashboard() {
             'all'
           );
 
-          // Also get statistics for the date range
-          const stats = await getChecklistDateRangeStatsApi(
-            startDate,
-            endDate,
-            dashboardStaffFilter,
-            shopFilter
-          );
-
-          // Process the filtered data
-          await processFilteredData(filteredData, stats);
+          // Process the filtered data for the table
+          await processFilteredData(filteredData, summary);
         } else {
           // For delegation, use the existing logic with date filtering
           await fetchShopDataWithDateRange(startDate, endDate);
@@ -179,8 +187,30 @@ export default function AdminDashboard() {
         completionRate: 0,
       });
 
-      // Reload original data without date filter
+      // Reload original data and summary
+      fetchSummaryStats();
       fetchShopData(1, false);
+    }
+  };
+
+  const fetchSummaryStats = async () => {
+    try {
+      const summary = await getDashboardSummaryApi(
+        dashboardType, 
+        dashboardStaffFilter === 'all' ? null : dashboardStaffFilter, 
+        shopFilter === 'all' ? null : shopFilter
+      );
+      
+      setShopData(prev => ({
+        ...prev,
+        totalTasks: summary.totalTasks,
+        completedTasks: summary.completedTasks,
+        pendingTasks: summary.pendingTasks,
+        overdueTasks: summary.overdueTasks,
+        completionRate: summary.completionRate,
+      }));
+    } catch (error) {
+      console.error("Error fetching summary stats:", error);
     }
   };
 
@@ -300,12 +330,6 @@ export default function AdminDashboard() {
       pending: data.pending,
     }));
 
-    const pieChartData = [
-      { name: "Completed", value: completedTasks, color: "#22c55e" },
-      { name: "Pending", value: pendingTasks, color: "#facc15" },
-      { name: "Overdue", value: overdueTasks, color: "#ef4444" },
-    ];
-
     // Use stats from API if available, otherwise use our calculations
     const finalStats = stats || {
       totalTasks,
@@ -314,6 +338,12 @@ export default function AdminDashboard() {
       overdueTasks,
       completionRate: totalTasks > 0 ? ((completedTasks / totalTasks) * 100).toFixed(1) : 0
     };
+
+    const pieChartData = [
+      { name: "Completed", value: finalStats.completedTasks, color: "#22c55e" },
+      { name: "Pending", value: finalStats.pendingTasks, color: "#facc15" },
+      { name: "Overdue", value: finalStats.overdueTasks, color: "#ef4444" },
+    ];
 
     // Update shop data with filtered results
     setShopData(prev => ({
@@ -511,56 +541,40 @@ export default function AdminDashboard() {
         }
       }
 
-      // Fetch ALL pages of data for accurate stat counts
+      // Optimized: Only fetch the requested page of data
       let data = [];
+      let summary = null;
 
-      if (mainTab === 'maintenance' || shopFilter === 'Maintenance') {
-        // Maintenance pagination
-        let p = 1;
-        let hasMore = true;
-        while (hasMore) {
-          const result = await fetchAllMaintenanceTasksForDashboard(p, batchSize);
-          const batch = result.data || [];
-          data = [...data, ...batch];
-          if (batch.length < batchSize) hasMore = false;
-          p++;
-          if (p > 20) break; // safety limit
-        }
-      } else if (mainTab === 'repair' || shopFilter === 'Repair') {
-        // Repair pagination
-        let p = 1;
-        let hasMore = true;
-        while (hasMore) {
-          const result = await fetchAllRepairTasks(p, batchSize);
-          const batch = result.data || [];
-          data = [...data, ...batch];
-          if (batch.length < batchSize) hasMore = false;
-          p++;
-          if (p > 20) break; // safety limit
-        }
-      } else {
-        // Checklist / Delegation: fetch ALL pages for full accurate count
-        let p = 1;
-        let hasMore = true;
-        while (hasMore) {
-          const batch = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, p, batchSize, 'all', shopFilter);
-          data = [...data, ...(batch || [])];
-          if (!batch || batch.length < batchSize) hasMore = false;
-          p++;
-          if (p > 30) break; // safety limit (30,000 records max)
-        }
+      if (page === 1) {
+        // Fetch summary statistics first for accurate counts across all pages
+        summary = await getDashboardSummaryApi(
+          dashboardType, 
+          dashboardStaffFilter === 'all' ? null : dashboardStaffFilter, 
+          shopFilter === 'all' ? null : shopFilter
+        );
       }
 
-      if (!data || data.length === 0) {
+      if (mainTab === 'maintenance' || shopFilter === 'Maintenance') {
+        const result = await fetchAllMaintenanceTasksForDashboard(page, batchSize);
+        data = result.data || [];
+      } else if (mainTab === 'repair' || shopFilter === 'Repair') {
+        const result = await fetchAllRepairTasks(page, batchSize);
+        data = result.data || [];
+      } else {
+        // Checklist / Delegation: single page fetch
+        data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', shopFilter);
+      }
+
+      if (!data || (data.length === 0 && page === 1)) {
         if (page === 1) {
           setShopData(prev => ({
             ...prev,
             allTasks: [],
-            totalTasks: 0,
-            completedTasks: 0,
-            pendingTasks: 0,
-            overdueTasks: 0,
-            completionRate: 0,
+            totalTasks: summary ? summary.totalTasks : 0,
+            completedTasks: summary ? summary.completedTasks : 0,
+            pendingTasks: summary ? summary.pendingTasks : 0,
+            overdueTasks: summary ? summary.overdueTasks : 0,
+            completionRate: summary ? summary.completionRate : 0,
           }));
         }
         setHasMoreData(false);
@@ -839,23 +853,31 @@ export default function AdminDashboard() {
           ? [...prev.allTasks, ...processedTasks]
           : processedTasks
 
-        return {
-          allTasks: updatedTasks,
-          staffMembers,
-          totalTasks: append ? prev.totalTasks + totalTasks : totalTasks,
-          completedTasks: append ? prev.completedTasks + completedTasks : completedTasks,
-          pendingTasks: append ? prev.pendingTasks + pendingTasks : pendingTasks,
-          overdueTasks: append ? prev.overdueTasks + overdueTasks : overdueTasks,
-          completionRate: append
-            ? (updatedTasks.filter(t => t.status === "completed").length / updatedTasks.length * 100).toFixed(1)
-            : completionRate,
-          barChartData,
-          pieChartData,
-          completedRatingOne: append ? prev.completedRatingOne + completedRatingOne : completedRatingOne,
-          completedRatingTwo: append ? prev.completedRatingTwo + completedRatingTwo : completedRatingTwo,
-          completedRatingThreePlus: append ? prev.completedRatingThreePlus + completedRatingThreePlus : completedRatingThreePlus,
-        }
-      })
+      const finalTotalTasks = summary ? summary.totalTasks : prev.totalTasks;
+      const finalCompletedTasks = summary ? summary.completedTasks : prev.completedTasks;
+      const finalPendingTasks = summary ? summary.pendingTasks : prev.pendingTasks;
+      const finalOverdueTasks = summary ? summary.overdueTasks : prev.overdueTasks;
+      const finalCompletionRate = summary ? summary.completionRate : prev.completionRate;
+
+      return {
+        allTasks: updatedTasks,
+        staffMembers,
+        totalTasks: finalTotalTasks,
+        completedTasks: finalCompletedTasks,
+        pendingTasks: finalPendingTasks,
+        overdueTasks: finalOverdueTasks,
+        completionRate: finalCompletionRate,
+        barChartData,
+        pieChartData: [
+          { name: "Completed", value: finalCompletedTasks, color: "#22c55e" },
+          { name: "Pending", value: finalPendingTasks, color: "#facc15" },
+          { name: "Overdue", value: finalOverdueTasks, color: "#ef4444" },
+        ],
+        completedRatingOne: append ? prev.completedRatingOne + completedRatingOne : completedRatingOne,
+        completedRatingTwo: append ? prev.completedRatingTwo + completedRatingTwo : completedRatingTwo,
+        completedRatingThreePlus: append ? prev.completedRatingThreePlus + completedRatingThreePlus : completedRatingThreePlus,
+      }
+    })
 
       // Check if we have more data to load
       if (data.length < batchSize) {
@@ -917,7 +939,10 @@ export default function AdminDashboard() {
   }, [isLoadingMore, hasMoreData])
 
   useEffect(() => {
-    // Fetch detailed data for charts and tables
+    // Fetch summary stats quickly
+    fetchSummaryStats()
+    
+    // Fetch detailed data for charts and tables (first page)
     fetchShopData(1, false)
 
     // Update Redux state counts with staff and shop filters
@@ -959,7 +984,7 @@ export default function AdminDashboard() {
       setMainTab("repair")
     } else if (shopFilter === "all") {
       // Only reset to default if we are not on a special tab
-      if (mainTab !== "ea" && mainTab !== "maintenance" && mainTab !== "repair") {
+      if (mainTab !== "ea" && mainTab !== "maintenance" && mainTab !== "repair" && mainTab !== "work") {
         setMainTab("default")
       }
     }
@@ -987,7 +1012,7 @@ export default function AdminDashboard() {
     setDashboardStaffFilter("all")
     setShopFilter("all")
     // Only reset mainTab to default if we are not on EA/Maintenance/Repair
-    if (mainTab !== "ea" && mainTab !== "maintenance" && mainTab !== "repair") {
+    if (mainTab !== "ea" && mainTab !== "maintenance" && mainTab !== "repair" && mainTab !== "work") {
       setMainTab("default")
     }
     setCurrentPage(1)
@@ -1147,6 +1172,10 @@ export default function AdminDashboard() {
                   setMainTab("default")
                   setShopFilter("all")
                   setDashboardType("checklist")
+                } else if (tabId === 'work') {
+                  setMainTab("work")
+                  setShopFilter("all")
+                  setDashboardType("work")
                 } else if (tabId === 'maintenance') {
                   setMainTab("maintenance")
                   setShopFilter("Maintenance")
@@ -1156,6 +1185,7 @@ export default function AdminDashboard() {
                 } else if (tabId === 'ea') {
                   setMainTab("ea")
                   setShopFilter("all")
+                  setDashboardType("ea")
                 }
               }}
             />
@@ -1179,7 +1209,7 @@ export default function AdminDashboard() {
           onDateRangeChange={handleDateRangeChange}
         />
 
-        {mainTab === "default" && (
+        {(mainTab === "default" || mainTab === "work") && (
           <DefaultView
             dashboardType={dashboardType}
             taskView={taskView}

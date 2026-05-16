@@ -73,7 +73,7 @@ export const fetchUniqueDoerNameDataApi = async (shop) => {
 
     let query = supabase
       .from("users")
-      .select("user_name, user_access, status, leave_date, leave_end_date, reported_by, can_self_assign")
+      .select("user_name, user_access, status, leave_date, leave_end_date, reported_by, can_self_assign, number")
       .order("user_name", { ascending: true });
 
     if (shop) {
@@ -107,7 +107,8 @@ export const fetchUniqueDoerNameDataApi = async (shop) => {
           leave_date: user.leave_date,
           leave_end_date: user.leave_end_date,
           reported_by: user.reported_by,
-          can_self_assign: user.can_self_assign
+          can_self_assign: user.can_self_assign,
+          phone: user.number
         });
         seenNames.add(uName);
       }

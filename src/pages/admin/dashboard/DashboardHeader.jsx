@@ -168,7 +168,7 @@ export default function DashboardHeader({
                             </div>
 
                             {/* Shop Filter - Show for checklist and delegation */}
-                            {(dashboardType === "checklist" || dashboardType === "delegation") && isAdmin && (
+                            {(dashboardType === "checklist" || dashboardType === "delegation" || dashboardType === "work") && isAdmin && (
                                 <div className="relative">
                                     <select
                                         value={shopFilter}
@@ -292,7 +292,7 @@ export default function DashboardHeader({
                         </select>
 
                         {/* Shop Filter - Show for checklist and delegation */}
-                        {(dashboardType === "checklist" || dashboardType === "delegation") && isAdmin && (
+                        {(dashboardType === "checklist" || dashboardType === "delegation" || dashboardType === "work") && isAdmin && (
                             <select
                                 value={shopFilter}
                                 onChange={(e) => setShopFilter(e.target.value)}

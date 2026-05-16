@@ -61,6 +61,7 @@ const AllTasks = () => {
   const [successMessage, setSuccessMessage] = useState("");
   const [remarksData, setRemarksData] = useState({});
   const [statusData, setStatusData] = useState({});
+  const [imagePreviews, setImagePreviews] = useState({});
   const [extendedDateData, setExtendedDateData] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -93,7 +94,7 @@ const AllTasks = () => {
   const [visibleCount, setVisibleCount] = useState(50);
   const loadingRef = useRef(null);
 
-  const statusDateColumn = activeTab === "repair" ? "created_at" : "planned_date";
+  const statusDateColumn = activeTab === "repair" ? "created_at" : (activeTab === "work" ? "current_date" : "planned_date");
   // Use planned_date for checklist/delegation sort — task_start_date is same for all occurrences of a recurring task
   const sortDateColumn = activeTab === "repair" ? "created_at" : "planned_date";
   const [holidaysList, setHolidaysList] = useState([]);
@@ -370,6 +371,19 @@ const AllTasks = () => {
             headers.push({ id: "updated_at", label: "Submitted" });
           }
           break;
+        case "work":
+          tableName = "work_task";
+          dateColumn = "current_date";
+          completionField = "submission_date";
+          headers = [
+            { id: "time_status", label: "Time" },
+            { id: "id", label: "ID" },
+            { id: "task_description", label: "Description" },
+            { id: "shop_name", label: "Shop" },
+            { id: "current_date", label: "Date" },
+            { id: "duration", label: "Mins" },
+          ];
+          break;
         case "checklist":
         default:
           tableName = "checklist";
@@ -428,6 +442,11 @@ const AllTasks = () => {
       } else {
         if (activeTab === "repair") {
           query = query.is("submission_date", null).order(dateColumn, { ascending: false });
+        } else if (activeTab === "work") {
+          query = query.is('submission_date', null).order('current_date', { ascending: true });
+          if (!isSuperAdmin) {
+            query = query.eq('name', currentUsername);
+          }
         } else if (activeTab === "ea") {
           query = query.in("status", ["pending", "extend", "extended"]).order("task_start_date", { ascending: true });
         } else if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance") {
@@ -446,6 +465,14 @@ const AllTasks = () => {
             .lte('planned_date', futureDate.toISOString().split('T')[0] + 'T23:59:59')
             .order('planned_date', { ascending: true });
         }
+      }
+
+      if (activeTab === "work") {
+        const { data, error: fetchError } = await query;
+        if (fetchError) throw fetchError;
+        setTasks(data || []);
+        setIsLoading(false);
+        return;
       }
 
       // Fetch
@@ -550,14 +577,14 @@ const AllTasks = () => {
         }
       }
 
-      // Smart deduplication for checklist, delegation, and maintenance tabs
-      if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance") {
+      // Smart deduplication for checklist, delegation, maintenance, and work tabs
+      if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance" || activeTab === "work") {
         const descKey = task.task_description || task.issue_description || "";
-        const nameKey = task.name || task.assigned_person || "";
+        const nameKey = task.name || task.assigned_person || task.doer_name || "";
         const shopKey = task.shop || task.shop_name || "";
         
-        // Use series_id as the unique identifier if available, otherwise fallback to the old key
-        const seriesBase = task.series_id || `${shopKey}::${descKey}::${nameKey}`;
+        // Use series_id or assignment_id as the unique identifier if available, otherwise fallback to the old key
+        const seriesBase = task.series_id || task.assignment_id || `${shopKey}::${descKey}::${nameKey}`;
 
         if (status === "Upcoming") {
           // UPCOMING: only show the NEXT (earliest) occurrence per task series
@@ -694,9 +721,23 @@ const AllTasks = () => {
   const handleImageUpload = useCallback((id, e) => {
     const file = e.target.files[0];
     if (file) {
+      // Clean up old preview if it exists
+      if (imagePreviews[id]) {
+        URL.revokeObjectURL(imagePreviews[id]);
+      }
+      
+      const previewUrl = URL.createObjectURL(file);
       setUploadedImages((prev) => ({ ...prev, [id]: file }));
+      setImagePreviews((prev) => ({ ...prev, [id]: previewUrl }));
       setSuccessMessage(`File selected for task ID: ${id}`);
     }
+  }, [imagePreviews]);
+
+  // Clean up all object URLs when component unmounts
+  useEffect(() => {
+    return () => {
+      Object.values(imagePreviews).forEach(url => URL.revokeObjectURL(url));
+    };
   }, []);
 
   const uploadFile = async (id, file) => {
@@ -862,7 +903,8 @@ const AllTasks = () => {
         activeTab === "delegation" ? "delegation" :
           activeTab === "maintenance" ? "maintenance_tasks" :
             activeTab === "ea" ? "ea_tasks" :
-              "repair_tasks";
+              activeTab === "work" ? "work_task" :
+                "repair_tasks";
       const completionField = "submission_date";
 
       const selectedArray = Array.from(selectedItems);
@@ -873,8 +915,8 @@ const AllTasks = () => {
           imageUrl = await uploadFile(id, uploadedImages[id]);
         }
 
-        const remarksField = (activeTab === "checklist") ? "remark" : "remarks";
-        const imageField = (activeTab === "checklist" || activeTab === "delegation") ? "image" : (activeTab === "maintenance" ? "uploaded_image_url" : "image_url");
+        const remarksField = (activeTab === "checklist" || activeTab === "work") ? "remark" : "remarks";
+        const imageField = (activeTab === "checklist" || activeTab === "delegation" || activeTab === "work") ? "image" : (activeTab === "maintenance" ? "uploaded_image_url" : "image_url");
 
         // Handle EA tasks differently - consolidate into ea_tasks
         if (activeTab === "ea") {
@@ -957,6 +999,16 @@ const AllTasks = () => {
               updates.image_url = imageUrl;
             }
             const { error: updateError = null } = await supabase.from("ea_tasks").update(updates).eq("task_id", id);
+            if (updateError) throw updateError;
+          } else if (activeTab === "work") {
+            const updates = {
+              remark: remarksData[id] || null,
+              image: imageUrl,
+              status: 'SUBMITTED',
+              submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
+              submitted_by: username
+            };
+            const { error: updateError } = await supabase.from("work_task").update(updates).eq("id", id);
             if (updateError) throw updateError;
           }
         } else {
@@ -1411,6 +1463,10 @@ const AllTasks = () => {
                                                             <option value="done">Done</option>
                                                             <option value="extended">Extend</option>
                                                           </>
+                                                        ) : activeTab === "work" ? (
+                                                          <>
+                                                            <option value="SUBMITTED">Done</option>
+                                                          </>
                                                         ) : (
                                                           <>
                                                             <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'yes' : 'Done'}>Done</option>
@@ -1498,10 +1554,37 @@ const AllTasks = () => {
                                         </td>
                                         <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 bg-emerald-50/30">
                                           <div className="flex flex-col gap-2">
+                                            {imagePreviews[task.id] && (
+                                              <div className="relative w-16 h-16 mb-1 group">
+                                                <img 
+                                                  src={imagePreviews[task.id]} 
+                                                  className="w-full h-full object-cover rounded-md border-2 border-purple-200 shadow-sm" 
+                                                  alt="Preview" 
+                                                />
+                                                <button 
+                                                  onClick={() => {
+                                                    URL.revokeObjectURL(imagePreviews[task.id]);
+                                                    setImagePreviews(prev => {
+                                                      const next = {...prev};
+                                                      delete next[task.id];
+                                                      return next;
+                                                    });
+                                                    setUploadedImages(prev => {
+                                                      const next = {...prev};
+                                                      delete next[task.id];
+                                                      return next;
+                                                    });
+                                                  }}
+                                                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                  <X size={10} />
+                                                </button>
+                                              </div>
+                                            )}
                                             <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-purple-600 hover:text-purple-800" : "text-gray-400 cursor-not-allowed"}`}>
                                               <Upload className="h-3.5 w-3.5" />
                                               <span>
-                                                {uploadedImages[task.id] ? "File Selected" : (task.require_attachment || task.attachment) ? <span>Upload Proof <span className="text-red-500 font-bold">*</span></span> : "Upload Proof"}
+                                                {uploadedImages[task.id] ? "Change File" : (task.require_attachment || task.attachment) ? <span>Upload Proof <span className="text-red-500 font-bold">*</span></span> : "Upload Proof"}
                                               </span>
                                               <input
                                                 type="file"
@@ -1513,7 +1596,7 @@ const AllTasks = () => {
                                             <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-cyan-500 hover:text-cyan-700" : "text-gray-400 cursor-not-allowed"}`}>
                                               <Camera className="h-3.5 w-3.5" />
                                               <span>
-                                                {uploadedImages[task.id] ? "Photo Captured" : (task.require_attachment || task.attachment) ? <span>Take Photo <span className="text-red-500 font-bold">*</span></span> : "Take Photo"}
+                                                {uploadedImages[task.id] ? "Retake Photo" : (task.require_attachment || task.attachment) ? <span>Take Photo <span className="text-red-500 font-bold">*</span></span> : "Take Photo"}
                                               </span>
                                               <input
                                                 type="file"
@@ -1770,18 +1853,43 @@ const AllTasks = () => {
                                       className="w-full text-xs border-gray-200 rounded-md py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-purple-400"
                                     />
                                   </div>
-                                  <div className="flex gap-2">
-                                    <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-purple-200 bg-purple-50 text-purple-600 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
-                                      <Upload className="h-3.5 w-3.5" />
-                                      <span>{uploadedImages[task.id] ? "Selected" : "Upload"}</span>
-                                      <input type="file" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
-                                    </label>
-                                    <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
-                                      <Camera className="h-3.5 w-3.5" />
-                                      <span>Photo</span>
-                                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
-                                    </label>
-                                  </div>
+                                  <div className="flex flex-col gap-3">
+                                      {imagePreviews[task.id] && (
+                                        <div className="relative w-full h-32 rounded-lg border-2 border-dashed border-purple-200 bg-purple-50/30 flex items-center justify-center overflow-hidden">
+                                          <img src={imagePreviews[task.id]} className="w-full h-full object-contain" alt="Preview" />
+                                          <button 
+                                            onClick={() => {
+                                              URL.revokeObjectURL(imagePreviews[task.id]);
+                                              setImagePreviews(prev => {
+                                                const next = {...prev};
+                                                delete next[task.id];
+                                                return next;
+                                              });
+                                              setUploadedImages(prev => {
+                                                const next = {...prev};
+                                                delete next[task.id];
+                                                return next;
+                                              });
+                                            }}
+                                            className="absolute top-2 right-2 bg-red-500/80 backdrop-blur-sm text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"
+                                          >
+                                            <X size={14} />
+                                          </button>
+                                        </div>
+                                      )}
+                                      <div className="flex gap-2">
+                                        <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-purple-200 bg-purple-50 text-purple-600 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
+                                          <Upload className="h-3.5 w-3.5" />
+                                          <span>{uploadedImages[task.id] ? "Change" : "Upload"}</span>
+                                          <input type="file" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
+                                        </label>
+                                        <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
+                                          <Camera className="h-3.5 w-3.5" />
+                                          <span>{uploadedImages[task.id] ? "Retake" : "Photo"}</span>
+                                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
+                                        </label>
+                                      </div>
+                                    </div>
                                 </div>
                               )}
 

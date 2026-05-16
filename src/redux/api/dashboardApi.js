@@ -22,14 +22,18 @@ export const fetchDashboardDataApi = async (
     const username = localStorage.getItem('user-name');
     const today = new Date().toISOString().split('T')[0];
 
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
-    // Use ascending order for checklist/delegation/maintenance to show oldest/most overdue first
-    const isAscending = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance');
+    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+    // Use ascending order for checklist/delegation/maintenance/work to show oldest/most overdue first
+    const isAscending = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'work');
+
+    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
+                      dashboardType === 'repair' ? 'repair_tasks' :
+                      dashboardType === 'ea' ? 'ea_tasks' : 
+                      dashboardType === 'work' ? 'work_task' : dashboardType;
 
     let query = supabase
-      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
-        dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
+      .from(tableName)
       .select('*')
       .order(dateColumn, { ascending: isAscending })
       .range(from, to);
@@ -64,7 +68,9 @@ export const fetchDashboardDataApi = async (
         // Today's tasks only
         query = query.gte(dateColumn, `${today}T00:00:00`)
           .lte(dateColumn, `${today}T23:59:59`);
-        if (dashboardType === 'checklist' || dashboardType === 'maintenance' || dashboardType === 'delegation') {
+        if (dashboardType === 'ea') {
+          query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
+        } else if (dashboardType === 'checklist' || dashboardType === 'maintenance' || dashboardType === 'delegation' || dashboardType === 'work') {
           // Exclude completed tasks for recent view
           query = query.is('submission_date', null);
         }
@@ -76,12 +82,16 @@ export const fetchDashboardDataApi = async (
         break;
 
       case 'overdue': {
-        // Tasks before today that are not completed AND have null submission_date
-        query = query.lt(dateColumn, `${today}T00:00:00`)
-          .is('submission_date', null);
+        // Tasks before today that are not completed
+        query = query.lt(dateColumn, `${today}T00:00:00`);
 
-        if (dashboardType === 'delegation') {
-          query = query.neq('status', 'done');
+        if (dashboardType === 'ea') {
+          query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
+        } else {
+          query = query.is('submission_date', null);
+          if (dashboardType === 'delegation') {
+            query = query.neq('status', 'done');
+          }
         }
         break;
       }
@@ -144,12 +154,18 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
     const today = new Date().toISOString().split('T')[0];
+    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+
+    const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
+                      dashboardType === 'repair' ? 'repair_tasks' :
+                      dashboardType === 'ea' ? 'ea_tasks' : 
+                      dashboardType === 'work' ? 'work_task' : dashboardType;
 
     let query = supabase
-      .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
-        dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
-      .select('*', { count: 'exact', head: true });
+      .from(tableName)
+      .select('*', { count: 'exact', head: true })
+      .not('name', 'is', null);
 
     // Apply role-based filtering
     if (role === 'USER' && username) {
@@ -173,30 +189,35 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
       query = query.eq('shop_name', shopFilter);
     }
 
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
-
     // Apply task view filtering
     switch (taskView) {
       case 'recent':
-        query = query.gte(dateColumn, `${today}T00:00:00`)
-          .lte(dateColumn, `${today}T23:59:59`);
-        if (dashboardType === 'checklist' || dashboardType === 'maintenance' || dashboardType === 'delegation') {
+        query = query.gte(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`))
+          .lte(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
+        
+        if (dashboardType === 'ea') {
+          query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
+        } else if (dashboardType === 'checklist' || dashboardType === 'maintenance' || dashboardType === 'delegation' || dashboardType === 'work') {
           query = query.is('submission_date', null);
         }
         break;
 
       case 'upcoming':
         // All future tasks (after today)
-        query = query.gt(dateColumn, `${today}T23:59:59`);
+        query = query.gt(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
         break;
 
       case 'overdue': {
-        // Tasks before today that are not completed AND have null submission_date
-        query = query.lt(dateColumn, `${today}T00:00:00`)
-          .is('submission_date', null);
+        // Tasks before today that are not completed
+        query = query.lt(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`));
 
-        if (dashboardType === 'delegation') {
-          query = query.neq('status', 'done');
+        if (dashboardType === 'ea') {
+          query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
+        } else {
+          query = query.is('submission_date', null);
+          if (dashboardType === 'delegation') {
+            query = query.neq('status', 'done');
+          }
         }
         break;
       }
@@ -206,7 +227,7 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
         break;
       default:
         if (dashboardType !== 'checklist' && dashboardType !== 'delegation') {
-          query = query.lte(dateColumn, `${today}T23:59:59`);
+          query = query.lte(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
         }
         break;
     }
@@ -232,9 +253,10 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
 
   try {
     const today = new Date().toISOString().split('T')[0];
-    let query;
+    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+                       (dashboardType === 'work') ? 'current_date' : 'created_at';
 
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation') ? 'planned_date' : 'task_start_date';
+    let query;
     if (dashboardType === 'delegation') {
       query = supabase
         .from('delegation')
@@ -246,14 +268,21 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
     } else {
       const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
+          dashboardType === 'ea' ? 'ea_tasks' : 
+          dashboardType === 'work' ? 'work_task' : dashboardType;
 
       query = supabase
         .from(tableName)
-        .select('*', { count: 'exact', head: true })
-        .is('submission_date', null)
-        .gte(dateColumn, `${today}T00:00:00`)
-        .lte(dateColumn, `${today}T23:59:59`);
+        .select('*', { count: 'exact', head: true });
+
+      if (dashboardType === 'ea') {
+        query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
+      } else {
+        query = query.is('submission_date', null);
+      }
+
+      query = query.gte(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`))
+        .lte(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
     }
 
     // Apply filters
@@ -346,16 +375,18 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
       selectedMonth
     });
 
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation') ? 'planned_date' : 'task_start_date';
+    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+                       (dashboardType === 'work') ? 'current_date' : 'created_at';
 
     // Build the query
     let query = supabase
       .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
+          dashboardType === 'ea' ? 'ea_tasks' : 
+          dashboardType === 'work' ? 'work_task' : dashboardType)
       .select('*')
-      .gte(dateColumn, `${startDate}T00:00:00`)
-      .lte(dateColumn, `${endDate}T23:59:59`)
+      .gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
+      .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
       .not('name', 'is', null);
 
     // Apply role-based filtering
@@ -414,13 +445,14 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
         (statusLower === 'yes') ||
         (statusLower.includes('done')) ||
         (statusLower.includes('completed')) ||
+        (statusLower.includes('approved')) ||
         (dashboardType === 'delegation' && task.admin_done === true);
 
       if (isCompleted) {
         summary[key].total_completed_tasks++;
 
         // Check if done on time - use planned_date as the definitive deadline
-        const dueDateStr = task.planned_date || task.task_start_date || task.created_at;
+        const dueDateStr = task.planned_date || task.current_date || task.task_start_date || task.created_at;
         if (task.submission_date && dueDateStr) {
           const submissionDate = new Date(task.submission_date);
           const dueDate = new Date(dueDateStr);
@@ -517,15 +549,17 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, s
     const lastDayOfMonth = new Date(year, month, 0).getDate();
     const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
 
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation') ? 'planned_date' : 'task_start_date';
+    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+                       (dashboardType === 'work') ? 'current_date' : 'created_at';
 
     let query = supabase
       .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : dashboardType)
+          dashboardType === 'ea' ? 'ea_tasks' : 
+          dashboardType === 'work' ? 'work_task' : dashboardType)
       .select('shop_name, name')
-      .gte(dateColumn, `${startDate}T00:00:00`)
-      .lte(dateColumn, `${endDate}T23:59:59`)
+      .gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
+      .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
       .not('name', 'is', null);
 
     // Apply role-based filtering
@@ -628,10 +662,10 @@ export const getUniqueShopsApi = async () => {
     // Shops are managed in the dedicated 'shop' table (same as Settings page)
     const { data, error } = await supabase
       .from('shop')
-      .select('name')
-      .not('name', 'is', null)
-      .not('name', 'eq', '')
-      .order('name', { ascending: true });
+      .select('shop_name')
+      .not('shop_name', 'is', null)
+      .not('shop_name', 'eq', '')
+      .order('shop_name', { ascending: true });
 
     if (error) {
       console.error("Error fetching shops:", error);
@@ -641,7 +675,7 @@ export const getUniqueShopsApi = async () => {
     const role = localStorage.getItem('role');
     const userAccess = localStorage.getItem('user_access');
 
-    let shops = (data || []).map(d => d.name.trim()).filter(Boolean);
+    let shops = (data || []).map(d => d.shop_name.trim()).filter(Boolean);
 
     if (role === 'HOD' && userAccess && userAccess !== 'all') {
       const allowedShops = userAccess.split(',').map(d => d.trim().toLowerCase());
@@ -1139,21 +1173,25 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
     const start = startDate ? `${startDate}T00:00:00` : defaultStart;
     const end = endDate ? `${endDate}T23:59:59` : defaultEnd;
     
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
+    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+    
     const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
       dashboardType === 'repair' ? 'repair_tasks' :
-        dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
+        dashboardType === 'ea' ? 'ea_tasks' : 
+        dashboardType === 'work' ? 'work_task' : dashboardType;
 
     let query = supabase
       .from(tableName)
       .select('*', { count: 'exact', head: true })
-      .gte(dateColumn, start)
-      .lte(dateColumn, end);
+      .gte(dateColumn, (dashboardType === 'work' ? (startDate || defaultStart.split('T')[0]) : start))
+      .lte(dateColumn, (dashboardType === 'work' ? (endDate || defaultEnd.split('T')[0]) : end));
 
     // Apply filters
-    if (role === 'user' && username) {
+    const upperRole = (role || "").toUpperCase();
+    if (upperRole === 'USER' && username) {
       query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
+    } else if (upperRole === 'HOD' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
@@ -1194,7 +1232,8 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
     const start = startDate ? `${startDate}T00:00:00` : defaultStart;
     const end = endDate ? `${endDate}T23:59:59` : defaultEnd;
     
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
+    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+                       (dashboardType === 'work') ? 'current_date' : 'created_at';
     let query;
 
     if (dashboardType === 'delegation') {
@@ -1208,14 +1247,25 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
     } else {
       const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
+          dashboardType === 'ea' ? 'ea_tasks' : 
+          dashboardType === 'work' ? 'work_task' : dashboardType;
 
       query = supabase
         .from(tableName)
         .select('*', { count: 'exact', head: true })
-        .not('submission_date', 'is', null) // Primary indicator for checklist/maintenance/etc.
-        .gte(dateColumn, start)
-        .lte(dateColumn, end);
+        .gte(dateColumn, (dashboardType === 'work' ? (startDate || defaultStart.split('T')[0]) : start))
+        .lte(dateColumn, (dashboardType === 'work' ? (endDate || defaultEnd.split('T')[0]) : end));
+
+      if (dashboardType === 'work') {
+        // Very inclusive check for Work tasks to ensure nothing is missed
+        query = query.or('status.in.("Done","SUBMITTED","done","APPROVED","Approved","submitted"),admin_done.eq.true,submission_date.not.is.null')
+                     .not('status', 'ilike', 'REJECTED');
+      } else if (dashboardType === 'ea') {
+        // EA doesn't have submission_date, use status/admin_done
+        query = query.or('status.ilike.done,admin_done.eq.true');
+      } else {
+        query = query.not('submission_date', 'is', null);
+      }
     }
 
     // Apply filters
@@ -1260,7 +1310,8 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     const { start: defaultStart, todayStart } = getCurrentMonthRange();
     const start = startDate ? `${startDate}T00:00:00` : defaultStart;
     
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
+    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+                       (dashboardType === 'work') ? 'current_date' : 'created_at';
     let query;
 
     if (dashboardType === 'delegation') {
@@ -1274,14 +1325,21 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     } else {
       const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : dashboardType;
+          dashboardType === 'ea' ? 'ea_tasks' : 
+          dashboardType === 'work' ? 'work_task' : dashboardType;
 
       query = supabase
         .from(tableName)
-        .select('*', { count: 'exact', head: true })
-        .is('submission_date', null)
-        .lt(dateColumn, todayStart)
-        .gte(dateColumn, start);
+        .select('*', { count: 'exact', head: true });
+      
+      if (dashboardType === 'ea') {
+        query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
+      } else {
+        query = query.is('submission_date', null);
+      }
+
+      query = query.lt(dateColumn, (dashboardType === 'work' ? todayStart.split('T')[0] : todayStart))
+        .gte(dateColumn, (dashboardType === 'work' ? start.split('T')[0] : start));
     }
 
     // Apply filters
