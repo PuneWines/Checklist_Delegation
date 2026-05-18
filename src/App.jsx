@@ -54,12 +54,30 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
 const SuperAdminRoute = ({ children }) => {
     const username = (localStorage.getItem("user-name") || "").toLowerCase();
     const role = (localStorage.getItem("role") || "").toLowerCase();
-
-    if (!username || username !== "admin" || role !== "admin") {
-        return <Navigate to="/dashboard/admin" replace />
+    const pageAccessRaw = localStorage.getItem("page_access");
+    let pageAccess = [];
+    try {
+        pageAccess = JSON.parse(pageAccessRaw) || [];
+    } catch (e) {
+        pageAccess = [];
     }
 
-    return children
+    const isSuperAdmin = username === "admin";
+    const isAdminRole = role === "admin";
+
+    if (isSuperAdmin || isAdminRole) {
+        return children;
+    }
+
+    const path = window.location.pathname;
+    if (path === "/dashboard/setting" && pageAccess.includes("Settings")) {
+        return children;
+    }
+    if (path === "/dashboard/holiday-list" && pageAccess.includes("Holiday List")) {
+        return children;
+    }
+
+    return <Navigate to="/dashboard/admin" replace />
 }
 
 function App() {
