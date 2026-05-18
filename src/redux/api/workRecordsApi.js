@@ -63,14 +63,56 @@ export const generateWorkTasksApi = async (assignments) => {
   try {
     const tasksToInsert = [];
     
-    // Failsafe: Fetch existing tasks for these assignments to avoid duplicates and overwriting employee work
-    const assignmentIds = assignments.map(a => a.assignmentId);
-    const { data: existingTasks } = await supabase
-      .from('work_task')
-      .select('assignment_id, current_date, name')
-      .in('assignment_id', assignmentIds);
+    // Gather all employee names, dates, task descriptions, and task_ids to query comprehensively
+    const employeeNames = [];
+    const dateStrings = [];
+    const taskDescriptions = [];
+    const taskIds = [];
+    
+    assignments.forEach(asgn => {
+      if (asgn.employee_name) {
+        asgn.employee_name.split(',').forEach(e => {
+          const trimmed = e.trim();
+          if (trimmed && !employeeNames.includes(trimmed)) employeeNames.push(trimmed);
+        });
+      }
+      if (asgn.task_name && !taskDescriptions.includes(asgn.task_name)) {
+        taskDescriptions.push(asgn.task_name);
+      }
+      if (asgn.task_id && !taskIds.includes(asgn.task_id)) {
+        taskIds.push(asgn.task_id);
+      }
+      
+      const start = new Date(asgn.start_datetime);
+      const end = new Date(asgn.end_datetime);
+      const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (!dateStrings.includes(dateStr)) dateStrings.push(dateStr);
+      }
+    });
 
-    const existingKeys = new Set(existingTasks?.map(t => `${t.assignment_id}_${t.current_date}_${t.name}`) || []);
+    let existingTasks = [];
+    if (employeeNames.length > 0 && dateStrings.length > 0) {
+      const { data, error } = await supabase
+        .from('work_task')
+        .select('assignment_id, current_date, name, task_description, task_id')
+        .in('name', employeeNames)
+        .in('current_date', dateStrings);
+      
+      if (!error && data) {
+        existingTasks = data;
+      }
+    }
+
+    // Build existing keys sets for different possible unique constraints
+    const existingAsgnKeys = new Set(existingTasks.map(t => `${t.assignment_id}_${t.current_date}_${t.name}`));
+    const existingDescKeys = new Set(existingTasks.map(t => `${t.name}_${t.current_date}_${t.task_description}`));
+    const existingIdKeys = new Set(existingTasks.map(t => `${t.name}_${t.current_date}_${t.task_id}`));
+
+    // Keep track of keys we are about to insert to avoid duplicates within the insertion payload itself
+    const insertedKeys = new Set();
 
     for (const asgn of assignments) {
       const start = new Date(asgn.start_datetime);
@@ -79,18 +121,31 @@ export const generateWorkTasksApi = async (assignments) => {
       const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
       const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
 
-      const employeeNames = asgn.employee_name
+      const employeeNamesList = asgn.employee_name
         ? asgn.employee_name.split(',').map(e => e.trim()).filter(Boolean)
         : [];
 
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         
-        for (const empName of employeeNames) {
-          const key = `${asgn.assignmentId}_${dateStr}_${empName}`;
+        for (const empName of employeeNamesList) {
+          const asgnKey = `${asgn.assignmentId}_${dateStr}_${empName}`;
+          const descKey = `${empName}_${dateStr}_${asgn.task_name}`;
+          const idKey = `${empName}_${dateStr}_${asgn.task_id}`;
 
-          // Only add if it doesn't already exist in the database
-          if (!existingKeys.has(key)) {
+          // Avoid inserting if it already exists in the database under any of the unique constraints
+          const existsInDb = 
+            (asgn.assignmentId && existingAsgnKeys.has(asgnKey)) || 
+            existingDescKeys.has(descKey) || 
+            existingIdKeys.has(idKey);
+
+          // Avoid inserting if we already added it in this run
+          const existsInCurrentPayload = insertedKeys.has(descKey) || insertedKeys.has(idKey);
+
+          if (!existsInDb && !existsInCurrentPayload) {
+            insertedKeys.add(descKey);
+            insertedKeys.add(idKey);
+
             tasksToInsert.push({
               task_id: asgn.task_id,
               name: empName,
@@ -111,14 +166,14 @@ export const generateWorkTasksApi = async (assignments) => {
       }
     }
 
-    if (tasksToInsert.length === 0) return;
+    if (tasksToInsert.length > 0) {
+      // 1. Insert into work_task
+      const { error: insertError } = await supabase
+        .from('work_task')
+        .insert(tasksToInsert);
 
-    // 1. Insert into work_task
-    const { error: insertError } = await supabase
-      .from('work_task')
-      .insert(tasksToInsert);
-
-    if (insertError) throw insertError;
+      if (insertError) throw insertError;
+    }
 
     // 2. Update task_assignments status to 'GENERATED'
     const { error: updateError } = await supabase

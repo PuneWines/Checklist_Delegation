@@ -238,11 +238,26 @@ export default function WorkDetails() {
     }
 
     const assignmentsToUpsert = [];
+    const assignmentsToDelete = [];
     const errors = [];
 
     allIdsToProcess.forEach(id => {
       const task = mergedData.find(t => t.taskId === id);
       if (!task) return;
+
+      // Check if ALL details are completely cleared/empty
+      const isCompletelyEmpty = 
+        !task.start_datetime && 
+        !task.end_datetime && 
+        !task.manager_name && 
+        !task.employee_name;
+
+      if (isCompletelyEmpty) {
+        if (task.assignmentId) {
+          assignmentsToDelete.push(task.assignmentId);
+        }
+        return; // Safe path, no validation error, no upsert
+      }
 
       const error = validateAssignment(task);
       if (error) {
@@ -269,12 +284,27 @@ export default function WorkDetails() {
     }
 
     try {
-      await dispatch(saveAssignments(assignmentsToUpsert)).unwrap();
+      // 1. Delete cleared assignments from task_assignments table
+      if (assignmentsToDelete.length > 0) {
+        const { error: delError } = await supabase
+          .from('task_assignments')
+          .delete()
+          .in('id', assignmentsToDelete);
+        
+        if (delError) throw delError;
+      }
+
+      // 2. Upsert updated assignments
+      if (assignmentsToUpsert.length > 0) {
+        await dispatch(saveAssignments(assignmentsToUpsert)).unwrap();
+      }
+
       setModifiedRows({});
       setSelectedRows(new Set());
       showToast("Work records saved successfully", "success");
+      dispatch(fetchWorkRecords()); // Refresh records to ensure local state sync
     } catch (err) {
-      showToast(err || "Failed to save records", "error");
+      showToast(err?.message || err || "Failed to save records", "error");
     }
   };
 
@@ -332,15 +362,15 @@ export default function WorkDetails() {
 
   const handleBulkReset = async () => {
     const selectedAsgnIds = mergedData
-      .filter(item => selectedRows.has(item.taskId) && item.status === 'LOCKED' && item.assignmentId)
+      .filter(item => selectedRows.has(item.taskId) && (item.status === 'LOCKED' || item.status === 'GENERATED') && item.assignmentId)
       .map(item => item.assignmentId);
     
     if (selectedAsgnIds.length === 0) {
-      showToast("No locked tasks selected to unlock", "error");
+      showToast("No locked or generated tasks selected to unlock", "error");
       return;
     }
 
-    if (!window.confirm("Are you sure you want to unlock selected tasks? HOD will be able to edit them again.")) return;
+    if (!window.confirm("Are you sure you want to unlock selected tasks? All generated work checklist tasks will be deleted, and HOD will be able to edit them again.")) return;
 
     try {
       await resetWorkTasksApi(selectedAsgnIds);
