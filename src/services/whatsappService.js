@@ -9,12 +9,10 @@ import supabase from "../SupabaseClient";
 // WhatsApp API Configuration
 // WhatsApp API Configuration
 // WhatsApp API Configuration (Maytapi)
-const WHATSAPP_API_URL = 'https://api.maytapi.com/api'; // Hardcoded to prevent .env conflict
-const WHATSAPP_PHONE_NUMBER_ID = import.meta.env.VITE_MAYTAPI_PHONE_ID;
-const WHATSAPP_ACCESS_TOKEN = import.meta.env.VITE_MAYTAPI_API_TOKEN;
-const WHATSAPP_PRODUCT_ID = import.meta.env.VITE_MAYTAPI_PRODUCT_ID;
-
-// Global Toggle to Enable/Disable WhatsApp Feature
+const WHATSAPP_API_URL = 'https://api.maytapi.com/api';
+const WHATSAPP_PHONE_NUMBER_ID = import.meta.env.VITE_WHATSAPP_PHONE_NUMBER_ID;
+const WHATSAPP_ACCESS_TOKEN = import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN;
+const WHATSAPP_PRODUCT_ID = import.meta.env.VITE_WHATSAPP_PRODUCT_ID;
 const WHATSAPP_ENABLED = true;
 
 
