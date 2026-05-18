@@ -324,6 +324,18 @@ export default function WorkDetails() {
     setSearchDropdown({ type: null, id: null, term: "" });
   };
 
+  const toggleEmployee = (taskId, empName, currentEmployeeNameStr) => {
+    const currentEmps = currentEmployeeNameStr ? currentEmployeeNameStr.split(',').map(e => e.trim()).filter(Boolean) : [];
+    let nextEmps;
+    if (currentEmps.includes(empName)) {
+      nextEmps = currentEmps.filter(e => e !== empName);
+    } else {
+      nextEmps = [...currentEmps, empName];
+    }
+    handleFieldChange(taskId, "employee_name", nextEmps.join(', '));
+    setSearchDropdown(prev => ({ ...prev, term: "" }));
+  };
+
   if (loading && masterTasks.length === 0) {
     return (
       <AdminLayout>
@@ -339,10 +351,10 @@ export default function WorkDetails() {
     <AdminLayout>
       <div className="flex flex-col gap-4 mt-2 animate-in fade-in duration-500 pb-20 md:pb-4">
         {/* Header Section */}
-        <div className="bg-white border-b border-purple-100 p-5 flex items-center justify-between shadow-sm relative overflow-hidden rounded-t-xl">
+        <div className="bg-white border-b border-purple-100 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm relative overflow-hidden rounded-t-xl">
           <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-blue-600 to-purple-600" />
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-tr from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100">
+            <div className="w-12 h-12 bg-gradient-to-tr from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-blue-100">
               <LayoutGrid className="text-white" size={24} />
             </div>
             <div>
@@ -355,18 +367,18 @@ export default function WorkDetails() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="relative group">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+            <div className="relative group w-full md:w-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" size={16} />
               <input 
                 type="text"
                 placeholder="Search tasks, managers..."
-                className="pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-700 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none w-64 transition-all"
+                className="pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-700 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none w-full md:w-64 transition-all"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <div className="bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100 flex items-center gap-2">
+            <div className="bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100 flex items-center justify-center gap-2 shrink-0">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">
                 {filteredTasks.length} / {masterTasks.length} Records
@@ -472,7 +484,8 @@ export default function WorkDetails() {
         )}
 
         {/* Table Section */}
-        <div className="overflow-x-auto bg-white rounded-b-xl shadow-2xl border border-gray-100">
+        {/* Desktop View Table */}
+        <div className="hidden md:block overflow-x-auto bg-white rounded-b-xl shadow-2xl border border-gray-100">
           <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead>
               <tr className="bg-gray-50/80 text-gray-400 uppercase text-[9px] font-black tracking-[0.15em] border-b border-gray-100">
@@ -627,43 +640,83 @@ export default function WorkDetails() {
                     </td>
                     <td className="px-2 py-3">
                       <div className="relative">
-                        <input 
-                          type="text" 
-                          placeholder="Employee.."
-                          className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${
-                            isModified && modifiedRows[item.taskId].employee_name 
-                            ? 'border-amber-300 bg-amber-50/50' 
-                            : item.status === 'LOCKED' || item.status === 'GENERATED'
-                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                          }`}
-                          value={item.employee_name || ""}
-                          onChange={(e) => {
-                            handleFieldChange(item.taskId, "employee_name", e.target.value);
-                            setSearchDropdown({ type: "employee", id: item.taskId, term: e.target.value });
-                          }}
-                          onFocus={() => setSearchDropdown({ type: "employee", id: item.taskId, term: item.employee_name || "" })}
-                          disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
-                        />
-                        {searchDropdown.type === "employee" && searchDropdown.id === item.taskId && (
-                          <div className={`absolute z-50 left-0 right-0 bg-white border border-gray-100 rounded-lg shadow-2xl max-h-40 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-300 ${
-                            index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"
-                          }`}>
-                            {userData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
-                              <button 
-                                key={user.id}
-                                className="w-full text-left px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-blue-50 flex items-center justify-between transition-colors border-b border-gray-50 last:border-0"
-                                onClick={() => selectUser(item.taskId, "employee_name", user)}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[8px]">
-                                    {user.user_name?.charAt(0)}
-                                  </div>
-                                  {user.user_name}
-                                </div>
-                                {item.employee_name === user.user_name && <Check size={10} className="text-blue-600" />}
-                              </button>
-                            ))}
+                        {(item.status === 'LOCKED' || item.status === 'GENERATED') ? (
+                          <div className="flex flex-wrap gap-1 max-w-[180px]">
+                            {item.employee_name ? (
+                              item.employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
+                                <span key={i} className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[9px] font-black border border-emerald-100 flex items-center gap-1 shadow-sm">
+                                  <div className="w-1 h-1 bg-emerald-500 rounded-full" />
+                                  {emp}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-gray-400 text-[10px] font-bold">No Employee Assigned</span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1 w-full min-w-[160px]">
+                            {/* Selected Employees Tag List */}
+                            {item.employee_name && (
+                              <div className="flex flex-wrap gap-1 mb-1">
+                                {item.employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
+                                  <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[9px] font-black border border-emerald-100 shadow-sm animate-in zoom-in-95 duration-150">
+                                    {emp}
+                                    <button 
+                                      type="button"
+                                      className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 transition-colors font-black text-[9px] leading-none"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleEmployee(item.taskId, emp, item.employee_name);
+                                      }}
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            
+                            {/* Search input to select employees */}
+                            <input 
+                              type="text" 
+                              placeholder={item.employee_name ? "Add employee..." : "Employee.."}
+                              className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${
+                                isModified && modifiedRows[item.taskId].employee_name 
+                                ? 'border-amber-300 bg-amber-50/50' 
+                                : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                              }`}
+                              value={(searchDropdown.type === "employee" && searchDropdown.id === item.taskId) ? searchDropdown.term : ""}
+                              onChange={(e) => {
+                                setSearchDropdown({ type: "employee", id: item.taskId, term: e.target.value });
+                              }}
+                              onFocus={() => setSearchDropdown({ type: "employee", id: item.taskId, term: "" })}
+                            />
+                            
+                            {searchDropdown.type === "employee" && searchDropdown.id === item.taskId && (
+                              <div className={`absolute z-50 left-0 right-0 bg-white border border-gray-100 rounded-lg shadow-2xl max-h-40 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-300 ${
+                                index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"
+                              }`}>
+                                {userData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
+                                  const isSelected = item.employee_name?.split(',').map(e => e.trim()).filter(Boolean).includes(user.user_name);
+                                  return (
+                                    <button 
+                                      key={user.id}
+                                      type="button"
+                                      className="w-full text-left px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-blue-50 flex items-center justify-between transition-colors border-b border-gray-50 last:border-0"
+                                      onClick={() => toggleEmployee(item.taskId, user.user_name, item.employee_name)}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[8px]">
+                                          {user.user_name?.charAt(0)}
+                                        </div>
+                                        {user.user_name}
+                                      </div>
+                                      {isSelected && <Check size={10} className="text-blue-600" />}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -677,6 +730,253 @@ export default function WorkDetails() {
             <div className="py-20 text-center flex flex-col items-center gap-3">
               <LayoutGrid size={48} className="text-gray-200" />
               <p className="text-gray-400 font-bold tracking-widest uppercase text-xs">No matching work records found</p>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile View Cards */}
+        <div className="md:hidden space-y-4 p-4 bg-gray-50/30 rounded-b-xl border-x border-b border-gray-100">
+          {filteredTasks.map((item, index) => {
+            const isModified = !!modifiedRows[item.taskId];
+            const isActive = item.status === 'ACTIVE' && !isModified;
+            
+            return (
+              <div 
+                key={item.taskId} 
+                className={`bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-4 relative transition-all ${
+                  isModified ? 'bg-amber-50/20 border-amber-200' : 'hover:border-blue-200'
+                }`}
+              >
+                {/* Card Top Row: Checkbox, Shop, Dept, Status */}
+                <div className="flex items-start justify-between gap-2 border-b border-gray-50 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <input 
+                      type="checkbox" 
+                      className={`w-5 h-5 rounded-md border-gray-300 text-[#006699] focus:ring-offset-0 focus:ring-0 transition-all ${
+                        ((item.status === 'LOCKED' || item.status === 'GENERATED') && !isAdmin) ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
+                      }`}
+                      checked={selectedRows.has(item.taskId)}
+                      onChange={() => handleSelectRow(item.taskId)}
+                      disabled={(item.status === 'LOCKED' || item.status === 'GENERATED') && !isAdmin}
+                    />
+                    <div className="flex flex-col gap-1">
+                      <span className="px-2 py-0.5 bg-sky-50 text-sky-600 rounded text-[9px] font-black border border-sky-100 uppercase tracking-tighter w-fit">
+                        {item.shopName}
+                      </span>
+                      <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded text-[8px] font-black border border-emerald-100 uppercase tracking-tight w-fit">
+                        {item.department || "N/A"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="inline-flex items-center gap-1 text-orange-500 font-bold text-[10px]">
+                      <Clock size={10} />
+                      <span>{item.estimated_minutes || "--"} Mins</span>
+                    </div>
+                    {isActive && (
+                      <span className={`text-[8px] font-black uppercase tracking-widest flex items-center gap-1 ${
+                        item.status === 'LOCKED' ? 'text-amber-600' : 
+                        item.status === 'GENERATED' ? 'text-indigo-600' : 'text-emerald-600'
+                      }`}>
+                        <div className={`w-1 h-1 rounded-full ${
+                          item.status === 'LOCKED' ? 'bg-amber-500' : 
+                          item.status === 'GENERATED' ? 'bg-indigo-500 animate-pulse' : 'bg-emerald-500 animate-ping'
+                        }`} /> 
+                        {item.status || 'Assigned'}
+                      </span>
+                    )}
+                    {isModified && (
+                      <span className="text-[8px] text-amber-600 font-black uppercase tracking-widest flex items-center gap-1">
+                        <div className="w-1 h-1 bg-amber-500 rounded-full" /> Pending
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Task Description */}
+                <div>
+                  <h4 className="text-xs font-bold text-gray-800 leading-snug">
+                    {item.task_name}
+                  </h4>
+                </div>
+
+                {/* Edit Fields Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-gray-50">
+                  {/* Start Date */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Start DateTime</label>
+                    <input 
+                      type="datetime-local" 
+                      className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
+                        isModified && modifiedRows[item.taskId].start_datetime 
+                        ? 'border-amber-300 bg-amber-50/50' 
+                        : item.status === 'LOCKED' || item.status === 'GENERATED'
+                          ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                          : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                      }`}
+                      value={item.start_datetime ? item.start_datetime.substring(0, 16) : ""}
+                      onChange={(e) => handleFieldChange(item.taskId, "start_datetime", e.target.value)}
+                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                    />
+                  </div>
+
+                  {/* End Date */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">End DateTime</label>
+                    <input 
+                      type="datetime-local" 
+                      className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
+                        isModified && modifiedRows[item.taskId].end_datetime 
+                        ? 'border-amber-300 bg-amber-50/50' 
+                        : item.status === 'LOCKED' || item.status === 'GENERATED'
+                          ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                          : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                      }`}
+                      value={item.end_datetime ? item.end_datetime.substring(0, 16) : ""}
+                      onChange={(e) => handleFieldChange(item.taskId, "end_datetime", e.target.value)}
+                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                    />
+                  </div>
+
+                  {/* Manager Input */}
+                  <div className="space-y-1 relative">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Manager</label>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        placeholder="Assign Manager.."
+                        className={`w-full px-2.5 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${
+                          isModified && modifiedRows[item.taskId].manager_name 
+                          ? 'border-amber-300 bg-amber-50/50' 
+                          : item.status === 'LOCKED' || item.status === 'GENERATED'
+                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                            : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                        }`}
+                        value={item.manager_name || ""}
+                        onChange={(e) => {
+                          handleFieldChange(item.taskId, "manager_name", e.target.value);
+                          setSearchDropdown({ type: "manager", id: item.taskId, term: e.target.value });
+                        }}
+                        onFocus={() => setSearchDropdown({ type: "manager", id: item.taskId, term: item.manager_name || "" })}
+                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                      />
+                      {searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
+                        <div className="absolute z-50 left-0 right-0 bg-white border border-gray-150 rounded-lg shadow-2xl max-h-40 overflow-y-auto mt-1">
+                          {userData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
+                            <button 
+                              key={user.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-blue-50 flex items-center justify-between transition-colors border-b border-gray-50 last:border-0"
+                              onClick={() => selectUser(item.taskId, "manager_name", user)}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[8px]">
+                                  {user.user_name?.charAt(0)}
+                                </div>
+                                {user.user_name}
+                              </div>
+                              {item.manager_name === user.user_name && <Check size={10} className="text-blue-600" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Employee Tag/Badge Multi-select Input */}
+                  <div className="space-y-1 relative">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Employees</label>
+                    
+                    {/* Selected Employees Tag List - Positioned above wrapper so they are always visible */}
+                    {!(item.status === 'LOCKED' || item.status === 'GENERATED') && item.employee_name && (
+                      <div className="flex flex-wrap gap-1 mb-1.5 pt-0.5">
+                        {item.employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[9px] font-black border border-emerald-100 shadow-sm animate-in zoom-in-95 duration-150">
+                            {emp}
+                            <button 
+                              type="button"
+                              className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 transition-colors font-black text-[9px] leading-none"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleEmployee(item.taskId, emp, item.employee_name);
+                              }}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="relative">
+                      {(item.status === 'LOCKED' || item.status === 'GENERATED') ? (
+                        <div className="flex flex-wrap gap-1">
+                          {item.employee_name ? (
+                            item.employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-lg text-[9px] font-black border border-emerald-100 flex items-center gap-1 shadow-sm">
+                                <div className="w-1 h-1 bg-emerald-500 rounded-full" />
+                                {emp}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-gray-400 text-[10px] font-bold">No Employee Assigned</span>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          {/* Search input to select employees */}
+                          <input 
+                            type="text" 
+                            placeholder={item.employee_name ? "Add employee..." : "Assign Employee.."}
+                            className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${
+                              isModified && modifiedRows[item.taskId].employee_name 
+                              ? 'border-amber-300 bg-amber-50/50' 
+                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                            }`}
+                            value={(searchDropdown.type === "employee" && searchDropdown.id === item.taskId) ? searchDropdown.term : ""}
+                            onChange={(e) => {
+                              setSearchDropdown({ type: "employee", id: item.taskId, term: e.target.value });
+                            }}
+                            onFocus={() => setSearchDropdown({ type: "employee", id: item.taskId, term: "" })}
+                          />
+                          
+                          {searchDropdown.type === "employee" && searchDropdown.id === item.taskId && (
+                            <div className="absolute z-50 left-0 right-0 bg-white border border-gray-150 rounded-lg shadow-2xl max-h-40 overflow-y-auto mt-1 top-full">
+                              {userData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
+                                const isSelected = item.employee_name?.split(',').map(e => e.trim()).filter(Boolean).includes(user.user_name);
+                                return (
+                                  <button 
+                                    key={user.id}
+                                    type="button"
+                                    className="w-full text-left px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-blue-50 flex items-center justify-between transition-colors border-b border-gray-50 last:border-0"
+                                    onClick={() => toggleEmployee(item.taskId, user.user_name, item.employee_name)}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[8px]">
+                                        {user.user_name?.charAt(0)}
+                                      </div>
+                                      {user.user_name}
+                                    </div>
+                                    {isSelected && <Check size={10} className="text-blue-600" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          
+          {filteredTasks.length === 0 && (
+            <div className="py-12 text-center flex flex-col items-center gap-2">
+              <LayoutGrid size={36} className="text-gray-300" />
+              <p className="text-gray-400 font-bold tracking-wider uppercase text-[10px]">No matching work records found</p>
             </div>
           )}
         </div>

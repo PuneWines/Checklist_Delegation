@@ -380,6 +380,7 @@ const AllTasks = () => {
             { id: "id", label: "ID" },
             { id: "task_description", label: "Description" },
             { id: "shop_name", label: "Shop" },
+            { id: "name", label: "Employee" },
             { id: "current_date", label: "Date" },
             { id: "duration", label: "Mins" },
           ];
@@ -584,7 +585,12 @@ const AllTasks = () => {
         const shopKey = task.shop || task.shop_name || "";
         
         // Use series_id or assignment_id as the unique identifier if available, otherwise fallback to the old key
-        const seriesBase = task.series_id || task.assignment_id || `${shopKey}::${descKey}::${nameKey}`;
+        let seriesBase = task.series_id || task.assignment_id || `${shopKey}::${descKey}::${nameKey}`;
+
+        // Differentiate work tasks by their unique employee name and task id so they aren't incorrectly collapsed/deduplicated
+        if (activeTab === "work") {
+          seriesBase = `${task.assignment_id || ""}_${nameKey}_${task.id || ""}`;
+        }
 
         if (status === "Upcoming") {
           // UPCOMING: only show the NEXT (earliest) occurrence per task series

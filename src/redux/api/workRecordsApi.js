@@ -67,10 +67,10 @@ export const generateWorkTasksApi = async (assignments) => {
     const assignmentIds = assignments.map(a => a.assignmentId);
     const { data: existingTasks } = await supabase
       .from('work_task')
-      .select('assignment_id, current_date')
+      .select('assignment_id, current_date, name')
       .in('assignment_id', assignmentIds);
 
-    const existingKeys = new Set(existingTasks?.map(t => `${t.assignment_id}_${t.current_date}`) || []);
+    const existingKeys = new Set(existingTasks?.map(t => `${t.assignment_id}_${t.current_date}_${t.name}`) || []);
 
     for (const asgn of assignments) {
       const start = new Date(asgn.start_datetime);
@@ -79,27 +79,34 @@ export const generateWorkTasksApi = async (assignments) => {
       const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
       const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
 
+      const employeeNames = asgn.employee_name
+        ? asgn.employee_name.split(',').map(e => e.trim()).filter(Boolean)
+        : [];
+
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const key = `${asgn.assignmentId}_${dateStr}`;
+        
+        for (const empName of employeeNames) {
+          const key = `${asgn.assignmentId}_${dateStr}_${empName}`;
 
-        // Only add if it doesn't already exist in the database
-        if (!existingKeys.has(key)) {
-          tasksToInsert.push({
-            task_id: asgn.task_id,
-            name: asgn.employee_name,
-            task_description: asgn.task_name,
-            shop_name: asgn.shopName,
-            department: asgn.department,
-            duration: asgn.estimated_minutes,
-            "current_date": dateStr,
-            status: (new Date(d.getFullYear(), d.getMonth(), d.getDate()) < new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) 
-              ? 'OVERDUE' 
-              : (new Date(d.getFullYear(), d.getMonth(), d.getDate()) > new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) 
-                ? 'UPCOMING' 
-                : 'PENDING',
-            assignment_id: asgn.assignmentId
-          });
+          // Only add if it doesn't already exist in the database
+          if (!existingKeys.has(key)) {
+            tasksToInsert.push({
+              task_id: asgn.task_id,
+              name: empName,
+              task_description: asgn.task_name,
+              shop_name: asgn.shopName,
+              department: asgn.department,
+              duration: asgn.estimated_minutes,
+              "current_date": dateStr,
+              status: (new Date(d.getFullYear(), d.getMonth(), d.getDate()) < new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) 
+                ? 'OVERDUE' 
+                : (new Date(d.getFullYear(), d.getMonth(), d.getDate()) > new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) 
+                  ? 'UPCOMING' 
+                  : 'PENDING',
+              assignment_id: asgn.assignmentId
+            });
+          }
         }
       }
     }
