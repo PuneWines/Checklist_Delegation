@@ -445,7 +445,7 @@ const LoginPage = () => {
                         try {
                           const { data, error } = await supabase.from('users').select('user_name, number').eq('user_name', forgotData.username).single();
                           if (error || !data) return showToast("User not found", "error");
-                          if (!data.number) return showToast("No registered phone number found for this user. Please contact Admin.", "error");
+                          if (!data.number) return showToast("No registered phone number found for your account. Please contact the Admin to update your phone number.", "error");
 
                           const otp = Math.floor(100000 + Math.random() * 900000).toString();
                           await sendPasswordResetOTP(forgotData.username, otp);
