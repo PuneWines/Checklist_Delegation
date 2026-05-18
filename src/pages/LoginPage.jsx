@@ -9,7 +9,7 @@ import { LoginCredentialsApi } from "../redux/api/loginApi"
 import { useMagicToast } from "../context/MagicToastContext"
 import supabase from "../SupabaseClient"
 import { sendPasswordResetOTP } from "../services/whatsappService"
-import { KeyRound, ShieldCheck, User as UserIcon, ArrowLeft, RefreshCw, Smartphone } from "lucide-react"
+import { KeyRound, ShieldCheck, User as UserIcon, ArrowLeft, RefreshCw, Smartphone, Store } from "lucide-react"
 
 const LoginPage = () => {
   const navigate = useNavigate()
@@ -34,6 +34,133 @@ const LoginPage = () => {
     generatedOtp: ""
   })
   const [isForgotLoading, setIsForgotLoading] = useState(false)
+
+  // Registration Mode & Data State
+  const [isRegisterMode, setIsRegisterMode] = useState(false)
+  const [registerData, setRegisterData] = useState({
+    username: "",
+    password: "",
+    phone: "",
+    role: "User",
+    shop: "",
+  })
+  const [isRegisterLoading, setIsRegisterLoading] = useState(false)
+  const [shops, setShops] = useState([])
+  const [shopsLoading, setShopsLoading] = useState(false)
+
+  useEffect(() => {
+    const fetchShops = async () => {
+      setShopsLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from('shop')
+          .select('shop_name')
+          .order('shop_name', { ascending: true });
+        if (data) {
+          const uniqueShops = [...new Set(data.map(d => d.shop_name))].filter(Boolean);
+          setShops(uniqueShops);
+        }
+      } catch (err) {
+        console.error("Error fetching shops:", err);
+      } finally {
+        setShopsLoading(false)
+      }
+    };
+    fetchShops();
+  }, []);
+
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!registerData.username.trim()) {
+      showToast("Username is required", "error");
+      return;
+    }
+    if (!registerData.password || registerData.password.length < 4) {
+      showToast("Password must be at least 4 characters long", "error");
+      return;
+    }
+    if (!registerData.phone.trim() || registerData.phone.replace(/\D/g, '').length < 10) {
+      showToast("Please enter a valid 10-digit mobile number", "error");
+      return;
+    }
+    if (!registerData.role) {
+      showToast("Please select a user role", "error");
+      return;
+    }
+    if (!registerData.shop) {
+      showToast("Please select a shop", "error");
+      return;
+    }
+
+    setIsRegisterLoading(true);
+
+    try {
+      // Step 1: Check if username already exists
+      const { data: existingUser, error: checkError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("user_name", registerData.username.trim())
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      if (existingUser) {
+        showToast("Username already exists. Please choose another one.", "error");
+        setIsRegisterLoading(false);
+        return;
+      }
+
+      // Step 2: Insert into database
+      const allPageAccess = [
+        "Dashboard", "Announcements", "Quick Task", "Assign Task", 
+        "Work Records", "Delegation", "Task", "Calendar", 
+        "Holiday List", "Working Day Calendar", "Admin Approval", "Settings"
+      ];
+
+      // Auto-generate employee_id matching Setting.jsx generation format
+      const generatedEmpId = `EMP-${Date.now().toString().slice(-6)}`;
+
+      const insertData = {
+        user_name: registerData.username.trim(),
+        password: registerData.password,
+        number: parseInt(registerData.phone.toString().replace(/\D/g, '')),
+        role: registerData.role,
+        employee_id: generatedEmpId,
+        status: 'active',
+        can_self_assign: false,
+        shop_name: registerData.shop,
+        user_access: registerData.shop,
+        page_access: registerData.role.toLowerCase() === 'admin' ? allPageAccess : []
+      };
+
+      const { error: insertError } = await supabase
+        .from("users")
+        .insert([insertData]);
+
+      if (insertError) throw insertError;
+
+      showToast("Account created successfully! You can now log in.", "success");
+      
+      setFormData({
+        username: registerData.username.trim(),
+        password: "",
+      });
+      setRegisterData({
+        username: "",
+        password: "",
+        phone: "",
+        role: "User",
+        shop: "",
+      });
+      setIsRegisterMode(false);
+    } catch (err) {
+      console.error("❌ Registration error:", err);
+      showToast(err.message || "Failed to create account", "error");
+    } finally {
+      setIsRegisterLoading(false);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -100,66 +227,185 @@ const LoginPage = () => {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 p-4">
       <div className="w-full max-w-md shadow-lg border border-blue-200 rounded-lg bg-white">
         <div className="space-y-1 p-4 bg-gradient-to-r from-blue-100 to-purple-100 rounded-t-lg">
-          {/* <img
-            src="/logo.png"
-            alt="Company Logo"
-            className="h-auto w-100 mr-3"
-          /> */}
-          <h2 className="text-2xl font-bold text-blue-700 p-2 items-center justify-center">TaskDesk</h2>
+          <h2 className="text-2xl font-bold text-blue-700 p-2 text-center">
+            {isRegisterMode ? "TaskDesk - Sign Up" : "TaskDesk"}
+          </h2>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="username" className="flex items-center text-blue-700">
-              <i className="fas fa-user h-4 w-4 mr-2"></i>
-              Username
-            </label>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              placeholder="Enter your username"
-              required
-              value={formData.username}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+        {isRegisterMode ? (
+          <form onSubmit={handleRegisterSubmit} className="p-4 space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="reg-username" className="flex items-center text-blue-700 font-semibold text-sm">
+                <UserIcon className="h-4 w-4 mr-2" />
+                Username *
+              </label>
+              <input
+                id="reg-username"
+                name="username"
+                type="text"
+                placeholder="Choose a username"
+                required
+                value={registerData.username}
+                onChange={(e) => setRegisterData({ ...registerData, username: e.target.value })}
+                className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
 
-          <div className="space-y-2">
-            <label htmlFor="password" className="flex items-center text-blue-700">
-              <i className="fas fa-key h-4 w-4 mr-2"></i>
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              placeholder="Enter your password"
-              required
-              value={formData.password}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+            <div className="space-y-2">
+              <label htmlFor="reg-password" className="flex items-center text-blue-700 font-semibold text-sm">
+                <KeyRound className="h-4 w-4 mr-2" />
+                Password *
+              </label>
+              <input
+                id="reg-password"
+                name="password"
+                type="password"
+                placeholder="Create a password"
+                required
+                value={registerData.password}
+                onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
+                className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
 
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 -mx-4 -mb-4 mt-4 rounded-b-lg flex flex-col gap-3">
-            <button
-              type="submit"
-              className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold hover:opacity-90 transition-all shadow-md active:scale-[0.98] disabled:opacity-50"
-              disabled={isLoginLoading}
-            >
-              {isLoginLoading ? "Logging in..." : "Login"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForgotModal(true)}
-              className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors text-center"
-            >
-              Forgot Password?
-            </button>
-          </div>
-        </form>
+            <div className="space-y-2">
+              <label htmlFor="reg-phone" className="flex items-center text-blue-700 font-semibold text-sm">
+                <Smartphone className="h-4 w-4 mr-2" />
+                Mobile Number (WhatsApp) *
+              </label>
+              <input
+                id="reg-phone"
+                name="phone"
+                type="tel"
+                placeholder="e.g. 919876543210"
+                required
+                value={registerData.phone}
+                onChange={(e) => setRegisterData({ ...registerData, phone: e.target.value })}
+                className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+              <p className="text-[10px] text-gray-400">Include country code without + (e.g. 91 for India)</p>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="reg-shop" className="flex items-center text-blue-700 font-semibold text-sm">
+                <Store className="h-4 w-4 mr-2" />
+                Shop Name *
+              </label>
+              <select
+                id="reg-shop"
+                name="shop"
+                required
+                value={registerData.shop}
+                onChange={(e) => setRegisterData({ ...registerData, shop: e.target.value })}
+                className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+              >
+                <option value="">{shopsLoading ? "Loading shops..." : "Select a Shop"}</option>
+                {shops.map((shopName, idx) => (
+                  <option key={idx} value={shopName}>
+                    {shopName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="reg-role" className="flex items-center text-blue-700 font-semibold text-sm">
+                <ShieldCheck className="h-4 w-4 mr-2" />
+                User Role *
+              </label>
+              <select
+                id="reg-role"
+                name="role"
+                required
+                disabled
+                value={registerData.role}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
+              >
+                <option value="User">User</option>
+              </select>
+              <p className="text-[10px] text-gray-400">All new sign-ups are registered as standard users. Admins can elevate your role later.</p>
+            </div>
+
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 -mx-4 -mb-4 mt-4 rounded-b-lg flex flex-col gap-3">
+              <button
+                type="submit"
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold hover:opacity-90 transition-all shadow-md active:scale-[0.98] disabled:opacity-50"
+                disabled={isRegisterLoading}
+              >
+                {isRegisterLoading ? "Creating Account..." : "Register"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRegisterMode(false)}
+                className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors text-center"
+              >
+                Already have an account? Sign In
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-4 space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="username" className="flex items-center text-blue-700">
+                <i className="fas fa-user h-4 w-4 mr-2"></i>
+                Username
+              </label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                placeholder="Enter your username"
+                required
+                value={formData.username}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="password" className="flex items-center text-blue-700">
+                <i className="fas fa-key h-4 w-4 mr-2"></i>
+                Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="Enter your password"
+                required
+                value={formData.password}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 -mx-4 -mb-4 mt-4 rounded-b-lg flex flex-col gap-3">
+              <button
+                type="submit"
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold hover:opacity-90 transition-all shadow-md active:scale-[0.98] disabled:opacity-50"
+                disabled={isLoginLoading}
+              >
+                {isLoginLoading ? "Logging in..." : "Login"}
+              </button>
+              <div className="flex items-center justify-between px-1">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotModal(true)}
+                  className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  Forgot Password?
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsRegisterMode(true)}
+                  className="text-sm font-bold text-purple-600 hover:text-purple-800 transition-colors"
+                >
+                  Create Account
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
 
         {/* Forgot Password Modal */}
         {showForgotModal && (
@@ -178,11 +424,10 @@ const LoginPage = () => {
                   {forgotStep === 'reset' && "Set New Password"}
                 </h3>
               </div>
-
               <div className="px-6 pb-8 space-y-4">
                 {forgotStep === 'username' && (
                   <div className="space-y-4">
-                    <p className="text-xs text-gray-500 text-center px-2">Enter your username. An OTP will be sent to the Admin for verification.</p>
+                    <p className="text-xs text-gray-500 text-center px-2">Enter your username. An OTP will be sent to your registered WhatsApp number.</p>
                     <div className="relative">
                       <input
                         type="text"
@@ -198,14 +443,15 @@ const LoginPage = () => {
                         if (!forgotData.username) return showToast("Please enter username", "error");
                         setIsForgotLoading(true);
                         try {
-                          const { data, error } = await supabase.from('users').select('user_name').eq('user_name', forgotData.username).single();
+                          const { data, error } = await supabase.from('users').select('user_name, number').eq('user_name', forgotData.username).single();
                           if (error || !data) return showToast("User not found", "error");
+                          if (!data.number) return showToast("No registered phone number found for this user. Please contact Admin.", "error");
 
                           const otp = Math.floor(100000 + Math.random() * 900000).toString();
                           await sendPasswordResetOTP(forgotData.username, otp);
                           setForgotData({ ...forgotData, generatedOtp: otp });
                           setForgotStep('otp');
-                          showToast("OTP sent to Admin via WhatsApp", "success");
+                          showToast("OTP sent to your registered number via WhatsApp", "success");
                         } catch (err) {
                           showToast("Error processing request", "error");
                         } finally {
@@ -225,7 +471,7 @@ const LoginPage = () => {
                   <div className="space-y-4">
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2">
                       <Smartphone className="text-amber-600 flex-shrink-0" size={16} />
-                      <p className="text-[10px] text-amber-800 font-medium">OTP has been sent to the admin number (9770532007). Please contact them for the code.</p>
+                      <p className="text-[10px] text-amber-800 font-medium">OTP has been sent to your registered WhatsApp number. Please enter the code below.</p>
                     </div>
                     <div className="relative">
                       <input

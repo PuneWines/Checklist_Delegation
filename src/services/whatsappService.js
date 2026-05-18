@@ -822,20 +822,22 @@ export const sendMasterTaskAssignmentNotification = async (taskDetails) => {
     }
 };
 
-/**
- * Send Password Reset OTP to Admin
- */
 export const sendPasswordResetOTP = async (username, otp) => {
     try {
-        const adminNumber = "9770532007";
+        const phoneNumber = await getUserPhoneNumber(username);
+        if (!phoneNumber) {
+            console.error(`No phone number found for user: ${username}`);
+            return false;
+        }
+
         const message = `🔐 *PASSWORD RESET REQUEST*\n\n` +
-            `A password reset has been requested for:\n` +
+            `A password reset has been requested for your account:\n` +
             `👤 User: *${username}*\n` +
             `🔢 OTP Code: *${otp}*\n\n` +
-            `Please provide this code to the user if the request is valid.\n\n` +
+            `Please use this OTP code to reset your password.\n\n` +
             `_Drinqkart_`;
 
-        return await sendWhatsAppMessage(adminNumber, message);
+        return await sendWhatsAppMessage(phoneNumber, message);
     } catch (error) {
         console.error('Error sending password reset OTP:', error);
         return false;
