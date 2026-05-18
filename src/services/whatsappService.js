@@ -10,9 +10,9 @@ import supabase from "../SupabaseClient";
 // WhatsApp API Configuration
 // WhatsApp API Configuration (Maytapi)
 const WHATSAPP_API_URL = 'https://api.maytapi.com/api'; // Hardcoded to prevent .env conflict
-const WHATSAPP_PHONE_NUMBER_ID = import.meta.env.VITE_WHATSAPP_PHONE_NUMBER_ID;
-const WHATSAPP_ACCESS_TOKEN = import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN;
-const WHATSAPP_PRODUCT_ID = import.meta.env.VITE_WHATSAPP_PRODUCT_ID;
+const WHATSAPP_PHONE_NUMBER_ID = import.meta.env.VITE_MAYTAPI_PHONE_ID;
+const WHATSAPP_ACCESS_TOKEN = import.meta.env.VITE_MAYTAPI_API_TOKEN;
+const WHATSAPP_PRODUCT_ID = import.meta.env.VITE_MAYTAPI_PRODUCT_ID;
 
 // Global Toggle to Enable/Disable WhatsApp Feature
 const WHATSAPP_ENABLED = true;
@@ -531,6 +531,47 @@ export const sendTaskExtensionNotification = async (taskDetails) => {
 };
 
 /**
+ * Send work task assignment notification
+ */
+export const sendWorkTaskNotification = async (taskDetails) => {
+    try {
+        const { doerName, taskId, description, start_datetime, end_datetime, givenBy, shop_name, department, duration } = taskDetails;
+        const phoneNumber = await getUserPhoneNumber(doerName);
+        if (!phoneNumber) return false;
+
+        const formattedStart = start_datetime ? new Date(start_datetime).toLocaleString('en-IN', {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+        }) : 'N/A';
+
+        const formattedEnd = end_datetime ? new Date(end_datetime).toLocaleString('en-IN', {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+        }) : 'N/A';
+
+        const message = `💼 *NEW WORK TASK ASSIGNED*\n` +
+            `Dear ${doerName},\n\n` +
+            `A new Master Work task has been assigned to you.\n\n` +
+            `📌 Task ID: ${taskId}\n` +
+            `🏢 Shop: ${shop_name || 'N/A'}\n` +
+            `🗂️ Department: ${department || 'N/A'}\n` +
+            `📝 Task Description: ${description || 'N/A'}\n` +
+            `⏳ Start Time: ${formattedStart}\n` +
+            `⏳ End Time: ${formattedEnd}\n` +
+            (duration ? `⏱ Estimated Duration: ${duration} Mins\n` : '') +
+            `🧑 Assigned By: ${givenBy || 'Admin'}\n\n` +
+            `✅ Closure Link: https://checklist-delegation-five.vercel.app/login\n\n` +
+            `Please ensure the task is completed on time.\n` +
+            `Best regards,\nDrinqkart.`;
+
+        return await sendWhatsAppMessage(phoneNumber, message);
+    } catch (error) {
+        console.error('Error sending work task notification:', error);
+        return false;
+    }
+};
+
+/**
  * Send task assignment notification (Delegation Task)
  */
 export const sendTaskAssignmentNotification = async (taskDetails) => {
@@ -547,6 +588,8 @@ export const sendTaskAssignmentNotification = async (taskDetails) => {
             return sendEATaskNotification(taskDetails);
         case 'delegation':
             return sendDelegationTaskNotification(taskDetails);
+        case 'work':
+            return sendWorkTaskNotification(taskDetails);
         default:
             // For backward compatibility or if type is not provided
             try {

@@ -21,6 +21,7 @@ import { fetchWorkRecords, saveAssignments } from "../redux/slice/workRecordsSli
 import { userDetails } from "../redux/slice/settingSlice";
 import { useMagicToast } from "../context/MagicToastContext";
 import { generateWorkTasksApi, resetWorkTasksApi } from "../redux/api/workRecordsApi";
+import { sendTaskAssignmentNotification } from "../services/whatsappService";
 
 export default function WorkDetails() {
   const dispatch = useDispatch();
@@ -290,6 +291,38 @@ export default function WorkDetails() {
     try {
       await generateWorkTasksApi(selectedAssignments);
       showToast(`Generated tasks for ${selectedAssignments.length} assignments`, "success");
+      
+      // WhatsApp notification trigger based on start_datetime compared to current time
+      const now = new Date();
+      selectedAssignments.forEach(asgn => {
+        if (asgn.start_datetime) {
+          const startTime = new Date(asgn.start_datetime);
+          if (startTime <= now) {
+            const employeeNames = asgn.employee_name
+              ? asgn.employee_name.split(',').map(e => e.trim()).filter(Boolean)
+              : [];
+              
+            employeeNames.forEach(empName => {
+              const taskDetails = {
+                taskType: 'work',
+                doerName: empName,
+                taskId: asgn.task_id,
+                description: asgn.task_name,
+                start_datetime: asgn.start_datetime,
+                end_datetime: asgn.end_datetime,
+                givenBy: localStorage.getItem("user-name") || 'Admin',
+                shop_name: asgn.shopName,
+                department: asgn.department,
+                duration: asgn.estimated_minutes
+              };
+              sendTaskAssignmentNotification(taskDetails).catch(err => {
+                console.error("❌ Error sending work task WhatsApp alert:", err);
+              });
+            });
+          }
+        }
+      });
+
       dispatch(fetchWorkRecords());
       setSelectedRows(new Set());
     } catch (err) {
