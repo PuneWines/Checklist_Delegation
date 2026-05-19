@@ -242,7 +242,7 @@ export const sendUrgentTaskNotification = async (taskDetails) => {
                     `⏳ Planned Date: ${dueDate}\n` +
                     `🧑 Given By: ${givenBy}\n`;
                 break;
-            
+
             case 'delegation':
                 body = `Name: ${doerName}\n` +
                     `Task ID: ${taskId}\n` +
@@ -533,33 +533,36 @@ export const sendTaskExtensionNotification = async (taskDetails) => {
  */
 export const sendWorkTaskNotification = async (taskDetails) => {
     try {
-        const { doerName, taskId, description, start_datetime, end_datetime, givenBy, shop_name, department, duration } = taskDetails;
+        const { doerName, description, start_datetime, shop_name, duration } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
 
-        const formattedStart = start_datetime ? new Date(start_datetime).toLocaleString('en-IN', {
+        const startDateObj = start_datetime ? new Date(start_datetime) : null;
+
+        // Expected End Time = Start + Duration
+        const endDateObj = (startDateObj && duration) ? new Date(startDateObj.getTime() + duration * 60 * 1000) : null;
+        const formattedEnd = endDateObj ? endDateObj.toLocaleString('en-IN', {
             dateStyle: 'medium',
             timeStyle: 'short'
         }) : 'N/A';
 
-        const formattedEnd = end_datetime ? new Date(end_datetime).toLocaleString('en-IN', {
+        // Expiry Time = Expected End Time + 45 Minutes
+        const expiryDateObj = endDateObj ? new Date(endDateObj.getTime() + 45 * 60 * 1000) : null;
+        const formattedExpiry = expiryDateObj ? expiryDateObj.toLocaleString('en-IN', {
             dateStyle: 'medium',
             timeStyle: 'short'
         }) : 'N/A';
 
         const message = `💼 *NEW WORK TASK ASSIGNED*\n` +
             `Dear ${doerName},\n\n` +
-            `A new Master Work task has been assigned to you.\n\n` +
-            `📌 Task ID: ${taskId}\n` +
+            `A new task has been assigned to you.\n\n` +
             `🏢 Shop: ${shop_name || 'N/A'}\n` +
-            `🗂️ Department: ${department || 'N/A'}\n` +
-            `📝 Task Description: ${description || 'N/A'}\n` +
-            `⏳ Start Time: ${formattedStart}\n` +
-            `⏳ End Time: ${formattedEnd}\n` +
-            (duration ? `⏱ Estimated Duration: ${duration} Mins\n` : '') +
-            `🧑 Assigned By: ${givenBy || 'Admin'}\n\n` +
+            `📝 Task: ${description || 'N/A'}\n` +
+            `⏱️ Duration: ${duration || '0'} Mins\n` +
+            `⏳ Target Completion: ${formattedEnd}\n` +
+            `⚠️ Final Expiry (with 45m Grace): ${formattedExpiry}\n\n` +
             `✅ Closure Link: https://checklist-delegation-five.vercel.app/login\n\n` +
-            `Please ensure the task is completed on time.\n` +
+            `Please complete it on time. After final expiry, it will mark as "Not Done".\n` +
             `Best regards,\nDrinqkart.`;
 
         return await sendWhatsAppMessage(phoneNumber, message);
@@ -870,6 +873,65 @@ export const sendAdminExtensionRemarkNotification = async (taskDetails) => {
     }
 };
 
+/**
+ * Send notification for multiple work tasks assigned at once
+ */
+export const sendMultipleWorkTasksNotification = async (doerName, tasks) => {
+    try {
+        const phoneNumber = await getUserPhoneNumber(doerName);
+        if (!phoneNumber) return false;
+
+        const count = tasks.length;
+        const givenBy = tasks[0]?.givenBy || 'Admin';
+
+        const message = `💼 *MULTIPLE WORK TASKS ASSIGNED*\n` +
+            `Dear ${doerName},\n\n` +
+            `You have been assigned *${count} new Master Work tasks* at once.\n\n` +
+            `🧑 Assigned By: ${givenBy}\n\n` +
+            `✅ To check and start your tasks, please click here:\n` +
+            `https://checklist-delegation-five.vercel.app/login\n\n` +
+            `Please ensure all tasks are completed on time.\n` +
+            `Best regards,\nDrinqkart.`;
+
+        return await sendWhatsAppMessage(phoneNumber, message);
+    } catch (error) {
+        console.error('Error sending multiple work tasks notification:', error);
+        return false;
+    }
+};
+
+/**
+ * Send daily reminder with the count of tasks assigned for the day (scheduled 9 AM - 10 AM)
+ * @param {Object} reminderDetails - Reminder details
+ * @param {string} reminderDetails.doerName - Employee name
+ * @param {number} reminderDetails.pendingTasksCount - Count of pending tasks
+ * @returns {Promise<boolean>} - Success status
+ */
+export const sendDailyTaskSummaryReminder = async (reminderDetails) => {
+    try {
+        const { doerName, pendingTasksCount } = reminderDetails;
+        const phoneNumber = await getUserPhoneNumber(doerName);
+
+        if (!phoneNumber) {
+            console.warn(`No phone number found for user: ${doerName}`);
+            return false;
+        }
+
+        const message = `☀️ *DAILY TASK REMINDER*\n\n` +
+            `Good Morning ${doerName},\n\n` +
+            `You have *${pendingTasksCount} pending/assigned task(s)* for today.\n\n` +
+            `🔗 Please click here to view and start your tasks:\n` +
+            `https://checklist-delegation-five.vercel.app/login\n\n` +
+            `Have a productive day!\n\n` +
+            `_Drinqkart_`;
+
+        return await sendWhatsAppMessage(phoneNumber, message);
+    } catch (error) {
+        console.error('Error sending daily task summary reminder:', error);
+        return false;
+    }
+};
+
 export default {
     sendUrgentTaskNotification,
     sendTaskExtensionNotification,
@@ -885,5 +947,7 @@ export default {
     sendTaskReassignmentNotification,
     sendMasterTaskAssignmentNotification,
     sendPasswordResetOTP,
-    sendAdminExtensionRemarkNotification
+    sendAdminExtensionRemarkNotification,
+    sendMultipleWorkTasksNotification,
+    sendDailyTaskSummaryReminder
 };

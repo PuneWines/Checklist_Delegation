@@ -4,7 +4,68 @@ import { useState, useEffect, useCallback } from "react"
 import { fetchWorkTasksForUserApi, submitWorkTaskApi } from "../../redux/api/workRecordsApi"
 import { useMagicToast } from "../../context/MagicToastContext"
 import supabase from "../../SupabaseClient"
-import { Loader2, CheckCircle2, Clock, AlertCircle, Search, Filter, Paperclip, MessageSquare } from "lucide-react"
+import { Loader2, CheckCircle2, Clock, AlertCircle, Search, Filter, Paperclip, MessageSquare, LayoutGrid } from "lucide-react"
+
+const getWorkTaskTimeBounds = (task) => {
+  const startStr = task.task_assignments?.start_datetime;
+  let startHour = 0;
+  let startMin = 0;
+  if (startStr) {
+    const parts = startStr.split('T');
+    if (parts[1]) {
+      const timeParts = parts[1].split(':');
+      startHour = parseInt(timeParts[0]) || 0;
+      startMin = parseInt(timeParts[1]) || 0;
+    }
+  }
+  const [year, month, day] = task.current_date.split('-').map(Number);
+  const taskStart = new Date(year, month - 1, day, startHour, startMin, 0);
+  const duration = task.duration || 0; // minutes
+  const taskEnd = new Date(taskStart.getTime() + duration * 60 * 1000);
+  const taskExtraEnd = new Date(taskEnd.getTime() + 45 * 60 * 1000);
+  return { taskStart, taskEnd, taskExtraEnd };
+};
+
+const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
+  if (task.status === "APPROVED" || task.status === "APPROVED") return "APPROVED";
+  if (task.status === "SUBMITTED" || task.status === "Done" || task.status === "done" || task.submission_date) return "SUBMITTED";
+  if (task.status === "REJECTED") return "REJECTED";
+
+  const { taskStart, taskEnd, taskExtraEnd } = getWorkTaskTimeBounds(task);
+
+  if (currentTime < taskStart) {
+    return "UPCOMING";
+  } else if (currentTime >= taskStart && currentTime < taskEnd) {
+    return "ACTIVE";
+  } else if (currentTime >= taskEnd && currentTime < taskExtraEnd) {
+    return "EXTRA_TIME";
+  } else {
+    return "NOT_DONE";
+  }
+};
+
+const getExtraTimeRemaining = (task, currentTime) => {
+  const { taskExtraEnd } = getWorkTaskTimeBounds(task);
+  const diffMs = taskExtraEnd.getTime() - currentTime.getTime();
+  if (diffMs <= 0) return 0;
+  return Math.ceil(diffMs / (60 * 1000));
+};
+
+const formatTaskStartTime = (startStr) => {
+  if (!startStr) return "";
+  try {
+    const date = new Date(startStr);
+    if (isNaN(date.getTime())) return "";
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${hours}:${minutes} ${ampm}`;
+  } catch (e) {
+    return "";
+  }
+};
 
 const UserTasks = () => {
   const { showToast } = useMagicToast()
@@ -17,6 +78,14 @@ const UserTasks = () => {
   const [selectedFiles, setSelectedFiles] = useState({})
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [currentTime, setCurrentTime] = useState(new Date())
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 60000)
+    return () => clearInterval(timer)
+  }, [])
 
   const currentUsername = localStorage.getItem("user-name") || ""
 
@@ -40,15 +109,19 @@ const UserTasks = () => {
   }, [loadTasks, currentUsername])
 
   const filteredTasks = userTasks.filter((task) => {
+    const dynamicStatus = getWorkTaskDynamicStatus(task, currentTime);
+
     // Filter by status
-    if (filterStatus === "completed" && task.status !== "APPROVED") return false
-    if (filterStatus === "pending" && (task.status === "APPROVED" || task.status === "SUBMITTED")) return false
-    if (filterStatus === "submitted" && task.status !== "SUBMITTED") return false
-    if (filterStatus === "overdue") {
-      const dueDate = new Date(task.current_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (dueDate >= today || task.status === "APPROVED" || task.status === "SUBMITTED") return false
+    if (filterStatus === "completed") {
+      if (dynamicStatus !== "APPROVED") return false;
+    } else if (filterStatus === "submitted") {
+      if (dynamicStatus !== "SUBMITTED") return false;
+    } else if (filterStatus === "pending") {
+      if (dynamicStatus !== "ACTIVE" && dynamicStatus !== "EXTRA_TIME") return false;
+    } else if (filterStatus === "not_done") {
+      if (dynamicStatus !== "NOT_DONE") return false;
+    } else if (filterStatus === "overdue") {
+      return false; // Work tasks do not show up under normal overdue
     }
 
     // Filter by search query
@@ -169,22 +242,32 @@ const UserTasks = () => {
   }
 
   const getStatusBadge = (task) => {
-    const status = task.status
-    if (status === "APPROVED") return <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Approved</span>
-    if (status === "SUBMITTED") return <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Submitted</span>
-    if (status === "REJECTED") return <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Rejected</span>
-    
-    // Check database status first
-    if (status === "OVERDUE") return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Overdue</span>
-    if (status === "UPCOMING") return <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-full uppercase tracking-wider">Upcoming</span>
-    
-    // Fallback to time-based calculation for PENDING tasks that might have aged
-    const dueDate = new Date(task.current_date)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    if (dueDate < today) return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Overdue</span>
-    
-    return <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Pending</span>
+    const ds = getWorkTaskDynamicStatus(task, currentTime);
+    if (ds === "APPROVED") {
+      return <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Approved</span>;
+    }
+    if (ds === "SUBMITTED") {
+      return <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Submitted</span>;
+    }
+    if (ds === "REJECTED") {
+      return <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Rejected</span>;
+    }
+    if (ds === "UPCOMING") {
+      return <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-full uppercase tracking-wider">Upcoming</span>;
+    }
+    if (ds === "EXTRA_TIME") {
+      const minsLeft = getExtraTimeRemaining(task, currentTime);
+      return (
+        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full uppercase tracking-wider animate-pulse flex items-center gap-1">
+          <Clock size={10} className="animate-spin-slow" />
+          Extra Time: {minsLeft} Min Left
+        </span>
+      );
+    }
+    if (ds === "NOT_DONE") {
+      return <span className="px-2 py-0.5 bg-red-50 text-red-500 text-[10px] font-bold rounded-full uppercase tracking-wider">Not Done</span>;
+    }
+    return <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Active</span>;
   }
 
   return (
@@ -239,7 +322,7 @@ const UserTasks = () => {
                 <option value="pending">Pending</option>
                 <option value="submitted">Submitted</option>
                 <option value="completed">Approved</option>
-                <option value="overdue">Overdue</option>
+                <option value="not_done">Not Done</option>
               </select>
             </div>
           </div>
@@ -263,12 +346,22 @@ const UserTasks = () => {
               {filteredTasks.map((task) => (
                 <div
                   key={task.id}
-                  onClick={() => task.status !== "APPROVED" && task.status !== "SUBMITTED" && handleTaskSelection(task.id)}
+                  onClick={() => {
+                    const dynamicStatus = getWorkTaskDynamicStatus(task, currentTime);
+                    if (dynamicStatus === "ACTIVE" || dynamicStatus === "EXTRA_TIME" || dynamicStatus === "REJECTED") {
+                      handleTaskSelection(task.id);
+                    }
+                  }}
                   className={`group relative p-5 rounded-3xl border-2 transition-all cursor-pointer ${
                     selectedTasks.includes(task.id)
                       ? "border-purple-600 bg-purple-50/30"
                       : "border-gray-50 bg-white hover:border-purple-200"
-                  } ${task.status === "APPROVED" || task.status === "SUBMITTED" ? "opacity-60 cursor-default" : ""}`}
+                  } ${
+                    (() => {
+                      const ds = getWorkTaskDynamicStatus(task, currentTime);
+                      return (ds === "APPROVED" || ds === "SUBMITTED" || ds === "UPCOMING" || ds === "NOT_DONE") ? "opacity-60 cursor-default" : "";
+                    })()
+                  }`}
                 >
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex items-center gap-3">
@@ -291,7 +384,7 @@ const UserTasks = () => {
                       <div className="flex items-center gap-1.5 text-gray-400">
                         <Clock size={14} />
                         <span className="text-[10px] font-bold uppercase tracking-wider">
-                          {new Date(task.current_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                          {new Date(task.current_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}{task.task_assignments?.start_datetime && ` @ ${formatTaskStartTime(task.task_assignments.start_datetime)}`}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 text-gray-400">

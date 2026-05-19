@@ -21,7 +21,7 @@ import { fetchWorkRecords, saveAssignments } from "../redux/slice/workRecordsSli
 import { userDetails } from "../redux/slice/settingSlice";
 import { useMagicToast } from "../context/MagicToastContext";
 import { generateWorkTasksApi, resetWorkTasksApi } from "../redux/api/workRecordsApi";
-import { sendTaskAssignmentNotification } from "../services/whatsappService";
+import { sendTaskAssignmentNotification, sendMultipleWorkTasksNotification } from "../services/whatsappService";
 
 const getTaskStatusInfo = (item, isModified) => {
   if (isModified) {
@@ -332,8 +332,19 @@ export default function WorkDetails() {
 
       const error = validateAssignment(task);
       if (error) {
-        // Only show error for modified rows or explicitly selected rows that have SOME data
-        if (modifiedRows[id] || (task.manager_name || task.employee_name || task.start_datetime || task.end_datetime)) {
+        const hasAssignmentFieldModified = modifiedRows[id] && (
+          modifiedRows[id].start_datetime !== undefined ||
+          modifiedRows[id].end_datetime !== undefined ||
+          modifiedRows[id].manager_name !== undefined ||
+          modifiedRows[id].employee_name !== undefined
+        );
+        const hasAssignmentValue = 
+          task.start_datetime || 
+          task.end_datetime || 
+          task.manager_name || 
+          task.employee_name;
+
+        if (hasAssignmentFieldModified || (selectedRows.has(id) && hasAssignmentValue)) {
           errors.push(`Task "${task.task_name}": ${error}`);
         }
       } else {
@@ -355,6 +366,19 @@ export default function WorkDetails() {
     }
 
     try {
+      // 0. Update estimated_minutes in master_work_tasks if modified by Admin
+      if (isAdmin) {
+        for (const id of allIdsToProcess) {
+          if (modifiedRows[id]?.estimated_minutes !== undefined) {
+            const { error: masterErr } = await supabase
+              .from('master_work_tasks')
+              .update({ estimated_minutes: modifiedRows[id].estimated_minutes })
+              .eq('id', id);
+            if (masterErr) throw masterErr;
+          }
+        }
+      }
+
       // 1. Delete cleared assignments from task_assignments table
       if (assignmentsToDelete.length > 0) {
         const { error: delError } = await supabase
@@ -393,8 +417,10 @@ export default function WorkDetails() {
       await generateWorkTasksApi(selectedAssignments);
       showToast(`Generated tasks for ${selectedAssignments.length} assignments`, "success");
       
-      // WhatsApp notification trigger based on start_datetime compared to current time
+      // WhatsApp notification trigger grouped by employee name
       const now = new Date();
+      const employeeTasksMap = {};
+
       selectedAssignments.forEach(asgn => {
         if (asgn.start_datetime) {
           const startTime = new Date(asgn.start_datetime);
@@ -404,7 +430,10 @@ export default function WorkDetails() {
               : [];
               
             employeeNames.forEach(empName => {
-              const taskDetails = {
+              if (!employeeTasksMap[empName]) {
+                employeeTasksMap[empName] = [];
+              }
+              employeeTasksMap[empName].push({
                 taskType: 'work',
                 doerName: empName,
                 taskId: asgn.task_id,
@@ -415,12 +444,23 @@ export default function WorkDetails() {
                 shop_name: asgn.shopName,
                 department: asgn.department,
                 duration: asgn.estimated_minutes
-              };
-              sendTaskAssignmentNotification(taskDetails).catch(err => {
-                console.error("❌ Error sending work task WhatsApp alert:", err);
               });
             });
           }
+        }
+      });
+
+      // Send appropriate notification (single template or group count template)
+      Object.keys(employeeTasksMap).forEach(empName => {
+        const empTasks = employeeTasksMap[empName];
+        if (empTasks.length === 1) {
+          sendTaskAssignmentNotification(empTasks[0]).catch(err => {
+            console.error(`❌ Error sending work task WhatsApp alert for ${empName}:`, err);
+          });
+        } else if (empTasks.length > 1) {
+          sendMultipleWorkTasksNotification(empName, empTasks).catch(err => {
+            console.error(`❌ Error sending multiple work tasks WhatsApp alert for ${empName}:`, err);
+          });
         }
       });
 
@@ -686,10 +726,30 @@ export default function WorkDetails() {
                       </span>
                     </td>
                     <td className="px-2 py-3 text-center">
-                      <div className="inline-flex items-center gap-1 text-orange-500 font-bold text-[10px]">
-                        <Clock size={10} />
-                        {item.estimated_minutes || "--"}
-                      </div>
+                      {isAdmin ? (
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            className={`w-16 px-1 py-1 border rounded text-[10px] font-bold text-center outline-none transition-all ${
+                              modifiedRows[item.taskId]?.estimated_minutes !== undefined
+                                ? 'border-amber-300 bg-amber-50/50'
+                                : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                            }`}
+                            value={
+                              modifiedRows[item.taskId]?.estimated_minutes !== undefined
+                                ? modifiedRows[item.taskId].estimated_minutes
+                                : (item.estimated_minutes || 0)
+                            }
+                            onChange={(e) => handleFieldChange(item.taskId, "estimated_minutes", parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1 text-orange-500 font-bold text-[10px]">
+                          <Clock size={10} />
+                          {item.estimated_minutes || "--"}
+                        </div>
+                      )}
                     </td>
                     <td className="px-2 py-3">
                       <input 
@@ -896,10 +956,27 @@ export default function WorkDetails() {
                   </div>
 
                   <div className="flex flex-col items-end gap-1">
-                    <div className="inline-flex items-center gap-1 text-orange-500 font-bold text-[10px]">
-                      <Clock size={10} />
-                      <span>{item.estimated_minutes || "--"} Mins</span>
-                    </div>
+                    {isAdmin ? (
+                      <div className="flex items-center gap-1 mt-1">
+                        <input
+                          type="number"
+                          min="0"
+                          className="w-14 px-1 py-0.5 border rounded text-[10px] font-bold text-center outline-none"
+                          value={
+                            modifiedRows[item.taskId]?.estimated_minutes !== undefined
+                              ? modifiedRows[item.taskId].estimated_minutes
+                              : (item.estimated_minutes || 0)
+                          }
+                          onChange={(e) => handleFieldChange(item.taskId, "estimated_minutes", parseInt(e.target.value) || 0)}
+                        />
+                        <span className="text-[9px] text-gray-400 font-bold">Mins</span>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-1 text-orange-500 font-bold text-[10px]">
+                        <Clock size={10} />
+                        <span>{item.estimated_minutes || "--"} Mins</span>
+                      </div>
+                    )}
                     {(() => {
                       const statusInfo = getTaskStatusInfo(item, isModified);
                       return (

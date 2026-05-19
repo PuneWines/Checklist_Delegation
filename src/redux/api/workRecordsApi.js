@@ -225,7 +225,7 @@ export const fetchWorkTasksForUserApi = async (username) => {
   try {
     const { data, error } = await supabase
       .from('work_task')
-      .select('*')
+      .select('*, task_assignments:assignment_id(start_datetime, end_datetime)')
       .eq('name', username)
       .order('current_date', { ascending: true });
 

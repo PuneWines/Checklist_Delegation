@@ -43,6 +43,51 @@ const isAudioUrl = (url) => {
   );
 };
 
+const getWorkTaskTimeBounds = (task) => {
+  const startStr = task.task_assignments?.start_datetime;
+  let startHour = 0;
+  let startMin = 0;
+  if (startStr) {
+    const parts = startStr.split('T');
+    if (parts[1]) {
+      const timeParts = parts[1].split(':');
+      startHour = parseInt(timeParts[0]) || 0;
+      startMin = parseInt(timeParts[1]) || 0;
+    }
+  }
+  const [year, month, day] = task.current_date.split('-').map(Number);
+  const taskStart = new Date(year, month - 1, day, startHour, startMin, 0);
+  const duration = task.duration || 0; // minutes
+  const taskEnd = new Date(taskStart.getTime() + duration * 60 * 1000);
+  const taskExtraEnd = new Date(taskEnd.getTime() + 45 * 60 * 1000);
+  return { taskStart, taskEnd, taskExtraEnd };
+};
+
+const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
+  if (task.status === "APPROVED" || task.status === "APPROVED") return "APPROVED";
+  if (task.status === "SUBMITTED" || task.status === "Done" || task.status === "done" || task.submission_date) return "SUBMITTED";
+  if (task.status === "REJECTED") return "REJECTED";
+
+  const { taskStart, taskEnd, taskExtraEnd } = getWorkTaskTimeBounds(task);
+
+  if (currentTime < taskStart) {
+    return "UPCOMING";
+  } else if (currentTime >= taskStart && currentTime < taskEnd) {
+    return "ACTIVE";
+  } else if (currentTime >= taskEnd && currentTime < taskExtraEnd) {
+    return "EXTRA_TIME";
+  } else {
+    return "NOT_DONE";
+  }
+};
+
+const getExtraTimeRemaining = (task, currentTime) => {
+  const { taskExtraEnd } = getWorkTaskTimeBounds(task);
+  const diffMs = taskExtraEnd.getTime() - currentTime.getTime();
+  if (diffMs <= 0) return 0;
+  return Math.ceil(diffMs / (60 * 1000));
+};
+
 const AllTasks = () => {
   const dispatch = useDispatch();
   const { customDropdowns = [] } = useSelector((state) => state.setting || {});
@@ -64,10 +109,26 @@ const AllTasks = () => {
   const [imagePreviews, setImagePreviews] = useState({});
   const [extendedDateData, setExtendedDateData] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dateFilter, setDateFilter] = useState("all"); // all, today, overdue, upcoming
   const [dropdownOpen, setDropdownOpen] = useState({ dateFilter: false });
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
   const [lightboxImage, setLightboxImage] = useState(null); // { url, name }
   const [fetchingProgress, setFetchingProgress] = useState(0);
 
@@ -135,6 +196,9 @@ const AllTasks = () => {
 
     setUserRole(role || "");
     setUsername(user || "");
+    if ((role || "").toLowerCase() === "user") {
+      setShowHistory(false);
+    }
   }, []);
 
   // Format date to dd/mm/yyyy
@@ -383,6 +447,7 @@ const AllTasks = () => {
             { id: "name", label: "Employee" },
             { id: "current_date", label: "Date" },
             { id: "duration", label: "Mins" },
+            { id: "status", label: "Status" },
           ];
           break;
         case "checklist":
@@ -409,7 +474,12 @@ const AllTasks = () => {
 
       setTableHeaders(showHistory ? headers.filter(h => h.id !== "time_status") : headers);
 
-      let query = supabase.from(tableName).select("*");
+      let query;
+      if (activeTab === "work") {
+        query = supabase.from(tableName).select("*, task_assignments:assignment_id(start_datetime, end_datetime)");
+      } else {
+        query = supabase.from(tableName).select("*");
+      }
 
       const currentUsername = (username || "");
       const currentUserRole = (userRole || "").toLowerCase();
@@ -456,6 +526,10 @@ const AllTasks = () => {
           if (!isSuperAdmin) {
             query = query.in('doer_name', reportingUsers);
           }
+        } else if (activeTab === "work") {
+          // For work history, we want to retrieve both submitted tasks and unsubmitted tasks from today or past
+          const todayStr = new Date().toISOString().split('T')[0];
+          query = query.or(`submission_date.not.is.null,current_date.lte.${todayStr}`).order('current_date', { ascending: false });
         } else {
           query = query.not(completionField, "is", null).order(completionField, { ascending: false });
         }
@@ -487,6 +561,37 @@ const AllTasks = () => {
         }
       }
 
+      // Apply search across fields directly in the backend query
+      if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
+        const cleanTerm = debouncedSearchTerm.trim();
+        let searchFields = [];
+        
+        switch (activeTab) {
+          case "maintenance":
+            searchFields = ["task_description", "shop", "machine_name", "part_name", "part_area", "name", "given_by"];
+            break;
+          case "repair":
+            searchFields = ["issue_description", "filled_by", "assigned_person", "machine_name", "part_replaced", "vendor_name"];
+            break;
+          case "ea":
+            searchFields = ["task_description", "doer_name", "phone_number"];
+            break;
+          case "work":
+            searchFields = ["task_description", "shop_name", "name"];
+            break;
+          case "checklist":
+          case "delegation":
+          default:
+            searchFields = ["task_description", "shop", "name", "given_by", "task_level"];
+            break;
+        }
+
+        if (searchFields.length > 0) {
+          const orQuery = searchFields.map(f => `${f}.ilike.%${cleanTerm}%`).join(',');
+          query = query.or(orQuery);
+        }
+      }
+
       if (activeTab === "work") {
         const { data, error: fetchError } = await query;
         if (fetchError) throw fetchError;
@@ -497,9 +602,19 @@ const AllTasks = () => {
           shop: item.shop || item.shop_name || "-"
         }));
         if (showHistory) {
-          setHistoryData(mappedData);
+          // Keep tasks that are NOT_DONE or have submission_date not null
+          const historyTasks = mappedData.filter(item => {
+            const ds = getWorkTaskDynamicStatus(item, currentTime);
+            return ds === "NOT_DONE" || item.submission_date;
+          });
+          setHistoryData(historyTasks);
         } else {
-          setTasks(mappedData);
+          // Keep tasks that are NOT NOT_DONE
+          const liveTasks = mappedData.filter(item => {
+            const ds = getWorkTaskDynamicStatus(item, currentTime);
+            return ds !== "NOT_DONE";
+          });
+          setTasks(liveTasks);
         }
         setIsLoading(false);
         return;
@@ -555,7 +670,7 @@ const AllTasks = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [username, userRole, activeTab, showHistory, holidaysList, workingDaysList, searchTerm, dateFilter]);
+  }, [username, userRole, activeTab, showHistory, holidaysList, workingDaysList, debouncedSearchTerm, dateFilter]);
 
   useEffect(() => {
     fetchData();
@@ -1156,21 +1271,23 @@ const AllTasks = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setShowHistory(!showHistory);
-                      setSearchTerm("");
-                      setStartDate("");
-                      setEndDate("");
-                    }}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200/80 rounded-xl hover:bg-gray-50 hover:text-purple-600 transition-all shadow-sm"
-                  >
-                    {showHistory ? (
-                      <><ArrowLeft className="h-4 w-4" /><span>Live</span></>
-                    ) : (
-                      <><History className="h-4 w-4" /><span>History</span></>
-                    )}
-                  </button>
+                  {userRole && userRole.toLowerCase() !== "user" && (
+                    <button
+                      onClick={() => {
+                        setShowHistory(!showHistory);
+                        setSearchTerm("");
+                        setStartDate("");
+                        setEndDate("");
+                      }}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200/80 rounded-xl hover:bg-gray-50 hover:text-purple-600 transition-all shadow-sm"
+                    >
+                      {showHistory ? (
+                        <><ArrowLeft className="h-4 w-4" /><span>Live</span></>
+                      ) : (
+                        <><History className="h-4 w-4" /><span>History</span></>
+                      )}
+                    </button>
+                  )}
 
                   {!showHistory && (
                     <>
@@ -1190,7 +1307,8 @@ const AllTasks = () => {
                               { id: 'overdue', label: 'Overdue' },
                               { id: 'today', label: 'Today' },
                               { id: 'upcoming', label: 'Upcoming' }
-                            ].map((filter) => (
+                            ].filter(f => activeTab !== 'work' || f.id !== 'overdue')
+                            .map((filter) => (
                               <button
                                 key={filter.id}
                                 onClick={() => {
@@ -1364,7 +1482,14 @@ const AllTasks = () => {
                                       type="checkbox"
                                       checked={selectedItems.has(task.id)}
                                       onChange={(e) => handleSelectItem(task.id, e.target.checked)}
-                                      disabled={getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"}
+                                      disabled={
+                                        activeTab === "work"
+                                          ? (() => {
+                                              const ds = getWorkTaskDynamicStatus(task, currentTime);
+                                              return ds === "UPCOMING" || ds === "NOT_DONE";
+                                            })()
+                                          : getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"
+                                      }
                                       className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
                                     />
                                   </td>
@@ -1450,18 +1575,25 @@ const AllTasks = () => {
                                     {tableHeaders.map((header) => (
                                       <td key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 ${header.id === 'task_description' || header.id === 'issue_description' ? 'min-w-[200px] whitespace-normal' : 'whitespace-nowrap'}`}>
                                         {header.id === "time_status"
-                                          ? (
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task[statusDateColumn], task.status) === 'Overdue' ? 'bg-red-100 text-red-800' :
-                                              getTimeStatus(task[statusDateColumn], task.status) === 'Today' ? 'bg-green-100 text-green-800' :
-                                                'bg-blue-100 text-blue-800'}`}>
-                                              {getTimeStatus(task[statusDateColumn], task.status)}
-                                            </span>
-                                          )
+                                          ? activeTab === "work"
+                                            ? (() => {
+                                                const ds = getWorkTaskDynamicStatus(task, currentTime);
+                                                const badgeColors = ds === 'NOT_DONE' ? 'bg-red-50 text-red-500' : ds === 'EXTRA_TIME' ? 'bg-amber-100 text-amber-800 animate-pulse' : ds === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
+                                                const label = ds === 'EXTRA_TIME' ? 'Extra Time' : ds === 'NOT_DONE' ? 'Not Done' : ds === 'ACTIVE' ? 'Active' : 'Upcoming';
+                                                return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${badgeColors}`}>{label}</span>;
+                                              })()
+                                            : (
+                                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task[statusDateColumn], task.status) === 'Overdue' ? 'bg-red-100 text-red-800' :
+                                                getTimeStatus(task[statusDateColumn], task.status) === 'Today' ? 'bg-green-100 text-green-800' :
+                                                  'bg-blue-100 text-blue-800'}`}>
+                                                {getTimeStatus(task[statusDateColumn], task.status)}
+                                              </span>
+                                            )
                                           : header.id === "task_start_date" || header.id === "created_at" || header.id === "planned_date" || header.id === "updated_at" || header.id === "current_date"
                                             ? (
                                               <div className="flex flex-col">
                                                 <span className="font-bold text-gray-900">{formatDate(task[header.id])}</span>
-                                                <span className="text-[11px] text-gray-400">{formatTimeOnly(task[header.id])}</span>
+                                                <span className="text-[11px] text-gray-400">{header.id === "current_date" ? (task.task_assignments?.start_datetime ? formatTimeOnly(task.task_assignments.start_datetime) : "") : formatTimeOnly(task[header.id])}</span>
                                               </div>
                                             )
                                             : (header.id === "id" || header.id === "task_id")
@@ -1482,8 +1614,22 @@ const AllTasks = () => {
                                                     </div>
                                                   )
                                                   : formatDateWithTime(task[header.id])
-                                                : header.id === "status"
-                                                  ? !showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")
+                                                 : header.id === "status"
+                                                   ? activeTab === "work"
+                                                     ? (() => {
+                                                         const ds = getWorkTaskDynamicStatus(task, currentTime);
+                                                         if (ds === "APPROVED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>;
+                                                         if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
+                                                         if (ds === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
+                                                         if (ds === "UPCOMING") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>;
+                                                         if (ds === "EXTRA_TIME") {
+                                                           const minsLeft = getExtraTimeRemaining(task, currentTime);
+                                                           return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800 animate-pulse">Extra Time: {minsLeft} Min Left</span>;
+                                                         }
+                                                         if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
+                                                         return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>;
+                                                       })()
+                                                   : !showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")
                                                     ? (
                                                       <select
                                                         value={statusData[task.id] || task.status || ""}
@@ -1810,7 +1956,7 @@ const AllTasks = () => {
                               <div className="grid grid-cols-2 gap-4 pt-1 border-t border-gray-50">
                                 <div className="space-y-1">
                                   <p className="text-[10px] text-gray-400 uppercase font-semibold">Planned Date</p>
-                                  <p className="text-sm font-bold text-purple-700">{formatDate(task.planned_date || task.task_start_date || task.created_at)}</p>
+                                  <p className="text-sm font-bold text-purple-700">{activeTab === "work" ? (<>{formatDate(task.current_date)}{task.task_assignments?.start_datetime && (<span className="text-xs text-gray-500 font-normal block">{formatTimeOnly(task.task_assignments.start_datetime)}</span>)}</>) : (formatDate(task.planned_date || task.task_start_date || task.created_at))}</p>
                                 </div>
                                 {(task.shop || task.shop_name) && (
                                   <div className="space-y-1">
