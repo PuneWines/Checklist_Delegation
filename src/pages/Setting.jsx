@@ -581,13 +581,22 @@ const Setting = () => {
   // Modified handleAddUser
   const handleAddUser = async (e) => {
     e.preventDefault();
-    // Auto-generate employee_id
-    const generatedEmpId = `EMP-${Date.now().toString().slice(-6)}`;
+    const empId = (userForm.employee_id || '').trim();
+    if (!empId) {
+      showToast("Employee ID is required.", "error");
+      return;
+    }
+
+    const alreadyExists = (userData || []).some(u => u && u.employee_id && u.employee_id.toLowerCase() === empId.toLowerCase());
+    if (alreadyExists) {
+      showToast(`Employee ID "${empId}" already exists.`, "error");
+      return;
+    }
 
     let imageUrl = userForm.profile_image;
     if (profileFile) {
       try {
-        imageUrl = await dispatch(uploadProfileImage({ file: profileFile, userId: generatedEmpId })).unwrap();
+        imageUrl = await dispatch(uploadProfileImage({ file: profileFile, userId: empId })).unwrap();
       } catch (uploadErr) {
         console.error('Image upload failed:', uploadErr);
         showToast("Image upload failed, continuing without image.", "warning");
@@ -596,7 +605,7 @@ const Setting = () => {
 
     const newUser = {
       ...userForm,
-      employee_id: generatedEmpId,
+      employee_id: empId,
       user_access: userForm.user_access || userForm.shop,
       shop_name: userForm.shop,
       profile_image: imageUrl,
@@ -626,11 +635,22 @@ const Setting = () => {
 
   const handleUpdateUser = async (e) => {
     e.preventDefault();
+    const empId = (userForm.employee_id || '').trim();
+    if (!empId) {
+      showToast("Employee ID is required.", "error");
+      return;
+    }
+
+    const alreadyExists = (userData || []).some(u => u && u.id !== currentUserId && u.employee_id && u.employee_id.toLowerCase() === empId.toLowerCase());
+    if (alreadyExists) {
+      showToast(`Employee ID "${empId}" is already taken by another user.`, "error");
+      return;
+    }
 
     let imageUrl = userForm.profile_image;
     if (profileFile) {
       try {
-        imageUrl = await dispatch(uploadProfileImage({ file: profileFile, userId: userForm.employee_id || currentUserId })).unwrap();
+        imageUrl = await dispatch(uploadProfileImage({ file: profileFile, userId: empId || currentUserId })).unwrap();
       } catch (uploadErr) {
         console.error('Image upload failed:', uploadErr);
         showToast("Image upload failed, continuing with previous image.", "warning");
@@ -642,7 +662,7 @@ const Setting = () => {
       password: userForm.password,
       email_id: userForm.email,
       number: userForm.phone,
-      employee_id: userForm.employee_id,
+      employee_id: empId,
       role: userForm.role,
       status: userForm.status,
       user_access: userForm.user_access || userForm.shop,
@@ -2507,19 +2527,19 @@ const Setting = () => {
                       />
                     </div>
 
-                    {isEditing && (
-                      <div className="space-y-2">
-                        <label htmlFor="employee_id" className="block text-sm font-bold text-gray-700 ml-1">Employee ID</label>
-                        <input
-                          type="text"
-                          name="employee_id"
-                          id="employee_id"
-                          value={userForm.employee_id}
-                          readOnly
-                          className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-gray-500 cursor-not-allowed outline-none"
-                        />
-                      </div>
-                    )}
+                    <div className="space-y-2">
+                      <label htmlFor="employee_id" className="block text-sm font-bold text-gray-700 ml-1">Employee ID</label>
+                      <input
+                        type="text"
+                        name="employee_id"
+                        id="employee_id"
+                        value={userForm.employee_id}
+                        onChange={handleUserInputChange}
+                        required
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all font-medium text-gray-800"
+                        placeholder="Enter employee ID"
+                      />
+                    </div>
 
                     <div className="space-y-2">
                       <label htmlFor="role" className="block text-sm font-bold text-gray-700 ml-1">User Role</label>

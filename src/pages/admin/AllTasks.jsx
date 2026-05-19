@@ -120,7 +120,8 @@ const AllTasks = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dateFilter, setDateFilter] = useState("all"); // all, today, overdue, upcoming
-  const [dropdownOpen, setDropdownOpen] = useState({ dateFilter: false });
+  const [workEmployeeFilter, setWorkEmployeeFilter] = useState("all");
+  const [dropdownOpen, setDropdownOpen] = useState({ dateFilter: false, workEmployee: false });
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -592,6 +593,10 @@ const AllTasks = () => {
         }
       }
 
+      if (activeTab === "work" && workEmployeeFilter && workEmployeeFilter !== "all") {
+        query = query.eq('name', workEmployeeFilter);
+      }
+
       if (activeTab === "work") {
         const { data, error: fetchError } = await query;
         if (fetchError) throw fetchError;
@@ -670,7 +675,7 @@ const AllTasks = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [username, userRole, activeTab, showHistory, holidaysList, workingDaysList, debouncedSearchTerm, dateFilter]);
+  }, [username, userRole, activeTab, showHistory, holidaysList, workingDaysList, debouncedSearchTerm, dateFilter, workEmployeeFilter]);
 
   useEffect(() => {
     fetchData();
@@ -1255,6 +1260,7 @@ const AllTasks = () => {
                   setSelectedItems(new Set());
                   setSearchTerm("");
                   setDateFilter("all");
+                  setWorkEmployeeFilter("all");
                 }} />
               </div>
 
@@ -1287,6 +1293,46 @@ const AllTasks = () => {
                         <><History className="h-4 w-4" /><span>History</span></>
                       )}
                     </button>
+                  )}
+
+                  {activeTab === "work" && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setDropdownOpen(prev => ({ ...prev, workEmployee: !prev.workEmployee }))}
+                        className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-sm ${workEmployeeFilter !== 'all' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200'}`}
+                      >
+                        <Users className="h-3.5 w-3.5" />
+                        <span>{workEmployeeFilter === 'all' ? 'All Employees' : workEmployeeFilter}</span>
+                        <ChevronDown size={14} className={`transition-transform ${dropdownOpen?.workEmployee ? 'rotate-180' : ''}`} />
+                      </button>
+                      {dropdownOpen?.workEmployee && (
+                        <div className="absolute z-50 mt-2 w-48 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-y-auto max-h-60 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <button
+                            onClick={() => {
+                              setWorkEmployeeFilter("all");
+                              setSelectedItems(new Set());
+                              setDropdownOpen(prev => ({ ...prev, workEmployee: false }));
+                            }}
+                            className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${workEmployeeFilter === 'all' ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            All Employees
+                          </button>
+                          {allUsers.map((user) => (
+                            <button
+                              key={user}
+                              onClick={() => {
+                                setWorkEmployeeFilter(user);
+                                setSelectedItems(new Set());
+                                setDropdownOpen(prev => ({ ...prev, workEmployee: false }));
+                              }}
+                              className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${workEmployeeFilter === user ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
+                            >
+                              {user}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {!showHistory && (
