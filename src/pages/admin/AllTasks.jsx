@@ -1587,18 +1587,20 @@ const AllTasks = () => {
                                                 </button>
                                               </div>
                                             )}
-                                            <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-purple-600 hover:text-purple-800" : "text-gray-400 cursor-not-allowed"}`}>
-                                              <Upload className="h-3.5 w-3.5" />
-                                              <span>
-                                                {uploadedImages[task.id] ? "Change File" : (task.require_attachment || task.attachment) ? <span>Upload Proof <span className="text-red-500 font-bold">*</span></span> : "Upload Proof"}
-                                              </span>
-                                              <input
-                                                type="file"
-                                                className="hidden"
-                                                onChange={(e) => handleImageUpload(task.id, e)}
-                                                disabled={!selectedItems.has(task.id)}
-                                              />
-                                            </label>
+                                            {activeTab !== "work" && (
+                                              <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-purple-600 hover:text-purple-800" : "text-gray-400 cursor-not-allowed"}`}>
+                                                <Upload className="h-3.5 w-3.5" />
+                                                <span>
+                                                  {uploadedImages[task.id] ? "Change File" : (task.require_attachment || task.attachment) ? <span>Upload Proof <span className="text-red-500 font-bold">*</span></span> : "Upload Proof"}
+                                                </span>
+                                                <input
+                                                  type="file"
+                                                  className="hidden"
+                                                  onChange={(e) => handleImageUpload(task.id, e)}
+                                                  disabled={!selectedItems.has(task.id)}
+                                                />
+                                              </label>
+                                            )}
                                             <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-cyan-500 hover:text-cyan-700" : "text-gray-400 cursor-not-allowed"}`}>
                                               <Camera className="h-3.5 w-3.5" />
                                               <span>
@@ -1607,6 +1609,7 @@ const AllTasks = () => {
                                               <input
                                                 type="file"
                                                 accept="image/*"
+                                                {...(activeTab === "work" ? { capture: "environment" } : {})}
                                                 className="hidden"
                                                 onChange={(e) => handleImageUpload(task.id, e)}
                                                 disabled={!selectedItems.has(task.id)}
@@ -1884,15 +1887,17 @@ const AllTasks = () => {
                                         </div>
                                       )}
                                       <div className="flex gap-2">
-                                        <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-purple-200 bg-purple-50 text-purple-600 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
-                                          <Upload className="h-3.5 w-3.5" />
-                                          <span>{uploadedImages[task.id] ? "Change" : "Upload"}</span>
-                                          <input type="file" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
-                                        </label>
+                                        {activeTab !== "work" && (
+                                          <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-purple-200 bg-purple-50 text-purple-600 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
+                                            <Upload className="h-3.5 w-3.5" />
+                                            <span>{uploadedImages[task.id] ? "Change" : "Upload"}</span>
+                                            <input type="file" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
+                                          </label>
+                                        )}
                                         <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
                                           <Camera className="h-3.5 w-3.5" />
                                           <span>{uploadedImages[task.id] ? "Retake" : "Photo"}</span>
-                                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
+                                          <input type="file" accept="image/*" {...(activeTab === "work" ? { capture: "environment" } : {})} className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
                                         </label>
                                       </div>
                                     </div>
