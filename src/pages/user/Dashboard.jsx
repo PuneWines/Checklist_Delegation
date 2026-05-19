@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Link } from "react-router-dom"
 import { fetchWorkTasksForUserApi } from "../../redux/api/workRecordsApi"
 import { useMagicToast } from "../../context/MagicToastContext"
+import supabase from "../../SupabaseClient"
 import { 
   LayoutGrid, 
   CheckCircle2, 
@@ -27,7 +28,25 @@ const UserDashboard = () => {
   const loadStats = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await fetchWorkTasksForUserApi(currentUsername)
+      const role = (localStorage.getItem("role") || "").toLowerCase()
+      const userAccess = localStorage.getItem("user_access") || ""
+      
+      let data = []
+      if (role === "manager") {
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean)
+        if (managerShops.length > 0) {
+          const { data: tasksData, error } = await supabase
+            .from('work_task')
+            .select('*')
+            .in('shop_name', managerShops)
+            .order('current_date', { ascending: true })
+          
+          if (error) throw error
+          data = tasksData || []
+        }
+      } else {
+        data = await fetchWorkTasksForUserApi(currentUsername)
+      }
       setTasks(data || [])
     } catch (error) {
       console.error("Error loading dashboard stats:", error)
@@ -167,7 +186,10 @@ const UserDashboard = () => {
                       {idx + 1}
                     </div>
                     <div>
-                      <h4 className="font-black text-gray-900 group-hover:text-purple-600 transition-colors">{task.shop_name}</h4>
+                      <h4 className="font-black text-gray-900 group-hover:text-purple-600 transition-colors">
+                        {task.shop_name}
+                        {task.name && <span className="text-xs font-medium text-gray-400 ml-2">({task.name})</span>}
+                      </h4>
                       <p className="text-sm text-gray-500 font-medium line-clamp-1">{task.task_description}</p>
                     </div>
                   </div>

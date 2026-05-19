@@ -415,8 +415,8 @@ const AllTasks = () => {
       const currentUserRole = (userRole || "").toLowerCase();
       const isSuperAdmin = currentUsername.toLowerCase() === "admin";
 
+      let reportingUsers = [currentUsername];
       if (!isSuperAdmin) {
-        let reportingUsers = [currentUsername];
         if (currentUserRole === "admin" || currentUserRole === "hod") {
           const { data: reports } = await supabase
             .from("users")
@@ -425,8 +425,24 @@ const AllTasks = () => {
           if (reports && reports.length > 0) {
             reportingUsers = [currentUsername, ...reports.map((r) => (r.user_name || ""))];
           }
+        } else if (currentUserRole === "manager") {
+          const { data: allDbUsers } = await supabase
+            .from("users")
+            .select("user_name, shop_name, user_access");
+          if (allDbUsers) {
+            const userAccess = localStorage.getItem("user_access") || "";
+            const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+            const matchedUsers = allDbUsers.filter(u => {
+              const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+              const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+              return userShopsList.some(s => managerShops.includes(s));
+            }).map(u => u.user_name || "");
+            reportingUsers = [...new Set([currentUsername, ...matchedUsers])].filter(Boolean);
+          }
         }
+      }
 
+      if (!isSuperAdmin) {
         // Checklist, Maintenance, Repair, EA all have a field for the assigned person
         // Repair uses assigned_person, EA uses doer_name, others use name
         query = query.in(nameField, reportingUsers);
@@ -437,6 +453,9 @@ const AllTasks = () => {
           query = query.not("submission_date", "is", null).order("submission_date", { ascending: false });
         } else if (activeTab === "ea") {
           query = supabase.from("ea_tasks_done").select("*").order("created_at", { ascending: false });
+          if (!isSuperAdmin) {
+            query = query.in('doer_name', reportingUsers);
+          }
         } else {
           query = query.not(completionField, "is", null).order(completionField, { ascending: false });
         }
@@ -446,7 +465,7 @@ const AllTasks = () => {
         } else if (activeTab === "work") {
           query = query.is('submission_date', null).order('current_date', { ascending: true });
           if (!isSuperAdmin) {
-            query = query.eq('name', currentUsername);
+            query = query.in('name', reportingUsers);
           }
         } else if (activeTab === "ea") {
           query = query.in("status", ["pending", "extend", "extended"]).order("task_start_date", { ascending: true });
@@ -471,7 +490,17 @@ const AllTasks = () => {
       if (activeTab === "work") {
         const { data, error: fetchError } = await query;
         if (fetchError) throw fetchError;
-        setTasks(data || []);
+        const mappedData = (data || []).map(item => ({
+          ...item,
+          id: item.id || item.task_id,
+          _table: item._table || tableName,
+          shop: item.shop || item.shop_name || "-"
+        }));
+        if (showHistory) {
+          setHistoryData(mappedData);
+        } else {
+          setTasks(mappedData);
+        }
         setIsLoading(false);
         return;
       }
@@ -1316,7 +1345,7 @@ const AllTasks = () => {
 
                           return (
                             <Fragment key={task.id}>
-                              {showGroupHeader && (
+                              {showGroupHeader && !showHistory && (
                                 <tr className="bg-gray-100/30">
                                   <td colSpan={tableHeaders.length + 6} className="px-4 sm:px-6 py-2">
                                     <div className="flex items-center gap-2">
@@ -1428,7 +1457,7 @@ const AllTasks = () => {
                                               {getTimeStatus(task[statusDateColumn], task.status)}
                                             </span>
                                           )
-                                          : header.id === "task_start_date" || header.id === "created_at" || header.id === "planned_date" || header.id === "updated_at"
+                                          : header.id === "task_start_date" || header.id === "created_at" || header.id === "planned_date" || header.id === "updated_at" || header.id === "current_date"
                                             ? (
                                               <div className="flex flex-col">
                                                 <span className="font-bold text-gray-900">{formatDate(task[header.id])}</span>
@@ -1693,7 +1722,7 @@ const AllTasks = () => {
 
                       return (
                         <Fragment key={task.id}>
-                          {showGroupHeader && (
+                          {showGroupHeader && !showHistory && (
                             <div className="pt-2 pb-1 px-1">
                               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
                                 <div className={`w-1 h-1 rounded-full ${currentStatus === 'Overdue' ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>

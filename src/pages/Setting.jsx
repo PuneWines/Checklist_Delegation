@@ -955,7 +955,35 @@ const Setting = () => {
         defaultAccess = ['Dashboard', 'Announcements', 'Delegation', 'Task', 'Calendar'];
       }
       
-      setUserForm(prev => ({ ...prev, [name]: value, page_access: defaultAccess }));
+      setUserForm(prev => ({ 
+        ...prev, 
+        [name]: value, 
+        page_access: defaultAccess,
+        user_access: roleLower === 'admin' ? 'admin' : (prev.shop || prev.user_access)
+      }));
+    } else if (name === 'shop') {
+      setUserForm(prev => {
+        const oldShop = prev.shop;
+        const oldAccess = prev.user_access || '';
+        
+        let newAccess = value;
+        if (oldAccess && oldShop && oldAccess !== oldShop) {
+          const shopsList = oldAccess.split(',').map(s => s.trim());
+          const index = shopsList.findIndex(s => s.toLowerCase() === oldShop.toLowerCase());
+          if (index !== -1) {
+            shopsList[index] = value;
+            newAccess = shopsList.filter(Boolean).join(', ');
+          } else {
+            newAccess = oldAccess;
+          }
+        }
+        
+        return {
+          ...prev,
+          shop: value,
+          user_access: newAccess
+        };
+      });
     } else {
       setUserForm(prev => ({ ...prev, [name]: value }));
     }

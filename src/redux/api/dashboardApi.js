@@ -51,14 +51,21 @@ export const fetchDashboardDataApi = async (
     }
 
     // Apply shop filter if provided (for checklist and delegation)
-    if (shopFilter && shopFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
-      query = query.eq('shop_name', shopFilter);
+    if (shopFilter && shopFilter !== 'all') {
+      query = query.ilike('shop_name', shopFilter);
+    } else if (role === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || "";
+      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      if (managerShops.length > 0) {
+        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+        query = query.or(orCondition);
+      }
     }
 
 
 
-    // Apply staff filter if provided and not "all" (for admin/HOD users)
-    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD')) {
+    // Apply staff filter if provided and not "all" (for admin/HOD/manager users)
+    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD' || role === 'MANAGER')) {
       query = query.eq('name', staffFilter);
     }
 
@@ -180,13 +187,20 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     }
 
     // Apply staff filter
-    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD')) {
+    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD' || role === 'MANAGER')) {
       query = query.eq('name', staffFilter);
     }
 
-    // Apply shop filter (for checklist and delegation)
-    if (shopFilter && shopFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
-      query = query.eq('shop_name', shopFilter);
+    // Apply shop filter
+    if (shopFilter && shopFilter !== 'all') {
+      query = query.ilike('shop_name', shopFilter);
+    } else if (role === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || "";
+      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      if (managerShops.length > 0) {
+        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+        query = query.or(orCondition);
+      }
     }
 
     // Apply task view filtering
@@ -285,23 +299,62 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
         .lte(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
     }
 
+    const nameField = dashboardType === 'repair' ? 'assigned_person' :
+                      dashboardType === 'ea' ? 'doer_name' : 'name';
+
+    const upperRole = (role || "").toUpperCase();
     // Apply filters
-    if (role === 'user' && username) {
-      query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
+    if (upperRole === 'USER' && username) {
+      query = query.eq(nameField, username);
+    } else if (upperRole === 'HOD' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+      query = query.in(nameField, reportingUsers);
     } else if (staffFilter && staffFilter !== 'all') {
-      query = query.eq('name', staffFilter);
+      query = query.eq(nameField, staffFilter);
     }
 
-    // Apply shop filter (only for checklist)
-    if (shopFilter && shopFilter !== 'all' && dashboardType === 'checklist') {
-      query = query.eq('shop_name', shopFilter);
+    // Apply shop filter
+    if (dashboardType === 'ea') {
+      let targetShops = [];
+      if (shopFilter && shopFilter !== 'all') {
+        targetShops = [shopFilter.toLowerCase()];
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      }
+      
+      if (targetShops.length > 0) {
+        const { data: dbUsers } = await supabase
+          .from("users")
+          .select("user_name, shop_name, user_access");
+        if (dbUsers) {
+          const allowedUsernames = dbUsers.filter(u => {
+            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+            return userShopsList.some(s => targetShops.includes(s));
+          }).map(u => u.user_name || "");
+          if (allowedUsernames.length > 0) {
+            query = query.in('doer_name', allowedUsernames);
+          } else {
+            query = query.eq('doer_name', 'none');
+          }
+        }
+      }
+    } else {
+      if (shopFilter && shopFilter !== 'all') {
+        query = query.ilike('shop_name', shopFilter);
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          query = query.or(orCondition);
+        }
+      }
     }
 
     const { count, error } = await query;
@@ -366,6 +419,9 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
     const lastDayOfMonth = new Date(year, month, 0).getDate();
     const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
 
+    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+
     console.log('Date range for filtering:', {
       startDate,
       endDate,
@@ -375,8 +431,8 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
       selectedMonth
     });
 
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
-                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+    const nameField = dashboardType === 'repair' ? 'assigned_person' :
+                      dashboardType === 'ea' ? 'doer_name' : 'name';
 
     // Build the query
     let query = supabase
@@ -387,28 +443,63 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
       .select('*')
       .gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
-      .not('name', 'is', null);
+      .not(nameField, 'is', null);
 
     // Apply role-based filtering
     if (role === 'USER' && username) {
-      query = query.eq('name', username);
+      query = query.eq(nameField, username);
     } else if (role === 'HOD' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+      query = query.in(nameField, reportingUsers);
     }
 
     // Apply staff filter if provided
-    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD')) {
-      query = query.eq('name', staffFilter);
+    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD' || role === 'MANAGER')) {
+      query = query.eq(nameField, staffFilter);
     }
 
-    // Apply shop filter if provided
-    if (shopFilter && shopFilter !== 'all') {
-      query = query.eq('shop_name', shopFilter);
+    // Apply shop filter
+    if (dashboardType === 'ea') {
+      let targetShops = [];
+      if (shopFilter && shopFilter !== 'all') {
+        targetShops = [shopFilter.toLowerCase()];
+      } else if (role === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      }
+      
+      if (targetShops.length > 0) {
+        const { data: dbUsers } = await supabase
+          .from("users")
+          .select("user_name, shop_name, user_access");
+        if (dbUsers) {
+          const allowedUsernames = dbUsers.filter(u => {
+            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+            return userShopsList.some(s => targetShops.includes(s));
+          }).map(u => u.user_name || "");
+          if (allowedUsernames.length > 0) {
+            query = query.in('doer_name', allowedUsernames);
+          } else {
+            query = query.eq('doer_name', 'none');
+          }
+        }
+      }
+    } else {
+      if (shopFilter && shopFilter !== 'all') {
+        query = query.ilike('shop_name', shopFilter);
+      } else if (role === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          query = query.or(orCondition);
+        }
+      }
     }
 
     const { data: tasksData, error } = await query;
@@ -424,12 +515,14 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
     const summary = {};
 
     tasksData.forEach(task => {
-      const key = `${((task.shop || task.shop_name) || (task.shop || task.shop_name))}-${task.name}`;
+      const shopVal = task.shop || task.shop_name || (dashboardType === 'ea' ? 'EA' : 'No Shop');
+      const nameVal = task.name || task.assigned_person || task.doer_name || 'Unnamed Staff';
+      const key = `${shopVal}-${nameVal}`;
 
       if (!summary[key]) {
         summary[key] = {
-          shop: ((task.shop || task.shop_name) || (task.shop || task.shop_name)),
-          name: task.name,
+          shop: shopVal,
+          name: nameVal,
           total_tasks: 0,
           total_completed_tasks: 0,
           total_done_on_time: 0
@@ -470,7 +563,7 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
     });
 
     // Fetch user images for the staff found
-    const uniqueNames = [...new Set(tasksData.map(t => t.name).filter(Boolean))];
+    const uniqueNames = [...new Set(tasksData.map(t => t.name || t.assigned_person || t.doer_name).filter(Boolean))];
     let userImageMap = {};
 
     if (uniqueNames.length > 0) {
@@ -552,36 +645,76 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, s
     const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
                        (dashboardType === 'work') ? 'current_date' : 'created_at';
 
+    const nameField = dashboardType === 'repair' ? 'assigned_person' :
+                      dashboardType === 'ea' ? 'doer_name' : 'name';
+    const selectFields = dashboardType === 'ea' ? 'doer_name' :
+                         dashboardType === 'repair' ? 'shop_name, assigned_person' : 'shop_name, name';
+
     let query = supabase
       .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
           dashboardType === 'ea' ? 'ea_tasks' : 
           dashboardType === 'work' ? 'work_task' : dashboardType)
-      .select('shop_name, name')
+      .select(selectFields)
       .gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
-      .not('name', 'is', null);
+      .not(nameField, 'is', null);
 
     // Apply role-based filtering
     if (role === 'USER' && username) {
-      query = query.eq('name', username);
+      query = query.eq(nameField, username);
     } else if (role === 'HOD' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+      query = query.in(nameField, reportingUsers);
     }
 
     // Apply staff filter
-    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD')) {
-      query = query.eq('name', staffFilter);
+    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD' || role === 'MANAGER')) {
+      query = query.eq(nameField, staffFilter);
     }
 
     // Apply shop filter
-    if (shopFilter && shopFilter !== 'all') {
-      query = query.eq('shop_name', shopFilter);
+    if (dashboardType === 'ea') {
+      let targetShops = [];
+      if (shopFilter && shopFilter !== 'all') {
+        targetShops = [shopFilter.toLowerCase()];
+      } else if (role === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      }
+      
+      if (targetShops.length > 0) {
+        const { data: dbUsers } = await supabase
+          .from("users")
+          .select("user_name, shop_name, user_access");
+        if (dbUsers) {
+          const allowedUsernames = dbUsers.filter(u => {
+            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+            return userShopsList.some(s => targetShops.includes(s));
+          }).map(u => u.user_name || "");
+          if (allowedUsernames.length > 0) {
+            query = query.in('doer_name', allowedUsernames);
+          } else {
+            query = query.eq('doer_name', 'none');
+          }
+        }
+      }
+    } else {
+      if (shopFilter && shopFilter !== 'all') {
+        query = query.ilike('shop_name', shopFilter);
+      } else if (role === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          query = query.or(orCondition);
+        }
+      }
     }
 
     const { data, error } = await query;
@@ -592,7 +725,11 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, s
     }
 
     // Count unique staff names
-    const uniqueStaff = new Set(data.map(item => `${((item.shop || item.shop_name) || (item.shop || item.shop_name))}-${item.name}`));
+    const uniqueStaff = new Set(data.map(item => {
+      const shopVal = item.shop || item.shop_name || (dashboardType === 'ea' ? 'EA' : 'No Shop');
+      const nameVal = item.name || item.assigned_person || item.doer_name || 'Unnamed Staff';
+      return `${shopVal}-${nameVal}`;
+    }));
     console.log(`Total unique staff count for ${month}/${year}: ${uniqueStaff.size}`);
     return uniqueStaff.size;
 
@@ -639,7 +776,14 @@ export const getTotalUsersCountApi = async (shopFilter = null) => {
 
     // Apply shop filter if provided and not "all"
     if (shopFilter && shopFilter !== 'all') {
-      query = query.eq('shop_name', shopFilter);
+      query = query.ilike('shop_name', shopFilter);
+    } else if (role === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || "";
+      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      if (managerShops.length > 0) {
+        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+        query = query.or(orCondition);
+      }
     }
 
     const { count, error } = await query;
@@ -677,7 +821,7 @@ export const getUniqueShopsApi = async () => {
 
     let shops = (data || []).map(d => d.shop_name.trim()).filter(Boolean);
 
-    if (role === 'HOD' && userAccess && userAccess !== 'all') {
+    if ((role === 'HOD' || role === 'manager') && userAccess && userAccess !== 'all') {
       const allowedShops = userAccess.split(',').map(d => d.trim().toLowerCase());
       shops = shops.filter(d => allowedShops.includes(d.toLowerCase()));
     }
@@ -716,6 +860,17 @@ export const getStaffNamesByShopApi = async (shopFilter = null) => {
     // Filter by HOD reports if applicable
     if (role === 'HOD' && username) {
       staff = staff.filter(user => user.reported_by === username || user.user_name === username);
+    }
+
+    // Filter by Manager shop if applicable
+    if (role === 'manager') {
+      const userAccess = localStorage.getItem('user_access') || "";
+      const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      staff = staff.filter(user => {
+        const userShop = (user.shop_name || user.user_access || "").toLowerCase();
+        const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+        return userShopsList.some(s => managerShops.includes(s));
+      });
     }
 
     // Filter by shop if provided
@@ -786,18 +941,26 @@ export const fetchChecklistDataByDateRangeApi = async (
       query = query.lte(dateColumn, `${endDate}T23:59:59`);
     }
 
+    const upperRole = (role || "").toUpperCase();
     // Apply role-based filtering
-    if (role === 'user' && username) {
+    if (upperRole === 'USER' && username) {
       query = query.eq('name', username);
     }
 
     // Apply shop filter
     if (shopFilter && shopFilter !== 'all') {
-      query = query.eq('shop_name', shopFilter);
+      query = query.ilike('shop_name', shopFilter);
+    } else if (upperRole === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || "";
+      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      if (managerShops.length > 0) {
+        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+        query = query.or(orCondition);
+      }
     }
 
     // Apply staff filter (for admin users)
-    if (staffFilter && staffFilter !== 'all' && role === 'admin') {
+    if (staffFilter && staffFilter !== 'all' && (upperRole === 'ADMIN' || upperRole === 'MANAGER')) {
       query = query.eq('name', staffFilter);
     }
 
@@ -873,18 +1036,26 @@ export const getChecklistDateRangeCountApi = async (
       query = query.lte(dateColumn, `${endDate}T23:59:59`);
     }
 
+    const upperRole = (role || "").toUpperCase();
     // Apply role-based filtering
-    if (role === 'user' && username) {
+    if (upperRole === 'USER' && username) {
       query = query.eq('name', username);
     }
 
     // Apply shop filter
     if (shopFilter && shopFilter !== 'all') {
-      query = query.eq('shop_name', shopFilter);
+      query = query.ilike('shop_name', shopFilter);
+    } else if (upperRole === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || "";
+      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      if (managerShops.length > 0) {
+        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+        query = query.or(orCondition);
+      }
     }
 
     // Apply staff filter
-    if (staffFilter && staffFilter !== 'all' && role === 'admin') {
+    if (staffFilter && staffFilter !== 'all' && (upperRole === 'ADMIN' || upperRole === 'MANAGER')) {
       query = query.eq('name', staffFilter);
     }
 
@@ -957,18 +1128,26 @@ export const getChecklistDateRangeStatsApi = async (
         .lte(dateColumn, `${endDate}T23:59:59`);
     }
 
+    const upperRole = (role || "").toUpperCase();
     // Apply role-based filtering
-    if (role === 'user' && username) {
+    if (upperRole === 'USER' && username) {
       totalQuery = totalQuery.eq('name', username);
     }
 
     // Apply shop filter
     if (shopFilter && shopFilter !== 'all') {
-      totalQuery = totalQuery.eq('shop_name', shopFilter);
+      totalQuery = totalQuery.ilike('shop_name', shopFilter);
+    } else if (upperRole === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || "";
+      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      if (managerShops.length > 0) {
+        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+        totalQuery = totalQuery.or(orCondition);
+      }
     }
 
     // Apply staff filter
-    if (staffFilter && staffFilter !== 'all' && role === 'admin') {
+    if (staffFilter && staffFilter !== 'all' && (upperRole === 'ADMIN' || upperRole === 'MANAGER')) {
       totalQuery = totalQuery.eq('name', staffFilter);
     }
 
@@ -993,13 +1172,20 @@ export const getChecklistDateRangeStatsApi = async (
         .gte('planned_date', `${startDate}T00:00:00`)
         .lte('planned_date', `${endDate}T23:59:59`);
     }
-    if (role === 'user' && username) {
+    if (upperRole === 'USER' && username) {
       completedQuery = completedQuery.eq('name', username);
     }
     if (shopFilter && shopFilter !== 'all') {
-      completedQuery = completedQuery.eq('shop_name', shopFilter);
+      completedQuery = completedQuery.ilike('shop_name', shopFilter);
+    } else if (upperRole === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || "";
+      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      if (managerShops.length > 0) {
+        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+        completedQuery = completedQuery.or(orCondition);
+      }
     }
-    if (staffFilter && staffFilter !== 'all' && role === 'admin') {
+    if (staffFilter && staffFilter !== 'all' && (upperRole === 'ADMIN' || upperRole === 'MANAGER')) {
       completedQuery = completedQuery.eq('name', staffFilter);
     }
 
@@ -1028,13 +1214,20 @@ export const getChecklistDateRangeStatsApi = async (
         .gte('planned_date', `${startDate}T00:00:00`)
         .lte('planned_date', `${endDate}T23:59:59`);
     }
-    if (role === 'user' && username) {
+    if (upperRole === 'USER' && username) {
       overdueQuery = overdueQuery.eq('name', username);
     }
     if (shopFilter && shopFilter !== 'all') {
-      overdueQuery = overdueQuery.eq('shop_name', shopFilter);
+      overdueQuery = overdueQuery.ilike('shop_name', shopFilter);
+    } else if (upperRole === 'MANAGER') {
+      const userAccess = localStorage.getItem('user_access') || "";
+      const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+      if (managerShops.length > 0) {
+        const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+        overdueQuery = overdueQuery.or(orCondition);
+      }
     }
-    if (staffFilter && staffFilter !== 'all' && role === 'admin') {
+    if (staffFilter && staffFilter !== 'all' && (upperRole === 'ADMIN' || upperRole === 'MANAGER')) {
       overdueQuery = overdueQuery.eq('name', staffFilter);
     }
 
@@ -1187,24 +1380,62 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
       .gte(dateColumn, (dashboardType === 'work' ? (startDate || defaultStart.split('T')[0]) : start))
       .lte(dateColumn, (dashboardType === 'work' ? (endDate || defaultEnd.split('T')[0]) : end));
 
+    const nameField = dashboardType === 'repair' ? 'assigned_person' :
+                      dashboardType === 'ea' ? 'doer_name' : 'name';
+
     // Apply filters
     const upperRole = (role || "").toUpperCase();
     if (upperRole === 'USER' && username) {
-      query = query.eq('name', username);
+      query = query.eq(nameField, username);
     } else if (upperRole === 'HOD' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+      query = query.in(nameField, reportingUsers);
     } else if (staffFilter && staffFilter !== 'all') {
-      query = query.eq('name', staffFilter);
+      query = query.eq(nameField, staffFilter);
     }
 
     // Apply shop filter
-    if (shopFilter && shopFilter !== 'all') {
-      query = query.eq('shop_name', shopFilter);
+    if (dashboardType === 'ea') {
+      let targetShops = [];
+      if (shopFilter && shopFilter !== 'all') {
+        targetShops = [shopFilter.toLowerCase()];
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      }
+      
+      if (targetShops.length > 0) {
+        const { data: dbUsers } = await supabase
+          .from("users")
+          .select("user_name, shop_name, user_access");
+        if (dbUsers) {
+          const allowedUsernames = dbUsers.filter(u => {
+            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+            return userShopsList.some(s => targetShops.includes(s));
+          }).map(u => u.user_name || "");
+          if (allowedUsernames.length > 0) {
+            query = query.in('doer_name', allowedUsernames);
+          } else {
+            query = query.eq('doer_name', 'none');
+          }
+        }
+      }
+    } else {
+      if (shopFilter && shopFilter !== 'all') {
+        query = query.ilike('shop_name', shopFilter);
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          query = query.or(orCondition);
+        }
+      }
     }
 
     const { count, error } = await query;
@@ -1268,23 +1499,62 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
       }
     }
 
+    const nameField = dashboardType === 'repair' ? 'assigned_person' :
+                      dashboardType === 'ea' ? 'doer_name' : 'name';
+
+    const upperRole = (role || "").toUpperCase();
     // Apply filters
-    if (role === 'user' && username) {
-      query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
+    if (upperRole === 'USER' && username) {
+      query = query.eq(nameField, username);
+    } else if (upperRole === 'HOD' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+      query = query.in(nameField, reportingUsers);
     } else if (staffFilter && staffFilter !== 'all') {
-      query = query.eq('name', staffFilter);
+      query = query.eq(nameField, staffFilter);
     }
 
     // Apply shop filter
-    if (shopFilter && shopFilter !== 'all') {
-      query = query.eq('shop_name', shopFilter);
+    if (dashboardType === 'ea') {
+      let targetShops = [];
+      if (shopFilter && shopFilter !== 'all') {
+        targetShops = [shopFilter.toLowerCase()];
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      }
+      
+      if (targetShops.length > 0) {
+        const { data: dbUsers } = await supabase
+          .from("users")
+          .select("user_name, shop_name, user_access");
+        if (dbUsers) {
+          const allowedUsernames = dbUsers.filter(u => {
+            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+            return userShopsList.some(s => targetShops.includes(s));
+          }).map(u => u.user_name || "");
+          if (allowedUsernames.length > 0) {
+            query = query.in('doer_name', allowedUsernames);
+          } else {
+            query = query.eq('doer_name', 'none');
+          }
+        }
+      }
+    } else {
+      if (shopFilter && shopFilter !== 'all') {
+        query = query.ilike('shop_name', shopFilter);
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          query = query.or(orCondition);
+        }
+      }
     }
 
     const { count, error } = await query;
@@ -1342,23 +1612,62 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
         .gte(dateColumn, (dashboardType === 'work' ? start.split('T')[0] : start));
     }
 
+    const nameField = dashboardType === 'repair' ? 'assigned_person' :
+                      dashboardType === 'ea' ? 'doer_name' : 'name';
+
+    const upperRole = (role || "").toUpperCase();
     // Apply filters
-    if (role === 'user' && username) {
-      query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
+    if (upperRole === 'USER' && username) {
+      query = query.eq(nameField, username);
+    } else if (upperRole === 'HOD' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+      query = query.in(nameField, reportingUsers);
     } else if (staffFilter && staffFilter !== 'all') {
-      query = query.eq('name', staffFilter);
+      query = query.eq(nameField, staffFilter);
     }
 
-    // Apply shop filter (only for checklist)
-    if (shopFilter && shopFilter !== 'all' && dashboardType === 'checklist') {
-      query = query.eq('shop_name', shopFilter);
+    // Apply shop filter
+    if (dashboardType === 'ea') {
+      let targetShops = [];
+      if (shopFilter && shopFilter !== 'all') {
+        targetShops = [shopFilter.toLowerCase()];
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      }
+      
+      if (targetShops.length > 0) {
+        const { data: dbUsers } = await supabase
+          .from("users")
+          .select("user_name, shop_name, user_access");
+        if (dbUsers) {
+          const allowedUsernames = dbUsers.filter(u => {
+            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+            return userShopsList.some(s => targetShops.includes(s));
+          }).map(u => u.user_name || "");
+          if (allowedUsernames.length > 0) {
+            query = query.in('doer_name', allowedUsernames);
+          } else {
+            query = query.eq('doer_name', 'none');
+          }
+        }
+      }
+    } else {
+      if (shopFilter && shopFilter !== 'all') {
+        query = query.ilike('shop_name', shopFilter);
+      } else if (upperRole === 'MANAGER') {
+        const userAccess = localStorage.getItem('user_access') || "";
+        const managerShops = userAccess.split(',').map(s => s.trim()).filter(Boolean);
+        if (managerShops.length > 0) {
+          const orCondition = managerShops.map(shop => `shop_name.ilike."${shop}"`).join(',');
+          query = query.or(orCondition);
+        }
+      }
     }
 
     const { count, error } = await query;

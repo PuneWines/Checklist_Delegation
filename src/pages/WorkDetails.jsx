@@ -23,6 +23,54 @@ import { useMagicToast } from "../context/MagicToastContext";
 import { generateWorkTasksApi, resetWorkTasksApi } from "../redux/api/workRecordsApi";
 import { sendTaskAssignmentNotification } from "../services/whatsappService";
 
+const getTaskStatusInfo = (item, isModified) => {
+  if (isModified) {
+    return {
+      text: "Pending Save",
+      className: "bg-amber-50 text-amber-700 border-amber-200",
+      dotClass: "bg-amber-500 animate-pulse"
+    };
+  }
+  
+  if (!item.assignmentId) {
+    return {
+      text: "Available",
+      className: "bg-green-50 text-green-700 border-green-200",
+      dotClass: "bg-green-500"
+    };
+  }
+
+  if (item.status === 'GENERATED') {
+    return {
+      text: "Generated & Running",
+      className: "bg-indigo-50 text-indigo-700 border-indigo-200",
+      dotClass: "bg-indigo-500 animate-pulse"
+    };
+  }
+
+  if (item.status === 'LOCKED') {
+    return {
+      text: "Locked",
+      className: "bg-blue-50 text-blue-700 border-blue-200",
+      dotClass: "bg-blue-500"
+    };
+  }
+
+  if (item.status === 'ACTIVE') {
+    return {
+      text: "Active (Editable)",
+      className: "bg-purple-50 text-purple-700 border-purple-200",
+      dotClass: "bg-purple-500"
+    };
+  }
+
+  return {
+    text: item.status || "Assigned",
+    className: "bg-gray-50 text-gray-700 border-gray-200",
+    dotClass: "bg-gray-500"
+  };
+};
+
 export default function WorkDetails() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -37,6 +85,23 @@ export default function WorkDetails() {
   const isSuperAdmin = username === "admin";
   const isAdmin = isSuperAdmin || role === "admin";
   const isHOD = role === "hod" || role === "manager";
+
+  const userAccess = localStorage.getItem("user_access") || "";
+  const managerShops = useMemo(() => {
+    return userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  }, [userAccess]);
+
+  // Filtered Users list based on manager role and shop access
+  const filteredUserData = useMemo(() => {
+    if (role === "manager") {
+      return userData.filter(u => {
+        const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+        const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+        return userShopsList.some(s => managerShops.includes(s));
+      });
+    }
+    return userData;
+  }, [userData, role, managerShops]);
 
   // Filter & UI States
   const [searchTerm, setSearchTerm] = useState("");
@@ -67,9 +132,12 @@ export default function WorkDetails() {
 
   // Derived Shops List
   const shops = useMemo(() => {
-    const s = new Set(masterTasks.map(t => t.shop?.shop_name).filter(Boolean));
+    const filteredMasterTasks = role === "manager"
+      ? masterTasks.filter(t => managerShops.includes(t.shop?.shop_name?.toLowerCase()))
+      : masterTasks;
+    const s = new Set(filteredMasterTasks.map(t => t.shop?.shop_name).filter(Boolean));
     return ["All", ...Array.from(s)];
-  }, [masterTasks]);
+  }, [masterTasks, role, managerShops]);
   
   // Background Cleanup: Archive & Delete expired assignments from DB
   useEffect(() => {
@@ -152,13 +220,16 @@ export default function WorkDetails() {
   // Filtering
   const filteredTasks = useMemo(() => {
     return mergedData.filter(item => {
+      if (role === "manager" && !managerShops.includes(item.shopName?.toLowerCase())) {
+        return false;
+      }
       const matchesShop = selectedShop === "All" || item.shopName === selectedShop;
       const matchesSearch = item.task_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           item.manager_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           item.employee_name?.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesShop && matchesSearch;
     });
-  }, [mergedData, selectedShop, searchTerm]);
+  }, [mergedData, selectedShop, searchTerm, role, managerShops]);
 
   // Handlers
   const handleSelectRow = (id) => {
@@ -598,23 +669,15 @@ export default function WorkDetails() {
                         <span className="text-[11px] font-bold text-gray-700 leading-tight">
                           {item.task_name}
                         </span>
-                        {isActive && (
-                          <span className={`text-[8px] font-black uppercase tracking-widest mt-0.5 flex items-center gap-1 ${
-                            item.status === 'LOCKED' ? 'text-amber-600' : 
-                            item.status === 'GENERATED' ? 'text-indigo-600' : 'text-emerald-600'
-                          }`}>
-                            <div className={`w-1 h-1 rounded-full ${
-                              item.status === 'LOCKED' ? 'bg-amber-500' : 
-                              item.status === 'GENERATED' ? 'bg-indigo-500 animate-pulse' : 'bg-emerald-500 animate-ping'
-                            }`} /> 
-                            {item.status || 'Assigned'}
-                          </span>
-                        )}
-                        {isModified && (
-                          <span className="text-[8px] text-amber-600 font-black uppercase tracking-widest mt-0.5 flex items-center gap-1">
-                            <div className="w-1 h-1 bg-amber-500 rounded-full" /> Pending
-                          </span>
-                        )}
+                        {(() => {
+                          const statusInfo = getTaskStatusInfo(item, isModified);
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider mt-1 w-fit ${statusInfo.className}`}>
+                              <span className={`w-1 h-1 rounded-full ${statusInfo.dotClass}`} />
+                              {statusInfo.text}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="px-2 py-3">
@@ -682,7 +745,7 @@ export default function WorkDetails() {
                           <div className={`absolute z-50 left-0 right-0 bg-white border border-gray-100 rounded-lg shadow-2xl max-h-40 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-300 ${
                             index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"
                           }`}>
-                            {userData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
+                            {filteredUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
                               <button 
                                 key={user.id}
                                 className="w-full text-left px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-blue-50 flex items-center justify-between transition-colors border-b border-gray-50 last:border-0"
@@ -759,7 +822,7 @@ export default function WorkDetails() {
                               <div className={`absolute z-50 left-0 right-0 bg-white border border-gray-100 rounded-lg shadow-2xl max-h-40 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-300 ${
                                 index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"
                               }`}>
-                                {userData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
+                                {filteredUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
                                   const isSelected = item.employee_name?.split(',').map(e => e.trim()).filter(Boolean).includes(user.user_name);
                                   return (
                                     <button 
@@ -837,23 +900,15 @@ export default function WorkDetails() {
                       <Clock size={10} />
                       <span>{item.estimated_minutes || "--"} Mins</span>
                     </div>
-                    {isActive && (
-                      <span className={`text-[8px] font-black uppercase tracking-widest flex items-center gap-1 ${
-                        item.status === 'LOCKED' ? 'text-amber-600' : 
-                        item.status === 'GENERATED' ? 'text-indigo-600' : 'text-emerald-600'
-                      }`}>
-                        <div className={`w-1 h-1 rounded-full ${
-                          item.status === 'LOCKED' ? 'bg-amber-500' : 
-                          item.status === 'GENERATED' ? 'bg-indigo-500 animate-pulse' : 'bg-emerald-500 animate-ping'
-                        }`} /> 
-                        {item.status || 'Assigned'}
-                      </span>
-                    )}
-                    {isModified && (
-                      <span className="text-[8px] text-amber-600 font-black uppercase tracking-widest flex items-center gap-1">
-                        <div className="w-1 h-1 bg-amber-500 rounded-full" /> Pending
-                      </span>
-                    )}
+                    {(() => {
+                      const statusInfo = getTaskStatusInfo(item, isModified);
+                      return (
+                        <span className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider mt-1 w-fit ${statusInfo.className}`}>
+                          <span className={`w-1 h-1 rounded-full ${statusInfo.dotClass}`} />
+                          {statusInfo.text}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -926,7 +981,7 @@ export default function WorkDetails() {
                       />
                       {searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
                         <div className="absolute z-50 left-0 right-0 bg-white border border-gray-150 rounded-lg shadow-2xl max-h-40 overflow-y-auto mt-1">
-                          {userData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
+                          {filteredUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
                             <button 
                               key={user.id}
                               type="button"
@@ -1006,7 +1061,7 @@ export default function WorkDetails() {
                           
                           {searchDropdown.type === "employee" && searchDropdown.id === item.taskId && (
                             <div className="absolute z-50 left-0 right-0 bg-white border border-gray-150 rounded-lg shadow-2xl max-h-40 overflow-y-auto mt-1 top-full">
-                              {userData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
+                              {filteredUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
                                 const isSelected = item.employee_name?.split(',').map(e => e.trim()).filter(Boolean).includes(user.user_name);
                                 return (
                                   <button 
