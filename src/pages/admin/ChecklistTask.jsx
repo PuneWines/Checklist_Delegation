@@ -176,8 +176,8 @@ function TaskCard({ task, index, total, shops, doerName, givenBy, levels, dispat
                                     task_level: ""
                                 });
                             }}
-                            disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin"))}
-                            className={`w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm ${(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD")}
+                            className={`w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm ${(localStorage.getItem("role")?.toUpperCase() === "HOD") ? 'opacity-70 cursor-not-allowed' : ''}`}
                         >
                             <option value="">Select Assign From</option>
                             {givenBy.map((g, i) => <option key={i} value={g}>{g}</option>)}
@@ -469,7 +469,7 @@ export default function ChecklistTask() {
     const [tasks, setTasks] = useState([
         {
             ...defaultTask(),
-            givenBy: (localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? localStorage.getItem("user-name") : ""
+            givenBy: (localStorage.getItem("role")?.toUpperCase() === "HOD") ? localStorage.getItem("user-name") : ""
         }
     ]);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -533,7 +533,7 @@ export default function ChecklistTask() {
             ...defaultTask(),
             shop: selectedShop || lastTask?.shop || "",
             task_level: selectedLevel || lastTask?.task_level || "",
-            givenBy: (localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? localStorage.getItem("user-name") : (lastTask?.givenBy || ""),
+            givenBy: (localStorage.getItem("role")?.toUpperCase() === "HOD") ? localStorage.getItem("user-name") : (lastTask?.givenBy || ""),
             doer: lastTask?.doer || ""
         }];
     });

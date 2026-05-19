@@ -30,7 +30,7 @@ const defaultTask = () => ({
     id: Date.now() + Math.random(),
     doer_name: "",
     phone_number: "",
-    given_by: (localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? localStorage.getItem("user-name") : "",
+    given_by: (localStorage.getItem("role")?.toUpperCase() === "HOD") ? localStorage.getItem("user-name") : "",
     planned_date: "",
     planned_time: "09:00",
     task_description: "",
@@ -162,8 +162,8 @@ function TaskCard({ task, index, total, allDoers, allAssignFrom, onUpdate, onRem
                             onUpdate(task.id, { givenBySuggestions: filtered, showGivenBySuggestions: true });
                         }}
                         onBlur={() => setTimeout(() => onUpdate(task.id, { showGivenBySuggestions: false }), 200)}
-                        disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin"))}
-                        className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD")}
+                        className={`w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm ${(localStorage.getItem("role")?.toUpperCase() === "HOD") ? 'opacity-70 cursor-not-allowed' : ''}`}
                         placeholder="Enter assigner name"
                         autoComplete="off"
                     />
