@@ -179,57 +179,10 @@ export default function WorkDetails() {
   
   // Background Cleanup: Archive & Delete expired assignments from DB
   useEffect(() => {
-    if (assignments.length > 0) {
-      const expiredAssignments = assignments.filter(a => {
-        if (!a.end_datetime) return false;
-        const endTime = new Date(a.end_datetime);
-        return endTime < currentTime;
-      });
-
-      if (expiredAssignments.length > 0) {
-        console.log("🕒 Detected expired tasks for archiving:", expiredAssignments.length);
-        const archiveAndCleanup = async () => {
-          try {
-            // 1. Prepare history records
-            const historyRecords = expiredAssignments.map(a => ({
-              task_id: a.task_id,
-              start_datetime: a.start_datetime,
-              end_datetime: a.end_datetime,
-              manager_name: a.manager_name,
-              employee_name: a.employee_name,
-              completed_at: new Date().toISOString()
-            }));
-
-            // 2. Insert into history
-            const { error: histError } = await supabase
-              .from('task_assignment_history')
-              .insert(historyRecords);
-
-            if (histError) {
-              console.error("❌ History Archive Error:", histError);
-              throw histError;
-            }
-
-            // 3. Delete from active assignments
-            const { error: delError } = await supabase
-              .from('task_assignments')
-              .delete()
-              .in('id', expiredAssignments.map(a => a.id));
-            
-            if (delError) {
-              console.error("❌ Cleanup Delete Error:", delError);
-            } else {
-              console.log(`✅ Archived and cleaned up ${expiredAssignments.length} expired assignments.`);
-              // Re-fetch to update the UI after DB changes
-              dispatch(fetchWorkRecords());
-            }
-          } catch (err) {
-            console.error("Failed to archive/cleanup expired assignments:", err);
-          }
-        };
-        archiveAndCleanup();
-      }
-    }
+    // Auto-archive of expired assignments is temporarily disabled.
+    // Reason: remove the automatic expiry/penalty mechanism per product request.
+    // If/when needed again, restore the implementation below.
+    return;
   }, [assignments, currentTime, dispatch]);
 
   // Merge Master Tasks and Current Assignments
@@ -295,10 +248,6 @@ export default function WorkDetails() {
   };
 
   const handleFieldChange = (taskId, field, value) => {
-    if (!isAdmin && (field === "start_datetime" || field === "end_datetime")) {
-      return;
-    }
-
     setModifiedRows(prev => ({
       ...prev,
       [taskId]: {
@@ -321,8 +270,8 @@ export default function WorkDetails() {
   };
 
   const applyBulkDates = () => {
-    if (!isAdmin) {
-      showToast("Only admin can update task dates", "error");
+    if (!(isAdmin || isHOD)) {
+      showToast("Only admins and managers can update task dates", "error");
       return;
     }
 
@@ -354,9 +303,17 @@ export default function WorkDetails() {
   };
 
   const validateAssignment = (data) => {
-    if (!hasCompleteDateTime(data.start_datetime) || !hasCompleteDateTime(data.end_datetime)) {
-      return "Start and End dates with time are required";
+    const startDateExists = Boolean(getDatePart(data.start_datetime));
+    const endDateExists = Boolean(getDatePart(data.end_datetime));
+
+    if (!startDateExists || !endDateExists) {
+      return "Start and End dates are required";
     }
+
+    if (isAdmin && (!hasCompleteDateTime(data.start_datetime) || !hasCompleteDateTime(data.end_datetime))) {
+      return "Start and End dates with time are required for admin updates";
+    }
+
     if (new Date(data.start_datetime) >= new Date(data.end_datetime)) return "Start date must be before End date";
     if (!data.manager_name || !data.employee_name) return "Manager and Employee names are required";
     return null;
@@ -373,6 +330,41 @@ export default function WorkDetails() {
       return;
     }
 
+    const pendingBulkUpdates = {};
+    if ((isAdmin || isHOD) && (bulkStartDate || bulkEndDate)) {
+      allIdsToProcess.forEach(id => {
+        const task = mergedData.find(t => t.taskId === id);
+        if (!task) return;
+        const existingChanges = modifiedRows[id] || {};
+        const effectiveTask = { ...task, ...existingChanges };
+        const currentStartTime = getTimePart(effectiveTask.start_datetime);
+        const currentEndTime = getTimePart(effectiveTask.end_datetime);
+
+        if (!effectiveTask.start_datetime && bulkStartDate) {
+          pendingBulkUpdates[id] = {
+            ...existingChanges,
+            start_datetime: combineDateAndTime(bulkStartDate, currentStartTime)
+          };
+        }
+
+        if (!effectiveTask.end_datetime && bulkEndDate) {
+          pendingBulkUpdates[id] = {
+            ...(pendingBulkUpdates[id] || existingChanges),
+            end_datetime: combineDateAndTime(bulkEndDate, currentEndTime)
+          };
+        }
+      });
+    }
+
+    const modifiedRowsWithBulk = {
+      ...modifiedRows,
+      ...pendingBulkUpdates
+    };
+
+    if (Object.keys(pendingBulkUpdates).length > 0) {
+      setModifiedRows(prev => ({ ...prev, ...pendingBulkUpdates }));
+    }
+
     const assignmentsToUpsert = [];
     const assignmentsToDelete = [];
     const errors = [];
@@ -380,45 +372,47 @@ export default function WorkDetails() {
     allIdsToProcess.forEach(id => {
       const task = mergedData.find(t => t.taskId === id);
       if (!task) return;
+      const effectiveTask = {
+        ...task,
+        ...(modifiedRowsWithBulk[id] || {})
+      };
 
-      // Check if ALL details are completely cleared/empty
+      // Check if user intends to clear the assignment (both manager and employee removed)
       const isCompletelyEmpty = 
-        !task.start_datetime && 
-        !task.end_datetime && 
-        !task.manager_name && 
-        !task.employee_name;
+        !effectiveTask.manager_name && 
+        !effectiveTask.employee_name;
 
       if (isCompletelyEmpty) {
-        if (task.assignmentId) {
-          assignmentsToDelete.push(task.assignmentId);
+        if (effectiveTask.assignmentId) {
+          assignmentsToDelete.push(effectiveTask.assignmentId);
         }
         return; // Safe path, no validation error, no upsert
       }
 
-      const error = validateAssignment(task);
+      const error = validateAssignment(effectiveTask);
       if (error) {
-        const hasAssignmentFieldModified = modifiedRows[id] && (
-          modifiedRows[id].start_datetime !== undefined ||
-          modifiedRows[id].end_datetime !== undefined ||
-          modifiedRows[id].manager_name !== undefined ||
-          modifiedRows[id].employee_name !== undefined
+        const hasAssignmentFieldModified = modifiedRowsWithBulk[id] && (
+          modifiedRowsWithBulk[id].start_datetime !== undefined ||
+          modifiedRowsWithBulk[id].end_datetime !== undefined ||
+          modifiedRowsWithBulk[id].manager_name !== undefined ||
+          modifiedRowsWithBulk[id].employee_name !== undefined
         );
         const hasAssignmentValue = 
-          task.start_datetime || 
-          task.end_datetime || 
-          task.manager_name || 
-          task.employee_name;
+          effectiveTask.start_datetime || 
+          effectiveTask.end_datetime || 
+          effectiveTask.manager_name || 
+          effectiveTask.employee_name;
 
         if (hasAssignmentFieldModified || (selectedRows.has(id) && hasAssignmentValue)) {
-          errors.push(`Task "${task.task_name}": ${error}`);
+          errors.push(`Task "${effectiveTask.task_name}": ${error}`);
         }
       } else {
         assignmentsToUpsert.push({
-          task_id: task.taskId,
-          start_datetime: task.start_datetime,
-          end_datetime: task.end_datetime,
-          manager_name: task.manager_name,
-          employee_name: task.employee_name,
+          task_id: effectiveTask.taskId,
+          start_datetime: effectiveTask.start_datetime,
+          end_datetime: effectiveTask.end_datetime,
+          manager_name: effectiveTask.manager_name,
+          employee_name: effectiveTask.employee_name,
           status: 'LOCKED', // Both Admin and HOD now lock the task on save
           updated_at: new Date().toISOString()
         });
@@ -475,6 +469,15 @@ export default function WorkDetails() {
     
     if (selectedAssignments.length === 0) {
       showToast("No locked assignments selected for generation", "error");
+      return;
+    }
+
+    const missingTimeAssignments = selectedAssignments.filter(a =>
+      !hasCompleteDateTime(a.start_datetime) || !hasCompleteDateTime(a.end_datetime)
+    );
+
+    if (missingTimeAssignments.length > 0) {
+      showToast("Please select Start and End time for all selected locked tasks before generating", "error");
       return;
     }
 
@@ -644,7 +647,7 @@ export default function WorkDetails() {
             </div>
           </div>
 
-          {isAdmin && (
+          {(isAdmin || isHOD) && (
             <>
               <div className="space-y-1">
                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
@@ -744,8 +747,12 @@ export default function WorkDetails() {
                 <th className="px-2 py-4 w-[22%]">Task Description</th>
                 <th className="px-2 py-4">Dept</th>
                 <th className="px-2 py-4 text-center">Mins</th>
-                <th className="px-2 py-4">Start Time</th>
-                <th className="px-2 py-4">End Time</th>
+                {isAdmin && (
+                  <>
+                    <th className="px-2 py-4">Start Time</th>
+                    <th className="px-2 py-4">End Time</th>
+                  </>
+                )}
                 <th className="px-2 py-4">Manager</th>
                 <th className="px-2 py-4">Employee</th>
               </tr>
@@ -820,48 +827,40 @@ export default function WorkDetails() {
                         </div>
                       )}
                     </td>
-                    <td className="px-2 py-3">
-                      {isAdmin ? (
-                        <input 
-                          type="time" 
-                          className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
-                            isModified && modifiedRows[item.taskId].start_datetime 
-                            ? 'border-amber-300 bg-amber-50/50' 
-                            : item.status === 'LOCKED' || item.status === 'GENERATED'
-                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                          }`}
-                          value={getTimePart(item.start_datetime)}
-                          onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
-                          disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
-                        />
-                      ) : (
-                        <span className="inline-flex items-center text-[10px] font-bold text-gray-500">
-                          {formatDateTime(item.start_datetime)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-2 py-3">
-                      {isAdmin ? (
-                        <input 
-                          type="time" 
-                          className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
-                            isModified && modifiedRows[item.taskId].end_datetime 
-                            ? 'border-amber-300 bg-amber-50/50' 
-                            : item.status === 'LOCKED' || item.status === 'GENERATED'
-                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                          }`}
-                          value={getTimePart(item.end_datetime)}
-                          onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
-                          disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
-                        />
-                      ) : (
-                        <span className="inline-flex items-center text-[10px] font-bold text-gray-500">
-                          {formatDateTime(item.end_datetime)}
-                        </span>
-                      )}
-                    </td>
+                    {isAdmin && (
+                      <>
+                        <td className="px-2 py-3">
+                          <input 
+                            type="time" 
+                            className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
+                              isModified && modifiedRows[item.taskId].start_datetime 
+                              ? 'border-amber-300 bg-amber-50/50' 
+                              : item.status === 'GENERATED'
+                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                            }`}
+                            value={getTimePart(item.start_datetime)}
+                            onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
+                            disabled={item.status === 'GENERATED'}
+                          />
+                        </td>
+                        <td className="px-2 py-3">
+                          <input 
+                            type="time" 
+                            className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
+                              isModified && modifiedRows[item.taskId].end_datetime 
+                              ? 'border-amber-300 bg-amber-50/50' 
+                              : item.status === 'GENERATED'
+                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                            }`}
+                            value={getTimePart(item.end_datetime)}
+                            onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
+                            disabled={item.status === 'GENERATED'}
+                          />
+                        </td>
+                      </>
+                    )}
                     <td className="px-2 py-3 relative">
                       <div className="relative">
                         <input 
@@ -1079,57 +1078,52 @@ export default function WorkDetails() {
 
                 {/* Edit Fields Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-gray-50">
-                  {/* Start Time */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Start Time</label>
-                    {isAdmin ? (
-                      <input 
-                        type="time" 
-                        className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
-                          isModified && modifiedRows[item.taskId].start_datetime 
-                          ? 'border-amber-300 bg-amber-50/50' 
-                          : item.status === 'LOCKED' || item.status === 'GENERATED'
-                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                            : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                        }`}
-                        value={getTimePart(item.start_datetime)}
-                        onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
-                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
-                      />
-                    ) : (
-                      <div className="px-2 py-1.5 rounded-lg bg-gray-50 border border-gray-100 text-[10px] font-bold text-gray-500">
-                        {formatDateTime(item.start_datetime)}
+                  {isAdmin && (
+                    <>
+                      {/* Start Time */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Start Time</label>
+                        <input 
+                          type="time" 
+                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
+                            isModified && modifiedRows[item.taskId].start_datetime 
+                            ? 'border-amber-300 bg-amber-50/50' 
+                            : item.status === 'GENERATED'
+                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                          }`}
+                          value={getTimePart(item.start_datetime)}
+                          onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
+                          disabled={item.status === 'GENERATED'}
+                        />
                       </div>
-                    )}
-                  </div>
 
-                  {/* End Time */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">End Time</label>
-                    {isAdmin ? (
-                      <input 
-                        type="time" 
-                        className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
-                          isModified && modifiedRows[item.taskId].end_datetime 
-                          ? 'border-amber-300 bg-amber-50/50' 
-                          : item.status === 'LOCKED' || item.status === 'GENERATED'
-                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                            : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                        }`}
-                        value={getTimePart(item.end_datetime)}
-                        onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
-                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
-                      />
-                    ) : (
-                      <div className="px-2 py-1.5 rounded-lg bg-gray-50 border border-gray-100 text-[10px] font-bold text-gray-500">
-                        {formatDateTime(item.end_datetime)}
+                      {/* End Time */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">End Time</label>
+                        <input 
+                          type="time" 
+                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
+                            isModified && modifiedRows[item.taskId].end_datetime 
+                            ? 'border-amber-300 bg-amber-50/50' 
+                            : item.status === 'GENERATED'
+                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                          }`}
+                          value={getTimePart(item.end_datetime)}
+                          onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
+                          disabled={item.status === 'GENERATED'}
+                        />
                       </div>
-                    )}
-                  </div>
+                    </>
+                  )}
 
                   {/* Manager Input */}
                   <div className="space-y-1 relative">
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Manager</label>
+                    {(!item.manager_name && !item.employee_name && !getDatePart(item.start_datetime)) && (
+                      <div className="absolute right-0 top-0 text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Unassigned</div>
+                    )}
                     <div className="relative">
                       <input 
                         type="text" 
@@ -1208,7 +1202,12 @@ export default function WorkDetails() {
                               </span>
                             ))
                           ) : (
-                            <span className="text-gray-400 text-[10px] font-bold">No Employee Assigned</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400 text-[10px] font-bold">No Employee Assigned</span>
+                              {(!item.manager_name && !getDatePart(item.start_datetime)) && (
+                                <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Unassigned</span>
+                              )}
+                            </div>
                           )}
                         </div>
                       ) : (

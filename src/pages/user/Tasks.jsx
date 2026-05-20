@@ -22,8 +22,7 @@ const getWorkTaskTimeBounds = (task) => {
   const taskStart = new Date(year, month - 1, day, startHour, startMin, 0);
   const duration = task.duration || 0; // minutes
   const taskEnd = new Date(taskStart.getTime() + duration * 60 * 1000);
-  const taskExtraEnd = new Date(taskEnd.getTime() + 45 * 60 * 1000);
-  return { taskStart, taskEnd, taskExtraEnd };
+  return { taskStart, taskEnd };
 };
 
 const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
@@ -31,22 +30,20 @@ const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
   if (task.status === "SUBMITTED" || task.status === "Done" || task.status === "done" || task.submission_date) return "SUBMITTED";
   if (task.status === "REJECTED") return "REJECTED";
 
-  const { taskStart, taskEnd, taskExtraEnd } = getWorkTaskTimeBounds(task);
+  const { taskStart, taskEnd } = getWorkTaskTimeBounds(task);
 
   if (currentTime < taskStart) {
     return "UPCOMING";
   } else if (currentTime >= taskStart && currentTime < taskEnd) {
     return "ACTIVE";
-  } else if (currentTime >= taskEnd && currentTime < taskExtraEnd) {
-    return "EXTRA_TIME";
   } else {
     return "NOT_DONE";
   }
 };
 
 const getExtraTimeRemaining = (task, currentTime) => {
-  const { taskExtraEnd } = getWorkTaskTimeBounds(task);
-  const diffMs = taskExtraEnd.getTime() - currentTime.getTime();
+  const { taskEnd } = getWorkTaskTimeBounds(task);
+  const diffMs = taskEnd.getTime() - currentTime.getTime();
   if (diffMs <= 0) return 0;
   return Math.ceil(diffMs / (60 * 1000));
 };
@@ -117,7 +114,7 @@ const UserTasks = () => {
     } else if (filterStatus === "submitted") {
       if (dynamicStatus !== "SUBMITTED") return false;
     } else if (filterStatus === "pending") {
-      if (dynamicStatus !== "ACTIVE" && dynamicStatus !== "EXTRA_TIME") return false;
+      if (dynamicStatus !== "ACTIVE") return false;
     } else if (filterStatus === "not_done") {
       if (dynamicStatus !== "NOT_DONE") return false;
     } else if (filterStatus === "overdue") {
@@ -255,15 +252,7 @@ const UserTasks = () => {
     if (ds === "UPCOMING") {
       return <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-full uppercase tracking-wider">Upcoming</span>;
     }
-    if (ds === "EXTRA_TIME") {
-      const minsLeft = getExtraTimeRemaining(task, currentTime);
-      return (
-        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full uppercase tracking-wider animate-pulse flex items-center gap-1">
-          <Clock size={10} className="animate-spin-slow" />
-          Extra Time: {minsLeft} Min Left
-        </span>
-      );
-    }
+    // Extra-time (45m) window removed; treat overdue as NOT_DONE
     if (ds === "NOT_DONE") {
       return <span className="px-2 py-0.5 bg-red-50 text-red-500 text-[10px] font-bold rounded-full uppercase tracking-wider">Not Done</span>;
     }
@@ -348,7 +337,7 @@ const UserTasks = () => {
                   key={task.id}
                   onClick={() => {
                     const dynamicStatus = getWorkTaskDynamicStatus(task, currentTime);
-                    if (dynamicStatus === "ACTIVE" || dynamicStatus === "EXTRA_TIME" || dynamicStatus === "REJECTED") {
+                    if (dynamicStatus === "ACTIVE" || dynamicStatus === "NOT_DONE" || dynamicStatus === "REJECTED") {
                       handleTaskSelection(task.id);
                     }
                   }}
@@ -359,7 +348,7 @@ const UserTasks = () => {
                   } ${
                     (() => {
                       const ds = getWorkTaskDynamicStatus(task, currentTime);
-                      return (ds === "APPROVED" || ds === "SUBMITTED" || ds === "UPCOMING" || ds === "NOT_DONE") ? "opacity-60 cursor-default" : "";
+                      return (ds === "APPROVED" || ds === "SUBMITTED" || ds === "UPCOMING") ? "opacity-60 cursor-default" : "";
                     })()
                   }`}
                 >

@@ -546,23 +546,16 @@ export const sendWorkTaskNotification = async (taskDetails) => {
             timeStyle: 'short'
         }) : 'N/A';
 
-        // Expiry Time = Expected End Time + 45 Minutes
-        const expiryDateObj = endDateObj ? new Date(endDateObj.getTime() + 45 * 60 * 1000) : null;
-        const formattedExpiry = expiryDateObj ? expiryDateObj.toLocaleString('en-IN', {
-            dateStyle: 'medium',
-            timeStyle: 'short'
-        }) : 'N/A';
-
+        // Note: 45-minute extra-time / penalty window removed. Notify target completion only.
         const message = `💼 *NEW WORK TASK ASSIGNED*\n` +
             `Dear ${doerName},\n\n` +
             `A new task has been assigned to you.\n\n` +
             `🏢 Shop: ${shop_name || 'N/A'}\n` +
             `📝 Task: ${description || 'N/A'}\n` +
             `⏱️ Duration: ${duration || '0'} Mins\n` +
-            `⏳ Target Completion: ${formattedEnd}\n` +
-            `⚠️ Final Expiry (with 45m Grace): ${formattedExpiry}\n\n` +
+            `⏳ Target Completion: ${formattedEnd}\n\n` +
             `✅ Closure Link: https://checklist-delegation-five.vercel.app/login\n\n` +
-            `Please complete it on time. After final expiry, it will mark as "Not Done".\n` +
+            `You may still submit the task after the target time; overdue submissions are recorded as Not Done in history.\n` +
             `Best regards,\nDrinqkart.`;
 
         return await sendWhatsAppMessage(phoneNumber, message);

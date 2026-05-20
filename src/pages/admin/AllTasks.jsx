@@ -55,12 +55,30 @@ const getWorkTaskTimeBounds = (task) => {
       startMin = parseInt(timeParts[1]) || 0;
     }
   }
-  const [year, month, day] = task.current_date.split('-').map(Number);
+  // Be defensive: some task objects may not have `current_date`.
+  let year, month, day;
+  if (task.current_date && typeof task.current_date === 'string' && task.current_date.includes('-')) {
+    [year, month, day] = task.current_date.split('-').map(Number);
+  } else if (startStr && startStr.includes('T')) {
+    // fallback to date part of start_datetime
+    const datePart = startStr.split('T')[0];
+    [year, month, day] = datePart.split('-').map(Number);
+  } else {
+    const today = new Date();
+    year = today.getFullYear();
+    month = today.getMonth() + 1;
+    day = today.getDate();
+  }
   const taskStart = new Date(year, month - 1, day, startHour, startMin, 0);
-  const duration = task.duration || 0; // minutes
-  const taskEnd = new Date(taskStart.getTime() + duration * 60 * 1000);
-  const taskExtraEnd = new Date(taskEnd.getTime() + 45 * 60 * 1000);
-  return { taskStart, taskEnd, taskExtraEnd };
+  
+  // TEMPORARY: Commented out duration condition as per request
+  // const duration = task.duration || 0; // minutes
+  // const taskEnd = new Date(taskStart.getTime() + duration * 60 * 1000);
+  
+  // Task is available for the entire day (until 23:59:59)
+  const taskEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+  
+  return { taskStart, taskEnd };
 };
 
 const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
@@ -68,22 +86,20 @@ const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
   if (task.status === "SUBMITTED" || task.status === "Done" || task.status === "done" || task.submission_date) return "SUBMITTED";
   if (task.status === "REJECTED") return "REJECTED";
 
-  const { taskStart, taskEnd, taskExtraEnd } = getWorkTaskTimeBounds(task);
+  const { taskStart, taskEnd } = getWorkTaskTimeBounds(task);
 
   if (currentTime < taskStart) {
     return "UPCOMING";
   } else if (currentTime >= taskStart && currentTime < taskEnd) {
     return "ACTIVE";
-  } else if (currentTime >= taskEnd && currentTime < taskExtraEnd) {
-    return "EXTRA_TIME";
   } else {
     return "NOT_DONE";
   }
 };
 
 const getExtraTimeRemaining = (task, currentTime) => {
-  const { taskExtraEnd } = getWorkTaskTimeBounds(task);
-  const diffMs = taskExtraEnd.getTime() - currentTime.getTime();
+  const { taskEnd } = getWorkTaskTimeBounds(task);
+  const diffMs = taskEnd.getTime() - currentTime.getTime();
   if (diffMs <= 0) return 0;
   return Math.ceil(diffMs / (60 * 1000));
 };
@@ -1624,8 +1640,8 @@ const AllTasks = () => {
                                           ? activeTab === "work"
                                             ? (() => {
                                                 const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                                const badgeColors = ds === 'NOT_DONE' ? 'bg-red-50 text-red-500' : ds === 'EXTRA_TIME' ? 'bg-amber-100 text-amber-800 animate-pulse' : ds === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
-                                                const label = ds === 'EXTRA_TIME' ? 'Extra Time' : ds === 'NOT_DONE' ? 'Not Done' : ds === 'ACTIVE' ? 'Active' : 'Upcoming';
+                                                const badgeColors = ds === 'NOT_DONE' ? 'bg-red-50 text-red-500' : ds === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
+                                                const label = ds === 'NOT_DONE' ? 'Not Done' : ds === 'ACTIVE' ? 'Active' : 'Upcoming';
                                                 return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${badgeColors}`}>{label}</span>;
                                               })()
                                             : (
@@ -1668,10 +1684,6 @@ const AllTasks = () => {
                                                          if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
                                                          if (ds === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
                                                          if (ds === "UPCOMING") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>;
-                                                         if (ds === "EXTRA_TIME") {
-                                                           const minsLeft = getExtraTimeRemaining(task, currentTime);
-                                                           return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800 animate-pulse">Extra Time: {minsLeft} Min Left</span>;
-                                                         }
                                                          if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
                                                          return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>;
                                                        })()
