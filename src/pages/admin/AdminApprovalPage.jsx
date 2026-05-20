@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
@@ -25,7 +25,9 @@ const extractAudioUrl = (text) => {
 
 export default function AdminApprovalPage() {
     const { showToast } = useMagicToast();
-    const [activeTab, setActiveTab] = useState("checklist");
+    const currentRole = (localStorage.getItem("role") || "").toLowerCase();
+    const isManager = currentRole === "manager";
+    const [activeTab, setActiveTab] = useState(isManager ? "work" : "checklist");
     const [viewMode, setViewMode] = useState("pending"); // 'pending' or 'history'
     const [pendingTasks, setPendingTasks] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -43,6 +45,28 @@ export default function AdminApprovalPage() {
     const [selectedImage, setSelectedImage] = useState(null); // Full-screen image URL
     const loadingRef = useRef(null);
     const dispatch = useDispatch();
+    const approvalTabs = useMemo(() => {
+        const workTab = { id: 'work', label: 'Work Detail', icon: LayoutGrid, color: 'bg-blue-600' };
+
+        if (isManager) {
+            return [workTab];
+        }
+
+        return [
+            { id: 'checklist', label: 'Checklist', icon: BookCheck, color: 'bg-purple-600' },
+            { id: 'delegation', label: 'Delegation', icon: BookCheck, color: 'bg-indigo-600' },
+            { id: 'maintenance', label: 'Maintenance', icon: Wrench, color: 'bg-blue-600' },
+            { id: 'repair', label: 'Repair', icon: Hammer, color: 'bg-amber-600' },
+            { id: 'ea', label: 'EA Tasks', icon: Briefcase, color: 'bg-emerald-600' },
+            workTab,
+        ];
+    }, [isManager]);
+
+    useEffect(() => {
+        if (isManager && activeTab !== "work") {
+            setActiveTab("work");
+        }
+    }, [activeTab, isManager]);
 
     const handleExtensionRemark = async (task) => {
         const remark = adminRemarks[task.id];
@@ -118,6 +142,11 @@ export default function AdminApprovalPage() {
         const currentUsername = (username || "").toLowerCase();
         const currentUserRole = (userRole || "").toLowerCase();
         const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
+        const managerShops = (localStorage.getItem("user_access") || "")
+            .toLowerCase()
+            .split(",")
+            .map(shop => shop.trim())
+            .filter(Boolean);
 
         // Filter tasks if not super admin
         let filteredData = data || [];
@@ -129,8 +158,8 @@ export default function AdminApprovalPage() {
                 return doerName !== currentUsername;
             });
 
-            let reportingUsers = [];
             if (currentUserRole === "hod") {
+                let reportingUsers = [];
                 const { data: reports } = await supabase
                     .from("users")
                     .select("user_name")
@@ -138,12 +167,19 @@ export default function AdminApprovalPage() {
                 if (reports && reports.length > 0) {
                     reportingUsers = reports.map((r) => (r.user_name || "").toLowerCase());
                 }
+                
+                filteredData = filteredData.filter(task => {
+                    const doerName = (task.name || task.doer_name || task.filled_by || "").toLowerCase();
+                    return reportingUsers.includes(doerName);
+                });
+            } else if (currentUserRole === "manager" && activeTab === "work") {
+                filteredData = filteredData.filter(task => {
+                    const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
+                    return managerShops.length === 0 || managerShops.includes(taskShop);
+                });
+            } else {
+                filteredData = [];
             }
-            
-            filteredData = filteredData.filter(task => {
-                const doerName = (task.name || task.doer_name || task.filled_by || "").toLowerCase();
-                return reportingUsers.includes(doerName);
-            });
         }
 
         setPendingTasks(filteredData);
@@ -497,14 +533,7 @@ export default function AdminApprovalPage() {
                         <div className="bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-1.5 sm:p-3 border border-gray-100/80 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
                             {/* Tabs */}
                             <div className="flex bg-gray-100/80 p-0.5 sm:p-1 rounded-lg sm:rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-full">
-                                {[
-                                    { id: 'checklist', label: 'Checklist', icon: BookCheck, color: 'bg-purple-600' },
-                                    { id: 'delegation', label: 'Delegation', icon: BookCheck, color: 'bg-indigo-600' },
-                                    { id: 'maintenance', label: 'Maintenance', icon: Wrench, color: 'bg-blue-600' },
-                                    { id: 'repair', label: 'Repair', icon: Hammer, color: 'bg-amber-600' },
-                                    { id: 'ea', label: 'EA Tasks', icon: Briefcase, color: 'bg-emerald-600' },
-                                    { id: 'work', label: 'Work Detail', icon: LayoutGrid, color: 'bg-blue-600' },
-                                ].map((tab) => (
+                                {approvalTabs.map((tab) => (
                                     <button
                                         key={tab.id}
                                         onClick={() => setActiveTab(tab.id)}

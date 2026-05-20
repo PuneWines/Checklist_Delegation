@@ -133,7 +133,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Admin Approval",
       icon: BookmarkCheck,
       active: location.pathname === "/dashboard/admin-approval",
-      showFor: ["admin", "HOD"],
+      showFor: ["admin", "HOD", "manager"],
     },
     {
       href: "/dashboard/setting",

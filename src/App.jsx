@@ -247,7 +247,7 @@ function App() {
                     <Route
                         path="/dashboard/admin-approval"
                         element={
-                            <ProtectedRoute allowedRoles={["admin", "HOD"]}>
+                            <ProtectedRoute allowedRoles={["admin", "HOD", "manager"]}>
                                 <AdminApprovalPage />
                             </ProtectedRoute>
                         }

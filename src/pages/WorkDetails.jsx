@@ -71,6 +71,35 @@ const getTaskStatusInfo = (item, isModified) => {
   };
 };
 
+const formatDateTime = (value) => {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  });
+};
+
+const getDatePart = (value) => {
+  if (!value) return "";
+  return String(value).split("T")[0] || "";
+};
+
+const getTimePart = (value) => {
+  if (!value || !String(value).includes("T")) return "";
+  return String(value).split("T")[1]?.substring(0, 5) || "";
+};
+
+const combineDateAndTime = (date, time) => {
+  if (!date && !time) return "";
+  if (!time) return date;
+  if (!date) return "";
+  return `${date}T${time}`;
+};
+
+const hasCompleteDateTime = (value) => Boolean(getDatePart(value) && getTimePart(value));
+
 export default function WorkDetails() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -91,18 +120,6 @@ export default function WorkDetails() {
     return userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   }, [userAccess]);
 
-  // Filtered Users list based on manager role and shop access
-  const filteredUserData = useMemo(() => {
-    if (role === "manager") {
-      return userData.filter(u => {
-        const userShop = (u.shop_name || u.user_access || "").toLowerCase();
-        const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
-        return userShopsList.some(s => managerShops.includes(s));
-      });
-    }
-    return userData;
-  }, [userData, role, managerShops]);
-
   // Filter & UI States
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedShop, setSelectedShop] = useState("All");
@@ -110,6 +127,27 @@ export default function WorkDetails() {
   const [bulkEndDate, setBulkEndDate] = useState("");
   const [selectedRows, setSelectedRows] = useState(new Set());
   const [searchDropdown, setSearchDropdown] = useState({ type: null, id: null, term: "" });
+
+  // Filtered Users list based on manager role and shop access
+  const filteredUserData = useMemo(() => {
+    return userData.filter(u => {
+      const userShopsList = (u.shop_name || u.user_access || "")
+        .toLowerCase()
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      if (role === "manager" && !userShopsList.some(s => managerShops.includes(s))) {
+        return false;
+      }
+
+      if (selectedShop !== "All") {
+        return userShopsList.includes(selectedShop.toLowerCase());
+      }
+
+      return true;
+    });
+  }, [userData, role, managerShops, selectedShop]);
 
   // Local state for modified fields (spreadsheet-style editing)
   const [modifiedRows, setModifiedRows] = useState({});
@@ -257,6 +295,10 @@ export default function WorkDetails() {
   };
 
   const handleFieldChange = (taskId, field, value) => {
+    if (!isAdmin && (field === "start_datetime" || field === "end_datetime")) {
+      return;
+    }
+
     setModifiedRows(prev => ({
       ...prev,
       [taskId]: {
@@ -266,7 +308,24 @@ export default function WorkDetails() {
     }));
   };
 
+  const handleTimeChange = (item, field, time) => {
+    const bulkDate = field === "start_datetime" ? bulkStartDate : bulkEndDate;
+    const date = getDatePart(item[field]) || (selectedRows.has(item.taskId) ? bulkDate : "");
+
+    if (time && !date) {
+      showToast("Please apply bulk date for this task first", "error");
+      return;
+    }
+
+    handleFieldChange(item.taskId, field, combineDateAndTime(date, time));
+  };
+
   const applyBulkDates = () => {
+    if (!isAdmin) {
+      showToast("Only admin can update task dates", "error");
+      return;
+    }
+
     if (!bulkStartDate && !bulkEndDate) {
       showToast("Please select bulk dates first", "error");
       return;
@@ -279,10 +338,14 @@ export default function WorkDetails() {
 
     const updates = {};
     selectedRows.forEach(id => {
+      const currentTask = mergedData.find(t => t.taskId === id) || {};
+      const currentStartTime = getTimePart(currentTask.start_datetime);
+      const currentEndTime = getTimePart(currentTask.end_datetime);
+
       updates[id] = {
         ...(modifiedRows[id] || {}),
-        ...(bulkStartDate && { start_datetime: bulkStartDate }),
-        ...(bulkEndDate && { end_datetime: bulkEndDate })
+        ...(bulkStartDate && { start_datetime: combineDateAndTime(bulkStartDate, currentStartTime) }),
+        ...(bulkEndDate && { end_datetime: combineDateAndTime(bulkEndDate, currentEndTime) })
       };
     });
     
@@ -291,7 +354,9 @@ export default function WorkDetails() {
   };
 
   const validateAssignment = (data) => {
-    if (!data.start_datetime || !data.end_datetime) return "Start and End dates are required";
+    if (!hasCompleteDateTime(data.start_datetime) || !hasCompleteDateTime(data.end_datetime)) {
+      return "Start and End dates with time are required";
+    }
     if (new Date(data.start_datetime) >= new Date(data.end_datetime)) return "Start date must be before End date";
     if (!data.manager_name || !data.employee_name) return "Manager and Employee names are required";
     return null;
@@ -579,37 +644,41 @@ export default function WorkDetails() {
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
-              <Calendar size={10} className="text-emerald-500" /> Bulk Start Date
-            </label>
-            <input 
-              type="datetime-local" 
-              className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-emerald-50/30 transition-all"
-              value={bulkStartDate}
-              onChange={(e) => setBulkStartDate(e.target.value)}
-            />
-          </div>
+          {isAdmin && (
+            <>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
+                  <Calendar size={10} className="text-emerald-500" /> Bulk Start Date
+                </label>
+                <input 
+                  type="date" 
+                  className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-emerald-50/30 transition-all"
+                  value={bulkStartDate}
+                  onChange={(e) => setBulkStartDate(e.target.value)}
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
-              <Calendar size={10} className="text-orange-500" /> Bulk End Date
-            </label>
-            <input 
-              type="datetime-local" 
-              className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-orange-50/30 transition-all"
-              value={bulkEndDate}
-              onChange={(e) => setBulkEndDate(e.target.value)}
-            />
-          </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
+                  <Calendar size={10} className="text-orange-500" /> Bulk End Date
+                </label>
+                <input 
+                  type="date" 
+                  className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-orange-50/30 transition-all"
+                  value={bulkEndDate}
+                  onChange={(e) => setBulkEndDate(e.target.value)}
+                />
+              </div>
 
-          <button 
-            onClick={applyBulkDates}
-            disabled={selectedRows.size === 0}
-            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:grayscale text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-emerald-200 active:scale-95"
-          >
-            <CheckCircle2 size={14} /> Apply Bulk
-          </button>
+              <button 
+                onClick={applyBulkDates}
+                disabled={selectedRows.size === 0}
+                className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:grayscale text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-emerald-200 active:scale-95"
+              >
+                <CheckCircle2 size={14} /> Apply Bulk
+              </button>
+            </>
+          )}
 
           <button 
             onClick={handleSaveChanges}
@@ -675,8 +744,8 @@ export default function WorkDetails() {
                 <th className="px-2 py-4 w-[22%]">Task Description</th>
                 <th className="px-2 py-4">Dept</th>
                 <th className="px-2 py-4 text-center">Mins</th>
-                <th className="px-2 py-4">Start DateTime</th>
-                <th className="px-2 py-4">End DateTime</th>
+                <th className="px-2 py-4">Start Time</th>
+                <th className="px-2 py-4">End Time</th>
                 <th className="px-2 py-4">Manager</th>
                 <th className="px-2 py-4">Employee</th>
               </tr>
@@ -752,34 +821,46 @@ export default function WorkDetails() {
                       )}
                     </td>
                     <td className="px-2 py-3">
-                      <input 
-                        type="datetime-local" 
-                        className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
-                          isModified && modifiedRows[item.taskId].start_datetime 
-                          ? 'border-amber-300 bg-amber-50/50' 
-                          : item.status === 'LOCKED' || item.status === 'GENERATED'
-                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                            : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                        }`}
-                        value={item.start_datetime ? item.start_datetime.substring(0, 16) : ""}
-                        onChange={(e) => handleFieldChange(item.taskId, "start_datetime", e.target.value)}
-                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
-                      />
+                      {isAdmin ? (
+                        <input 
+                          type="time" 
+                          className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
+                            isModified && modifiedRows[item.taskId].start_datetime 
+                            ? 'border-amber-300 bg-amber-50/50' 
+                            : item.status === 'LOCKED' || item.status === 'GENERATED'
+                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                              : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                          }`}
+                          value={getTimePart(item.start_datetime)}
+                          onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
+                          disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                        />
+                      ) : (
+                        <span className="inline-flex items-center text-[10px] font-bold text-gray-500">
+                          {formatDateTime(item.start_datetime)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 py-3">
-                      <input 
-                        type="datetime-local" 
-                        className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
-                          isModified && modifiedRows[item.taskId].end_datetime 
-                          ? 'border-amber-300 bg-amber-50/50' 
-                          : item.status === 'LOCKED' || item.status === 'GENERATED'
-                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                            : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                        }`}
-                        value={item.end_datetime ? item.end_datetime.substring(0, 16) : ""}
-                        onChange={(e) => handleFieldChange(item.taskId, "end_datetime", e.target.value)}
-                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
-                      />
+                      {isAdmin ? (
+                        <input 
+                          type="time" 
+                          className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
+                            isModified && modifiedRows[item.taskId].end_datetime 
+                            ? 'border-amber-300 bg-amber-50/50' 
+                            : item.status === 'LOCKED' || item.status === 'GENERATED'
+                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                              : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                          }`}
+                          value={getTimePart(item.end_datetime)}
+                          onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
+                          disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                        />
+                      ) : (
+                        <span className="inline-flex items-center text-[10px] font-bold text-gray-500">
+                          {formatDateTime(item.end_datetime)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 py-3 relative">
                       <div className="relative">
@@ -998,40 +1079,52 @@ export default function WorkDetails() {
 
                 {/* Edit Fields Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-gray-50">
-                  {/* Start Date */}
+                  {/* Start Time */}
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Start DateTime</label>
-                    <input 
-                      type="datetime-local" 
-                      className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
-                        isModified && modifiedRows[item.taskId].start_datetime 
-                        ? 'border-amber-300 bg-amber-50/50' 
-                        : item.status === 'LOCKED' || item.status === 'GENERATED'
-                          ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                          : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                      }`}
-                      value={item.start_datetime ? item.start_datetime.substring(0, 16) : ""}
-                      onChange={(e) => handleFieldChange(item.taskId, "start_datetime", e.target.value)}
-                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
-                    />
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Start Time</label>
+                    {isAdmin ? (
+                      <input 
+                        type="time" 
+                        className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
+                          isModified && modifiedRows[item.taskId].start_datetime 
+                          ? 'border-amber-300 bg-amber-50/50' 
+                          : item.status === 'LOCKED' || item.status === 'GENERATED'
+                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                            : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                        }`}
+                        value={getTimePart(item.start_datetime)}
+                        onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
+                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                      />
+                    ) : (
+                      <div className="px-2 py-1.5 rounded-lg bg-gray-50 border border-gray-100 text-[10px] font-bold text-gray-500">
+                        {formatDateTime(item.start_datetime)}
+                      </div>
+                    )}
                   </div>
 
-                  {/* End Date */}
+                  {/* End Time */}
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">End DateTime</label>
-                    <input 
-                      type="datetime-local" 
-                      className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
-                        isModified && modifiedRows[item.taskId].end_datetime 
-                        ? 'border-amber-300 bg-amber-50/50' 
-                        : item.status === 'LOCKED' || item.status === 'GENERATED'
-                          ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                          : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                      }`}
-                      value={item.end_datetime ? item.end_datetime.substring(0, 16) : ""}
-                      onChange={(e) => handleFieldChange(item.taskId, "end_datetime", e.target.value)}
-                      disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
-                    />
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">End Time</label>
+                    {isAdmin ? (
+                      <input 
+                        type="time" 
+                        className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
+                          isModified && modifiedRows[item.taskId].end_datetime 
+                          ? 'border-amber-300 bg-amber-50/50' 
+                          : item.status === 'LOCKED' || item.status === 'GENERATED'
+                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                            : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                        }`}
+                        value={getTimePart(item.end_datetime)}
+                        onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
+                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                      />
+                    ) : (
+                      <div className="px-2 py-1.5 rounded-lg bg-gray-50 border border-gray-100 text-[10px] font-bold text-gray-500">
+                        {formatDateTime(item.end_datetime)}
+                      </div>
+                    )}
                   </div>
 
                   {/* Manager Input */}

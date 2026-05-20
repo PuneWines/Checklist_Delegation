@@ -35,6 +35,8 @@ const ALL_PAGES = [
   { id: 'settings', label: 'Settings', path: '/dashboard/setting' },
 ];
 
+const ADMIN_APPROVAL_PAGE_LABEL = 'Admin Approval';
+
 const Setting = () => {
   const { showToast } = useMagicToast();
   const [activeTab, setActiveTab] = useState('users');
@@ -968,9 +970,9 @@ const Setting = () => {
       if (roleLower === 'admin') {
         defaultAccess = ALL_PAGES.map(p => p.label);
       } else if (roleLower === 'hod') {
-        defaultAccess = ['Dashboard', 'Announcements', 'Assign Task', 'Work Records', 'Delegation', 'Task', 'Calendar', 'Admin Approval'];
+        defaultAccess = ['Dashboard', 'Announcements', 'Assign Task', 'Work Records', 'Delegation', 'Task', 'Calendar', ADMIN_APPROVAL_PAGE_LABEL];
       } else if (roleLower === 'manager') {
-        defaultAccess = ['Dashboard', 'Announcements', 'Work Records', 'Task'];
+        defaultAccess = ['Dashboard', 'Announcements', 'Work Records', 'Task', ADMIN_APPROVAL_PAGE_LABEL];
       } else { // user
         defaultAccess = ['Dashboard', 'Announcements', 'Delegation', 'Task', 'Calendar'];
       }
