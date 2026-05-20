@@ -185,7 +185,8 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
     };
 
     if (isOneTime) {
-      delegationTasks.push({ ...taskData, status: task.status || 'pending' });
+      const { series_id, ...delegationData } = taskData;
+      delegationTasks.push({ ...delegationData, status: task.status || 'pending' });
     } else {
       checklistTasks.push({ ...taskData, status: null });
     }
