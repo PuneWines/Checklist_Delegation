@@ -46,11 +46,11 @@ export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchT
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
       query = query.in('name', reportingUsers);
-    } else if (role === 'admin' && userAccess && userAccess !== 'all') {
+    } else if (role === 'admin' && userAccess && userAccess.toLowerCase() !== 'all' && userAccess.toLowerCase() !== 'admin') {
       // Filter by shops in user_access for admin
-      const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(s => s && s !== 'all');
+      const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(s => s && s.toLowerCase() !== 'all');
       if (allowedShops.length > 0) {
-        query = query.in('shop', allowedShops);
+        query = query.in('shop_name', allowedShops);
       }
     }
 
@@ -104,11 +104,11 @@ export const fetchChechListDataForHistory = async (page = 1, searchTerm = '') =>
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
       query = query.in('name', reportingUsers);
-    } else if (role === 'admin' && userAccess && userAccess !== 'all') {
+    } else if (role === 'admin' && userAccess && userAccess.toLowerCase() !== 'all' && userAccess.toLowerCase() !== 'admin') {
       // Filter by shops in user_access for admin
-      const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(s => s && s !== 'all');
+      const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(s => s && s.toLowerCase() !== 'all');
       if (allowedShops.length > 0) {
-        query = query.in('shop', allowedShops);
+        query = query.in('shop_name', allowedShops);
       }
     }
 

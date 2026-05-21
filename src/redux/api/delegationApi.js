@@ -157,7 +157,7 @@ export const fetchDelegationDataSortByDate = async () => {
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
       query = query.in('name', reportingUsers);
-    } else if (role === 'admin' && userAccess && userAccess.toLowerCase() !== 'all') {
+    } else if (role === 'admin' && userAccess && userAccess.toLowerCase() !== 'all' && userAccess.toLowerCase() !== 'admin') {
       const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(d => d && d.toLowerCase() !== 'all');
       if (allowedShops.length > 0) {
         query = query.in('shop_name', allowedShops);

@@ -529,12 +529,12 @@ const AllTasks = () => {
 
         // Shop based logic for admin
         const userAccess = localStorage.getItem("user_access") || "";
-        if (userAccess && userAccess.toLowerCase() !== "all") {
+        if (userAccess && userAccess.toLowerCase() !== "all" && userAccess.toLowerCase() !== "admin") {
           const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(d => d && d.toLowerCase() !== 'all');
           if (allowedShops.length > 0) {
-            // regular tab uses 'shop', others use 'shop_name'
+            // regular tab uses 'shop_name', others use 'shop_name'
             if (activeTab === 'regular') {
-              query = query.in('shop', allowedShops);
+              query = query.in('shop_name', allowedShops);
             } else if (activeTab === 'ea' || activeTab === 'repair') {
               // ea_tasks and repair_tasks typically don't have a shop column, we skip filtering to avoid DB error. 
               // Since EA/Repair are usually cross-shop, maybe we just don't filter, or we check if they have specific access.

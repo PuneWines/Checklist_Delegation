@@ -73,11 +73,11 @@ export const fetchUniqueDoerNameDataApi = async (shop) => {
 
     let query = supabase
       .from("users")
-      .select("user_name, user_access, status, leave_date, leave_end_date, reported_by, can_self_assign, number")
+      .select("user_name, role, user_access, shop_name, status, leave_date, leave_end_date, reported_by, can_self_assign, number")
       .order("user_name", { ascending: true });
 
     if (shop) {
-      query = query.ilike("user_access", `%${shop}%`);
+      query = query.or(`user_access.ilike.%${shop}%,shop_name.ilike.%${shop}%`);
     }
 
     const { data, error } = await query;
