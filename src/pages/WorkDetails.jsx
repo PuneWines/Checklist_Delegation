@@ -1,11 +1,11 @@
 "use client";
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { 
-  Search, 
-  Calendar, 
-  Clock, 
-  Save, 
-  CheckCircle2, 
+import {
+  Search,
+  Calendar,
+  Clock,
+  Save,
+  CheckCircle2,
   ChevronDown,
   LayoutGrid,
   Check,
@@ -31,7 +31,7 @@ const getTaskStatusInfo = (item, isModified) => {
       dotClass: "bg-amber-500 animate-pulse"
     };
   }
-  
+
   if (!item.assignmentId) {
     return {
       text: "Available",
@@ -104,10 +104,10 @@ export default function WorkDetails() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { showToast } = useMagicToast();
-  
+
   const { tasks: masterTasks, assignments, loading, saving, error } = useSelector(state => state.workRecords);
   const { userData } = useSelector(state => state.setting);
-  
+
   // Use same role logic as AdminLayout
   const role = (localStorage.getItem("role") || "").toLowerCase();
   const username = (localStorage.getItem("user-name") || "").toLowerCase();
@@ -176,7 +176,7 @@ export default function WorkDetails() {
     const s = new Set(filteredMasterTasks.map(t => t.shop?.shop_name).filter(Boolean));
     return ["All", ...Array.from(s)];
   }, [masterTasks, role, managerShops]);
-  
+
   // Background Cleanup: Archive & Delete expired assignments from DB
   useEffect(() => {
     // Auto-archive of expired assignments is temporarily disabled.
@@ -189,14 +189,14 @@ export default function WorkDetails() {
   const mergedData = useMemo(() => {
     return masterTasks.map(task => {
       let assignment = assignments.find(a => a.task_id === task.id);
-      
+
       // Auto-Reset Logic: If end_datetime has passed, treat as unassigned
       if (assignment && assignment.end_datetime && new Date(assignment.end_datetime) < currentTime) {
         assignment = null;
       }
 
       const modified = modifiedRows[task.id] || {};
-      
+
       return {
         ...task,
         ...(assignment || {}),
@@ -216,8 +216,8 @@ export default function WorkDetails() {
       }
       const matchesShop = selectedShop === "All" || item.shopName === selectedShop;
       const matchesSearch = item.task_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.manager_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.employee_name?.toLowerCase().includes(searchTerm.toLowerCase());
+        item.manager_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.employee_name?.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesShop && matchesSearch;
     });
   }, [mergedData, selectedShop, searchTerm, role, managerShops]);
@@ -279,7 +279,7 @@ export default function WorkDetails() {
       showToast("Please select bulk dates first", "error");
       return;
     }
-    
+
     if (selectedRows.size === 0) {
       showToast("No rows selected", "error");
       return;
@@ -297,7 +297,7 @@ export default function WorkDetails() {
         ...(bulkEndDate && { end_datetime: combineDateAndTime(bulkEndDate, currentEndTime) })
       };
     });
-    
+
     setModifiedRows(prev => ({ ...prev, ...updates }));
     showToast(`Applied dates to ${selectedRows.size} tasks`, "success");
   };
@@ -378,8 +378,8 @@ export default function WorkDetails() {
       };
 
       // Check if user intends to clear the assignment (both manager and employee removed)
-      const isCompletelyEmpty = 
-        !effectiveTask.manager_name && 
+      const isCompletelyEmpty =
+        !effectiveTask.manager_name &&
         !effectiveTask.employee_name;
 
       if (isCompletelyEmpty) {
@@ -397,10 +397,10 @@ export default function WorkDetails() {
           modifiedRowsWithBulk[id].manager_name !== undefined ||
           modifiedRowsWithBulk[id].employee_name !== undefined
         );
-        const hasAssignmentValue = 
-          effectiveTask.start_datetime || 
-          effectiveTask.end_datetime || 
-          effectiveTask.manager_name || 
+        const hasAssignmentValue =
+          effectiveTask.start_datetime ||
+          effectiveTask.end_datetime ||
+          effectiveTask.manager_name ||
           effectiveTask.employee_name;
 
         if (hasAssignmentFieldModified || (selectedRows.has(id) && hasAssignmentValue)) {
@@ -444,7 +444,7 @@ export default function WorkDetails() {
           .from('task_assignments')
           .delete()
           .in('id', assignmentsToDelete);
-        
+
         if (delError) throw delError;
       }
 
@@ -463,10 +463,10 @@ export default function WorkDetails() {
   };
 
   const handleBulkGenerate = async () => {
-    const selectedAssignments = mergedData.filter(item => 
+    const selectedAssignments = mergedData.filter(item =>
       selectedRows.has(item.taskId) && item.status === 'LOCKED' && item.assignmentId
     );
-    
+
     if (selectedAssignments.length === 0) {
       showToast("No locked assignments selected for generation", "error");
       return;
@@ -484,7 +484,7 @@ export default function WorkDetails() {
     try {
       await generateWorkTasksApi(selectedAssignments);
       showToast(`Generated tasks for ${selectedAssignments.length} assignments`, "success");
-      
+
       // WhatsApp notification trigger grouped by employee name
       const now = new Date();
       const employeeTasksMap = {};
@@ -496,7 +496,7 @@ export default function WorkDetails() {
             const employeeNames = asgn.employee_name
               ? asgn.employee_name.split(',').map(e => e.trim()).filter(Boolean)
               : [];
-              
+
             employeeNames.forEach(empName => {
               if (!employeeTasksMap[empName]) {
                 employeeTasksMap[empName] = [];
@@ -543,7 +543,7 @@ export default function WorkDetails() {
     const selectedAsgnIds = mergedData
       .filter(item => selectedRows.has(item.taskId) && (item.status === 'LOCKED' || item.status === 'GENERATED') && item.assignmentId)
       .map(item => item.assignmentId);
-    
+
     if (selectedAsgnIds.length === 0) {
       showToast("No locked or generated tasks selected to unlock", "error");
       return;
@@ -612,7 +612,7 @@ export default function WorkDetails() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
             <div className="relative group w-full md:w-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" size={16} />
-              <input 
+              <input
                 type="text"
                 placeholder="Search tasks, managers..."
                 className="pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-700 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none w-full md:w-64 transition-all"
@@ -636,7 +636,7 @@ export default function WorkDetails() {
               <LayoutGrid size={10} className="text-blue-500" /> Filter Shop
             </label>
             <div className="relative group">
-              <select 
+              <select
                 className="w-full pl-2.5 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none appearance-none transition-all group-hover:bg-blue-50/50"
                 value={selectedShop}
                 onChange={(e) => setSelectedShop(e.target.value)}
@@ -653,8 +653,8 @@ export default function WorkDetails() {
                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
                   <Calendar size={10} className="text-emerald-500" /> Bulk Start Date
                 </label>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-emerald-50/30 transition-all"
                   value={bulkStartDate}
                   onChange={(e) => setBulkStartDate(e.target.value)}
@@ -665,15 +665,15 @@ export default function WorkDetails() {
                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
                   <Calendar size={10} className="text-orange-500" /> Bulk End Date
                 </label>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[11px] font-bold text-gray-700 focus:ring-2 focus:ring-blue-600 outline-none hover:bg-orange-50/30 transition-all"
                   value={bulkEndDate}
                   onChange={(e) => setBulkEndDate(e.target.value)}
                 />
               </div>
 
-              <button 
+              <button
                 onClick={applyBulkDates}
                 disabled={selectedRows.size === 0}
                 className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:grayscale text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-emerald-200 active:scale-95"
@@ -683,7 +683,7 @@ export default function WorkDetails() {
             </>
           )}
 
-          <button 
+          <button
             onClick={handleSaveChanges}
             disabled={saving || Object.keys(modifiedRows).length === 0}
             className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-blue-200 active:scale-95"
@@ -694,14 +694,14 @@ export default function WorkDetails() {
 
           {isAdmin && (
             <>
-              <button 
+              <button
                 onClick={handleBulkGenerate}
                 disabled={selectedRows.size === 0}
                 className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-indigo-200 active:scale-95"
               >
                 <CheckCircle2 size={14} /> Generate Tasks
               </button>
-              <button 
+              <button
                 onClick={handleBulkReset}
                 disabled={selectedRows.size === 0}
                 className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-red-200 active:scale-95"
@@ -712,11 +712,11 @@ export default function WorkDetails() {
           )}
 
           {isAdmin && (
-            <button 
+            <button
               onClick={() => navigate('/dashboard/work-records/bulk-import')}
               className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-black py-2 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-purple-200 active:scale-95"
             >
-              <Upload size={14} /> Bulk Import
+              <Upload size={14} /> Add Tasks
             </button>
           )}
         </div>
@@ -736,8 +736,8 @@ export default function WorkDetails() {
             <thead>
               <tr className="bg-gray-50/80 text-gray-400 uppercase text-[9px] font-black tracking-[0.15em] border-b border-gray-100">
                 <th className="px-4 py-4 w-12 text-center">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     className="w-4 h-4 rounded-md border-gray-200 text-[#006699] focus:ring-offset-0 focus:ring-0 transition-all cursor-pointer"
                     onChange={handleSelectAll}
                     checked={selectedRows.size === filteredTasks.length && filteredTasks.length > 0}
@@ -747,6 +747,8 @@ export default function WorkDetails() {
                 <th className="px-2 py-4 w-[22%]">Task Description</th>
                 <th className="px-2 py-4">Dept</th>
                 <th className="px-2 py-4 text-center">Mins</th>
+                <th className="px-2 py-4">Start Date</th>
+                <th className="px-2 py-4">End Date</th>
                 {isAdmin && (
                   <>
                     <th className="px-2 py-4">Start Time</th>
@@ -761,12 +763,12 @@ export default function WorkDetails() {
               {filteredTasks.map((item, index) => {
                 const isModified = !!modifiedRows[item.taskId];
                 const isActive = item.status === 'ACTIVE' && !isModified;
-                
+
                 return (
                   <tr key={item.taskId} className={`hover:bg-blue-50/40 transition-all group ${isModified ? 'bg-amber-50/30' : ''}`}>
                     <td className="px-4 py-3 text-center">
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         className={`w-4 h-4 rounded-md border-gray-200 text-[#006699] focus:ring-offset-0 focus:ring-0 transition-all ${((item.status === 'LOCKED' || item.status === 'GENERATED') && !isAdmin) ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
                         checked={selectedRows.has(item.taskId)}
                         onChange={() => handleSelectRow(item.taskId)}
@@ -807,11 +809,10 @@ export default function WorkDetails() {
                           <input
                             type="number"
                             min="0"
-                            className={`w-16 px-1 py-1 border rounded text-[10px] font-bold text-center outline-none transition-all ${
-                              modifiedRows[item.taskId]?.estimated_minutes !== undefined
+                            className={`w-16 px-1 py-1 border rounded text-[10px] font-bold text-center outline-none transition-all ${modifiedRows[item.taskId]?.estimated_minutes !== undefined
                                 ? 'border-amber-300 bg-amber-50/50'
                                 : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                            }`}
+                              }`}
                             value={
                               modifiedRows[item.taskId]?.estimated_minutes !== undefined
                                 ? modifiedRows[item.taskId].estimated_minutes
@@ -827,33 +828,47 @@ export default function WorkDetails() {
                         </div>
                       )}
                     </td>
+                    <td className="px-2 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar size={10} className={isModified && modifiedRows[item.taskId]?.start_datetime ? "text-amber-500" : "text-emerald-500"} />
+                        <span className={`text-[10px] font-bold ${isModified && modifiedRows[item.taskId]?.start_datetime ? "text-amber-700" : "text-gray-700"}`}>
+                          {getDatePart(item.start_datetime) ? getDatePart(item.start_datetime).split('-').reverse().join('/') : "--"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar size={10} className={isModified && modifiedRows[item.taskId]?.end_datetime ? "text-amber-500" : "text-orange-500"} />
+                        <span className={`text-[10px] font-bold ${isModified && modifiedRows[item.taskId]?.end_datetime ? "text-amber-700" : "text-gray-700"}`}>
+                          {getDatePart(item.end_datetime) ? getDatePart(item.end_datetime).split('-').reverse().join('/') : "--"}
+                        </span>
+                      </div>
+                    </td>
                     {isAdmin && (
                       <>
                         <td className="px-2 py-3">
-                          <input 
-                            type="time" 
-                            className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
-                              isModified && modifiedRows[item.taskId].start_datetime 
-                              ? 'border-amber-300 bg-amber-50/50' 
-                              : item.status === 'GENERATED'
-                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                            }`}
+                          <input
+                            type="time"
+                            className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].start_datetime
+                                ? 'border-amber-300 bg-amber-50/50'
+                                : item.status === 'GENERATED'
+                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                              }`}
                             value={getTimePart(item.start_datetime)}
                             onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
                             disabled={item.status === 'GENERATED'}
                           />
                         </td>
                         <td className="px-2 py-3">
-                          <input 
-                            type="time" 
-                            className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${
-                              isModified && modifiedRows[item.taskId].end_datetime 
-                              ? 'border-amber-300 bg-amber-50/50' 
-                              : item.status === 'GENERATED'
-                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                                : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                            }`}
+                          <input
+                            type="time"
+                            className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].end_datetime
+                                ? 'border-amber-300 bg-amber-50/50'
+                                : item.status === 'GENERATED'
+                                  ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                              }`}
                             value={getTimePart(item.end_datetime)}
                             onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
                             disabled={item.status === 'GENERATED'}
@@ -863,16 +878,15 @@ export default function WorkDetails() {
                     )}
                     <td className="px-2 py-3 relative">
                       <div className="relative">
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           placeholder="Manager.."
-                          className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${
-                            isModified && modifiedRows[item.taskId].manager_name 
-                            ? 'border-amber-300 bg-amber-50/50' 
-                            : item.status === 'LOCKED' || item.status === 'GENERATED'
-                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                          }`}
+                          className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId].manager_name
+                              ? 'border-amber-300 bg-amber-50/50'
+                              : item.status === 'LOCKED' || item.status === 'GENERATED'
+                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                            }`}
                           value={item.manager_name || ""}
                           onChange={(e) => {
                             handleFieldChange(item.taskId, "manager_name", e.target.value);
@@ -882,11 +896,10 @@ export default function WorkDetails() {
                           disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
                         />
                         {searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
-                          <div className={`absolute z-50 left-0 right-0 bg-white border border-gray-100 rounded-lg shadow-2xl max-h-40 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-300 ${
-                            index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"
-                          }`}>
+                          <div className={`absolute z-50 left-0 right-0 bg-white border border-gray-100 rounded-lg shadow-2xl max-h-40 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-300 ${index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"
+                            }`}>
                             {filteredUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
-                              <button 
+                              <button
                                 key={user.id}
                                 className="w-full text-left px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-blue-50 flex items-center justify-between transition-colors border-b border-gray-50 last:border-0"
                                 onClick={() => selectUser(item.taskId, "manager_name", user)}
@@ -927,7 +940,7 @@ export default function WorkDetails() {
                                 {item.employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
                                   <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[9px] font-black border border-emerald-100 shadow-sm animate-in zoom-in-95 duration-150">
                                     {emp}
-                                    <button 
+                                    <button
                                       type="button"
                                       className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 transition-colors font-black text-[9px] leading-none"
                                       onClick={(e) => {
@@ -941,31 +954,29 @@ export default function WorkDetails() {
                                 ))}
                               </div>
                             )}
-                            
+
                             {/* Search input to select employees */}
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
                               placeholder={item.employee_name ? "Add employee..." : "Employee.."}
-                              className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${
-                                isModified && modifiedRows[item.taskId].employee_name 
-                                ? 'border-amber-300 bg-amber-50/50' 
-                                : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                              }`}
+                              className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId].employee_name
+                                  ? 'border-amber-300 bg-amber-50/50'
+                                  : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                                }`}
                               value={(searchDropdown.type === "employee" && searchDropdown.id === item.taskId) ? searchDropdown.term : ""}
                               onChange={(e) => {
                                 setSearchDropdown({ type: "employee", id: item.taskId, term: e.target.value });
                               }}
                               onFocus={() => setSearchDropdown({ type: "employee", id: item.taskId, term: "" })}
                             />
-                            
+
                             {searchDropdown.type === "employee" && searchDropdown.id === item.taskId && (
-                              <div className={`absolute z-50 left-0 right-0 bg-white border border-gray-100 rounded-lg shadow-2xl max-h-40 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-300 ${
-                                index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"
-                              }`}>
+                              <div className={`absolute z-50 left-0 right-0 bg-white border border-gray-100 rounded-lg shadow-2xl max-h-40 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-300 ${index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"
+                                }`}>
                                 {filteredUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
                                   const isSelected = item.employee_name?.split(',').map(e => e.trim()).filter(Boolean).includes(user.user_name);
                                   return (
-                                    <button 
+                                    <button
                                       key={user.id}
                                       type="button"
                                       className="w-full text-left px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-blue-50 flex items-center justify-between transition-colors border-b border-gray-50 last:border-0"
@@ -1005,22 +1016,20 @@ export default function WorkDetails() {
           {filteredTasks.map((item, index) => {
             const isModified = !!modifiedRows[item.taskId];
             const isActive = item.status === 'ACTIVE' && !isModified;
-            
+
             return (
-              <div 
-                key={item.taskId} 
-                className={`bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-4 relative transition-all ${
-                  isModified ? 'bg-amber-50/20 border-amber-200' : 'hover:border-blue-200'
-                }`}
+              <div
+                key={item.taskId}
+                className={`bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-4 relative transition-all ${isModified ? 'bg-amber-50/20 border-amber-200' : 'hover:border-blue-200'
+                  }`}
               >
                 {/* Card Top Row: Checkbox, Shop, Dept, Status */}
                 <div className="flex items-start justify-between gap-2 border-b border-gray-50 pb-3">
                   <div className="flex items-center gap-2.5">
-                    <input 
-                      type="checkbox" 
-                      className={`w-5 h-5 rounded-md border-gray-300 text-[#006699] focus:ring-offset-0 focus:ring-0 transition-all ${
-                        ((item.status === 'LOCKED' || item.status === 'GENERATED') && !isAdmin) ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
-                      }`}
+                    <input
+                      type="checkbox"
+                      className={`w-5 h-5 rounded-md border-gray-300 text-[#006699] focus:ring-offset-0 focus:ring-0 transition-all ${((item.status === 'LOCKED' || item.status === 'GENERATED') && !isAdmin) ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
+                        }`}
                       checked={selectedRows.has(item.taskId)}
                       onChange={() => handleSelectRow(item.taskId)}
                       disabled={(item.status === 'LOCKED' || item.status === 'GENERATED') && !isAdmin}
@@ -1083,15 +1092,14 @@ export default function WorkDetails() {
                       {/* Start Time */}
                       <div className="space-y-1">
                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Start Time</label>
-                        <input 
-                          type="time" 
-                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
-                            isModified && modifiedRows[item.taskId].start_datetime 
-                            ? 'border-amber-300 bg-amber-50/50' 
-                            : item.status === 'GENERATED'
-                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                          }`}
+                        <input
+                          type="time"
+                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].start_datetime
+                              ? 'border-amber-300 bg-amber-50/50'
+                              : item.status === 'GENERATED'
+                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                            }`}
                           value={getTimePart(item.start_datetime)}
                           onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
                           disabled={item.status === 'GENERATED'}
@@ -1101,15 +1109,14 @@ export default function WorkDetails() {
                       {/* End Time */}
                       <div className="space-y-1">
                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">End Time</label>
-                        <input 
-                          type="time" 
-                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${
-                            isModified && modifiedRows[item.taskId].end_datetime 
-                            ? 'border-amber-300 bg-amber-50/50' 
-                            : item.status === 'GENERATED'
-                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                          }`}
+                        <input
+                          type="time"
+                          className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].end_datetime
+                              ? 'border-amber-300 bg-amber-50/50'
+                              : item.status === 'GENERATED'
+                                ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                            }`}
                           value={getTimePart(item.end_datetime)}
                           onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
                           disabled={item.status === 'GENERATED'}
@@ -1125,16 +1132,15 @@ export default function WorkDetails() {
                       <div className="absolute right-0 top-0 text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Unassigned</div>
                     )}
                     <div className="relative">
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         placeholder="Assign Manager.."
-                        className={`w-full px-2.5 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${
-                          isModified && modifiedRows[item.taskId].manager_name 
-                          ? 'border-amber-300 bg-amber-50/50' 
-                          : item.status === 'LOCKED' || item.status === 'GENERATED'
-                            ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
-                            : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                        }`}
+                        className={`w-full px-2.5 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId].manager_name
+                            ? 'border-amber-300 bg-amber-50/50'
+                            : item.status === 'LOCKED' || item.status === 'GENERATED'
+                              ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
+                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                          }`}
                         value={item.manager_name || ""}
                         onChange={(e) => {
                           handleFieldChange(item.taskId, "manager_name", e.target.value);
@@ -1146,7 +1152,7 @@ export default function WorkDetails() {
                       {searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
                         <div className="absolute z-50 left-0 right-0 bg-white border border-gray-150 rounded-lg shadow-2xl max-h-40 overflow-y-auto mt-1">
                           {filteredUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
-                            <button 
+                            <button
                               key={user.id}
                               type="button"
                               className="w-full text-left px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-blue-50 flex items-center justify-between transition-colors border-b border-gray-50 last:border-0"
@@ -1169,14 +1175,14 @@ export default function WorkDetails() {
                   {/* Employee Tag/Badge Multi-select Input */}
                   <div className="space-y-1 relative">
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Employees</label>
-                    
+
                     {/* Selected Employees Tag List - Positioned above wrapper so they are always visible */}
                     {!(item.status === 'LOCKED' || item.status === 'GENERATED') && item.employee_name && (
                       <div className="flex flex-wrap gap-1 mb-1.5 pt-0.5">
                         {item.employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
                           <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[9px] font-black border border-emerald-100 shadow-sm animate-in zoom-in-95 duration-150">
                             {emp}
-                            <button 
+                            <button
                               type="button"
                               className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 transition-colors font-black text-[9px] leading-none"
                               onClick={(e) => {
@@ -1213,27 +1219,26 @@ export default function WorkDetails() {
                       ) : (
                         <>
                           {/* Search input to select employees */}
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             placeholder={item.employee_name ? "Add employee..." : "Assign Employee.."}
-                            className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${
-                              isModified && modifiedRows[item.taskId].employee_name 
-                              ? 'border-amber-300 bg-amber-50/50' 
-                              : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
-                            }`}
+                            className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId].employee_name
+                                ? 'border-amber-300 bg-amber-50/50'
+                                : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
+                              }`}
                             value={(searchDropdown.type === "employee" && searchDropdown.id === item.taskId) ? searchDropdown.term : ""}
                             onChange={(e) => {
                               setSearchDropdown({ type: "employee", id: item.taskId, term: e.target.value });
                             }}
                             onFocus={() => setSearchDropdown({ type: "employee", id: item.taskId, term: "" })}
                           />
-                          
+
                           {searchDropdown.type === "employee" && searchDropdown.id === item.taskId && (
                             <div className="absolute z-50 left-0 right-0 bg-white border border-gray-150 rounded-lg shadow-2xl max-h-40 overflow-y-auto mt-1 top-full">
                               {filteredUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
                                 const isSelected = item.employee_name?.split(',').map(e => e.trim()).filter(Boolean).includes(user.user_name);
                                 return (
-                                  <button 
+                                  <button
                                     key={user.id}
                                     type="button"
                                     className="w-full text-left px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-blue-50 flex items-center justify-between transition-colors border-b border-gray-50 last:border-0"
@@ -1259,7 +1264,7 @@ export default function WorkDetails() {
               </div>
             );
           })}
-          
+
           {filteredTasks.length === 0 && (
             <div className="py-12 text-center flex flex-col items-center gap-2">
               <LayoutGrid size={36} className="text-gray-300" />
@@ -1268,7 +1273,7 @@ export default function WorkDetails() {
           )}
         </div>
       </div>
-      
+
       {/* Click outside to close dropdowns */}
       {searchDropdown.id && (
         <div className="fixed inset-0 z-40" onClick={() => setSearchDropdown({ type: null, id: null, term: "" })} />

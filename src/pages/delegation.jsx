@@ -534,7 +534,7 @@ function DelegationDataPage() {
     (e) => {
       e.stopPropagation();
       const checked = e.target.checked;
-      
+
       const selectableIds = paginatedTasks
         .filter(item => item.timeStatus !== "Upcoming")
         .map((item) => item.id);
@@ -828,69 +828,69 @@ function DelegationDataPage() {
   return (
     <AdminLayout>
       <>
-      <div className="space-y-4 sm:space-y-6">
-        {/* Sticky Header and Controls */}
-        <div className="sticky top-0 z-40 bg-gray-50/95 backdrop-blur-md pt-2 pb-4 space-y-4 -mx-2 px-2 sm:mx-0 sm:px-0">
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-purple-700">
-            {showHistory
-              ? CONFIG.PAGE_CONFIG.historyTitle
-              : CONFIG.PAGE_CONFIG.title}
-          </h1>
+        <div className="space-y-4 sm:space-y-6">
+          {/* Sticky Header and Controls */}
+          <div className="sticky top-0 z-40 bg-gray-50/95 backdrop-blur-md pt-2 pb-4 space-y-4 -mx-2 px-2 sm:mx-0 sm:px-0">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-purple-700">
+              {showHistory
+                ? CONFIG.PAGE_CONFIG.historyTitle
+                : CONFIG.PAGE_CONFIG.title}
+            </h1>
 
-          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-purple-50 shadow-sm">
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-              <div className="relative flex-1">
-                <Search
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  size={18}
-                />
-                <input
-                  type="text"
-                  placeholder={
-                    showHistory ? "Search by Task ID..." : "Search tasks..."
-                  }
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-purple-200 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                />
-              </div>
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-purple-50 shadow-sm">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+                <div className="relative flex-1">
+                  <Search
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                    size={18}
+                  />
+                  <input
+                    type="text"
+                    placeholder={
+                      showHistory ? "Search by Task ID..." : "Search tasks..."
+                    }
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-purple-200 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                  />
+                </div>
 
-              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                {!showHistory && (
-                  <div className="flex items-center gap-2 flex-1 sm:flex-none">
-                    <select
-                      value={dateFilter}
-                      onChange={(e) => setDateFilter(e.target.value)}
-                      className="w-full sm:w-auto border border-purple-200 rounded-md px-3 py-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 h-10"
-                    >
-                      {filterOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <button
-                  onClick={toggleHistory}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-purple-700 bg-white border border-purple-200 rounded-md hover:bg-purple-50 transition-colors shadow-sm h-10"
-                >
-                  {showHistory ? (
-                    <>
-                      <ArrowLeft className="h-4 w-4 mr-1" />
-                      <span>Back</span>
-                    </>
-                  ) : (
-                    <>
-                      <History className="h-4 w-4 mr-1" />
-                      <span>History</span>
-                    </>
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                  {!showHistory && (
+                    <div className="flex items-center gap-2 flex-1 sm:flex-none">
+                      <select
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value)}
+                        className="w-full sm:w-auto border border-purple-200 rounded-md px-3 py-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 h-10"
+                      >
+                        {filterOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
-                </button>
+                  <button
+                    onClick={toggleHistory}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-purple-700 bg-white border border-purple-200 rounded-md hover:bg-purple-50 transition-colors shadow-sm h-10"
+                  >
+                    {showHistory ? (
+                      <>
+                        <ArrowLeft className="h-4 w-4 mr-1" />
+                        <span>Back</span>
+                      </>
+                    ) : (
+                      <>
+                        <History className="h-4 w-4 mr-1" />
+                        <span>History</span>
+                      </>
+                    )}
+                  </button>
 
-                {!showHistory && (
-                  <>
-                    {/* 
+                  {!showHistory && (
+                    <>
+                      {/* 
                     <button
                       onClick={handleSendUrgentWhatsApp}
                       disabled={selectedItems.size === 0 || isSubmitting}
@@ -903,872 +903,869 @@ function DelegationDataPage() {
                     </button>
                     */}
 
-                    <button
-                      onClick={handleSubmit}
-                      disabled={selectedItemsCount === 0 || isSubmitting}
-                      className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors h-10"
-                    >
-                      {isSubmitting
-                        ? "..."
-                        : (
-                          <>
-                            <span className="hidden sm:inline">Submit Selected ({selectedItemsCount})</span>
-                            <span className="sm:hidden">Submit ({selectedItemsCount})</span>
-                          </>
-                        )}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {successMessage && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-3 sm:px-4 py-3 rounded-md flex items-center justify-between text-sm sm:text-base">
-            <div className="flex items-center">
-              <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-green-500 flex-shrink-0" />
-              <span className="break-words">{successMessage}</span>
-            </div>
-            <button
-              onClick={() => setSuccessMessage("")}
-              className="text-green-500 hover:text-green-700 ml-2 flex-shrink-0"
-            >
-              <X className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
-          </div>
-        )}
-
-        <div className="rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-3 sm:p-4">
-            <h2 className="text-purple-700 font-medium text-sm sm:text-base">
-              {showHistory
-                ? `Completed ${CONFIG.SOURCE_SHEET_NAME} Tasks`
-                : `Pending ${CONFIG.SOURCE_SHEET_NAME} Tasks`}
-            </h2>
-            <p className="text-purple-600 text-xs sm:text-sm mt-1">
-              {showHistory
-                ? `${CONFIG.PAGE_CONFIG.historyDescription} for ${userRole === "admin" ? "all" : "your"
-                } tasks`
-                : CONFIG.PAGE_CONFIG.description}
-            </p>
-          </div>
-
-          {loading ? (
-            <div className="text-center py-10">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500 mb-4"></div>
-              <p className="text-purple-600 text-sm sm:text-base">Loading task data...</p>
-            </div>
-          ) : error ? (
-            <div className="bg-red-50 p-4 rounded-md text-red-800 text-center text-sm sm:text-base">
-              {error}{" "}
-              <button
-                className="underline ml-2"
-                onClick={() => window.location.reload()}
-              >
-                Try again
-              </button>
-            </div>
-          ) : showHistory ? (
-            <>
-              {/* Simplified History Filters - Only Date Range */}
-              <div className="p-3 sm:p-4 border-b border-purple-100 bg-gray-50">
-                <div className="flex flex-col gap-3 sm:gap-4">
-                  <div className="flex flex-col">
-                    <div className="mb-2 flex items-center">
-                      <span className="text-xs sm:text-sm font-medium text-purple-700">
-                        Filter by Date Range:
-                      </span>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                      <div className="flex items-center w-full sm:w-auto">
-                        <label
-                          htmlFor="start-date"
-                          className="text-xs sm:text-sm text-gray-700 mr-1 whitespace-nowrap"
-                        >
-                          From
-                        </label>
-                        <input
-                          id="start-date"
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className="flex-1 sm:flex-none text-xs sm:text-sm border border-gray-200 rounded-md p-1"
-                        />
-                      </div>
-                      <div className="flex items-center w-full sm:w-auto">
-                        <label
-                          htmlFor="end-date"
-                          className="text-xs sm:text-sm text-gray-700 mr-1 whitespace-nowrap"
-                        >
-                          To
-                        </label>
-                        <input
-                          id="end-date"
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          className="flex-1 sm:flex-none text-xs sm:text-sm border border-gray-200 rounded-md p-1"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {(startDate || endDate || searchTerm) && (
-                    <button
-                      onClick={resetFilters}
-                      className="px-3 py-1 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-xs sm:text-sm w-full sm:w-auto"
-                    >
-                      Clear All Filters
-                    </button>
+                      <button
+                        onClick={handleSubmit}
+                        disabled={selectedItemsCount === 0 || isSubmitting}
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors h-10"
+                      >
+                        {isSubmitting
+                          ? "..."
+                          : (
+                            <>
+                              <span className="hidden sm:inline">Submit Selected ({selectedItemsCount})</span>
+                              <span className="sm:hidden">Submit ({selectedItemsCount})</span>
+                            </>
+                          )}
+                      </button>
+                    </>
                   )}
                 </div>
-                <PaginationUI />
               </div>
+            </div>
+          </div>
 
-              {/* History Table - Mobile Responsive */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50 sticky top-0 z-20 shadow-sm">
-                    <tr>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Task ID
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Level
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
-                        Task
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Timestamp
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Status
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Next Target
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
-                        Remarks
-                      </th>
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Image
-                      </th>
-                      {userRole === "admin" && (
-                        <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                          User
-                        </th>
-                      )}
-                      <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Given By
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {paginatedTasks.length > 0 ? (
-                      paginatedTasks.map((history, index) => (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-3 sm:px-6 py-2 sm:py-4">
-                            <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {history.id || "—"}
-                            </div>
-                          </td>
-                          <td className="px-3 sm:px-6 py-2 sm:py-4">
-                            <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {history.task_level || "—"}
-                            </div>
-                          </td>
-                          <td className="px-3 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
-                            <RenderDescription text={history.task_description} audioUrl={history.audio_url} instructionUrl={history.instruction_attachment_url} instructionType={history.instruction_attachment_type} />
-                          </td>
-                          <td className="px-3 sm:px-6 py-2 sm:py-4">
-                            <div className="text-xs sm:text-sm font-medium text-gray-900 whitespace-normal break-words">
-                              {formatDateTimeForDisplay(history.created_at) ||
-                                "—"}
-                            </div>
-                          </td>
-                          <td className="px-3 sm:px-6 py-2 sm:py-4">
-                            <span
-                              className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${history.status === "done"
-                                ? (history.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
-                                : history.status === "rejected"
-                                  ? "bg-red-100 text-red-800"
-                                  : history.status === "extend"
-                                    ? "bg-yellow-100 text-yellow-800"
-                                    : history.status === "pending"
-                                      ? "bg-orange-100 text-orange-800"
-                                      : "bg-gray-100 text-gray-800"
-                                }`}
-                            >
-                              {history.status === "done"
-                                ? (history.admin_done ? "Approved" : "Pending Approval")
-                                : (history.status === "pending" ? "Pending Approval" :
-                                  history.status === "rejected" ? "Rejected" :
-                                    history.status === "extend" ? "Extended" :
-                                      (history.status || "—"))}
-                            </span>
-                          </td>
-                          <td className="px-3 sm:px-6 py-2 sm:py-4">
-                            <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {formatDateTimeForDisplay(
-                                history.next_extend_date
-                              ) || "—"}
-                            </div>
-                          </td>
-                          <td className="px-3 sm:px-6 py-2 sm:py-4 bg-purple-50 min-w-[150px] max-w-[250px]">
-                            <div
-                              className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
-                              title={history.reason}
-                            >
-                              {history.reason || "—"}
-                            </div>
-                          </td>
-                          <td className="px-3 sm:px-6 py-2 sm:py-4">
-                            {history.image_url ? (
-                              <a
-                                href={history.image_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-800 underline flex items-center"
-                              >
-                                <img
-                                  src={
-                                    history.image_url ||
-                                    "/api/placeholder/32/32"
-                                  }
-                                  alt="Attachment"
-                                  className="h-6 w-6 sm:h-8 sm:w-8 object-cover rounded-md mr-2 flex-shrink-0"
-                                />
-                                <span className="text-xs whitespace-normal break-words">
-                                  View
-                                </span>
-                              </a>
-                            ) : (
-                              <span className="text-gray-400 text-xs">
-                                No file
-                              </span>
-                            )}
-                          </td>
-                          {userRole === "admin" && (
-                            <td className="px-3 sm:px-6 py-2 sm:py-4">
-                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                                {history.name || "—"}
-                              </div>
-                            </td>
-                          )}
-                          <td className="px-3 sm:px-6 py-2 sm:py-4">
-                            <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                              {history.given_by || "—"}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan={userRole === "admin" ? 9 : 8}
-                          className="px-4 sm:px-6 py-4 text-center text-gray-500 text-xs sm:text-sm"
-                        >
-                          {searchTerm || startDate || endDate
-                            ? "No historical records matching your filters"
-                            : "No completed records found"}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+          {successMessage && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-3 sm:px-4 py-3 rounded-md flex items-center justify-between text-sm sm:text-base">
+              <div className="flex items-center">
+                <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-green-500 flex-shrink-0" />
+                <span className="break-words">{successMessage}</span>
               </div>
+              <button
+                onClick={() => setSuccessMessage("")}
+                className="text-green-500 hover:text-green-700 ml-2 flex-shrink-0"
+              >
+                <X className="h-4 w-4 sm:h-5 sm:w-5" />
+              </button>
+            </div>
+          )}
 
-              {/* Mobile History Cards */}
-              <div className="md:hidden space-y-4 p-4 bg-gray-50/50">
-                {paginatedTasks.length > 0 ? (
-                  paginatedTasks.map((history, index) => (
-                    <div key={index} className="bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden">
-                      <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-purple-800">#{history.id || index}</span>
-                          {history.task_level && (
-                            <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
-                              {history.task_level}
-                            </span>
-                          )}
-                        </div>
-                        <span
-                          className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${history.status?.toLowerCase() === "done"
-                            ? (history.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
-                            : history.status === "pending_approval"
-                              ? "bg-orange-100 text-orange-800"
-                              : history.status === "extend"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : "bg-gray-100 text-gray-800"
-                            }`}
-                        >
-                          {history.status === "done"
-                            ? (history.admin_done ? "Approved" : "Pending Approval")
-                            : (history.status === "pending" ? "Pending Approval" :
-                              history.status === "rejected" ? "Rejected" :
-                                history.status === "extend" ? "Extended" :
-                                  (history.status || "—"))}
+          <div className="rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-3 sm:p-4">
+              <h2 className="text-purple-700 font-medium text-sm sm:text-base">
+                {showHistory
+                  ? `Completed ${CONFIG.SOURCE_SHEET_NAME} Tasks`
+                  : `Pending ${CONFIG.SOURCE_SHEET_NAME} Tasks`}
+              </h2>
+              <p className="text-purple-600 text-xs sm:text-sm mt-1">
+                {showHistory
+                  ? `${CONFIG.PAGE_CONFIG.historyDescription} for ${userRole === "admin" ? "all" : "your"
+                  } tasks`
+                  : CONFIG.PAGE_CONFIG.description}
+              </p>
+            </div>
+
+            {loading ? (
+              <div className="text-center py-10">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500 mb-4"></div>
+                <p className="text-purple-600 text-sm sm:text-base">Loading task data...</p>
+              </div>
+            ) : error ? (
+              <div className="bg-red-50 p-4 rounded-md text-red-800 text-center text-sm sm:text-base">
+                {error}{" "}
+                <button
+                  className="underline ml-2"
+                  onClick={() => window.location.reload()}
+                >
+                  Try again
+                </button>
+              </div>
+            ) : showHistory ? (
+              <>
+                {/* Simplified History Filters - Only Date Range */}
+                <div className="p-3 sm:p-4 border-b border-purple-100 bg-gray-50">
+                  <div className="flex flex-col gap-3 sm:gap-4">
+                    <div className="flex flex-col">
+                      <div className="mb-2 flex items-center">
+                        <span className="text-xs sm:text-sm font-medium text-purple-700">
+                          Filter by Date Range:
                         </span>
                       </div>
-                      <div className="p-4 space-y-3">
-                        <div className="space-y-1">
-                          <p className="text-[10px] text-gray-400 uppercase font-semibold">Task</p>
-                          <RenderDescription text={history.task_description} audioUrl={history.audio_url} instructionUrl={history.instruction_attachment_url} instructionType={history.instruction_attachment_type} />
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                        <div className="flex items-center w-full sm:w-auto">
+                          <label
+                            htmlFor="start-date"
+                            className="text-xs sm:text-sm text-gray-700 mr-1 whitespace-nowrap"
+                          >
+                            From
+                          </label>
+                          <input
+                            id="start-date"
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="flex-1 sm:flex-none text-xs sm:text-sm border border-gray-200 rounded-md p-1"
+                          />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <p className="text-[10px] text-gray-400 uppercase font-semibold">Timestamp</p>
-                            <p className="text-xs text-gray-700">{formatDateTimeForDisplay(history.created_at)}</p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-[10px] text-gray-400 uppercase font-semibold">Given By</p>
-                            <p className="text-xs text-gray-700 font-bold">{history.given_by || "—"}</p>
-                          </div>
+                        <div className="flex items-center w-full sm:w-auto">
+                          <label
+                            htmlFor="end-date"
+                            className="text-xs sm:text-sm text-gray-700 mr-1 whitespace-nowrap"
+                          >
+                            To
+                          </label>
+                          <input
+                            id="end-date"
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="flex-1 sm:flex-none text-xs sm:text-sm border border-gray-200 rounded-md p-1"
+                          />
                         </div>
-                        {history.next_extend_date && (
-                          <div className="space-y-1">
-                            <p className="text-[10px] text-gray-400 uppercase font-semibold">Next Target</p>
-                            <p className="text-xs text-indigo-600 font-bold">{formatDateTimeForDisplay(history.next_extend_date)}</p>
-                          </div>
-                        )}
-                        {history.reason && (
-                          <div className="space-y-1 p-2 bg-purple-50 rounded">
-                            <p className="text-[10px] text-purple-400 uppercase font-semibold">Remarks</p>
-                            <p className="text-xs text-purple-700 italic">{history.reason}</p>
-                          </div>
-                        )}
-                        {history.image_url && (
-                          <div className="pt-2 border-t border-gray-50">
-                            <a href={history.image_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 font-bold text-xs">
-                              <img src={history.image_url} className="w-8 h-8 rounded object-cover border" alt="preview" />
-                              View Attachment
-                            </a>
-                          </div>
-                        )}
                       </div>
                     </div>
-                  ))) : (
-                  <div className="text-center py-10 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
-                    <p>No records found</p>
-                  </div>
-                )}
-              </div>
-              <PaginationUI />
-            </>
-          ) : (
-            <>
-              {/* Regular Tasks Table - Mobile Responsive */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                          checked={
-                            (() => {
-                              const selectableTasks = paginatedTasks.filter(t => t.timeStatus !== "Upcoming");
-                              return selectableTasks.length > 0 && selectableTasks.every(t => selectedItems.has(t.id));
-                            })()
-                          }
-                          onChange={handleSelectAllItems}
-                        />
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Time Status
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Task ID
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Level
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
-                        Task Description
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Shop
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Given By
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Name
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Last Activity
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-green-50">
-                        Planned Date
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-blue-50">
-                        Select Status
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-indigo-50">
-                        Next Target
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px] bg-purple-50">
-                        Remarks
-                      </th>
-                      <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-orange-50">
-                        Upload
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {paginatedTasks.length > 0 ? (
-                      paginatedTasks.map((task, index) => {
-                        const isSelected = selectedItems.has(task.id);
-                        const showHeader = index === 0 || task.timeStatus !== paginatedTasks[index - 1].timeStatus;
-                        
-                        return (
-                          <Fragment key={index}>
-                            {showHeader && (
-                              <tr className="bg-gray-100/50">
-                                <td colSpan={13} className="px-6 py-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className={`w-2 h-2 rounded-full ${
-                                      task.timeStatus === "Overdue" ? "bg-red-500" :
-                                      task.timeStatus === "Today" ? "bg-amber-500" :
-                                      "bg-blue-500"
-                                    }`} />
-                                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-500">
-                                      {task.timeStatus} Tasks
-                                    </span>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                            <tr
-                              className={`${isSelected ? "bg-purple-50" : ""} hover:bg-gray-50`}
-                            >
-                            <td className="px-2 sm:px-6 py-2 sm:py-4">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
-                                checked={isSelected}
-                                disabled={task.timeStatus === "Upcoming"}
-                                title={task.timeStatus === "Upcoming" ? "Cannot submit upcoming tasks" : ""}
-                                onChange={(e) =>
-                                  handleCheckboxClick(e, task.id)
-                                }
-                              />
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4">
-                              <div className="text-[10px] font-bold">
-                                <span className={`px-2 py-0.5 rounded-full ${task.timeStatus === "Overdue" ? "bg-red-100 text-red-700" :
-                                  task.timeStatus === "Today" ? "bg-amber-100 text-amber-700" :
-                                    task.timeStatus === "Upcoming" ? "bg-blue-100 text-blue-700" :
-                                      "bg-gray-100 text-gray-700"
-                                  }`}>
-                                  {task.timeStatus}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4">
-                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                                {task.id || "—"}
-                              </div>
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4">
-                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                                {task.task_level || "—"}
-                              </div>
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
-                              <div
-                                className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
-                              >
-                                <RenderDescription text={task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
-                              </div>
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4">
-                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                                {task.shop || task.shop_name || "—"}
-                              </div>
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4">
-                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                                {task.given_by || "—"}
-                              </div>
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4">
-                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                                {task.name || "—"}
-                              </div>
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4">
-                              <div className="text-[10px] text-purple-600 font-bold whitespace-nowrap">
-                                {task.submission_date ? formatDateTimeForDisplay(task.submission_date) : "New Task"}
-                              </div>
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4 bg-green-50">
-                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                                {formatDateTimeForDisplay(task.planned_date)}
-                              </div>
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4 bg-blue-50">
-                              <select
-                                disabled={!isSelected}
-                                value={statusData[task.id] || ""}
-                                onChange={(e) =>
-                                  handleStatusChange(
-                                    task.id,
-                                    e.target.value
-                                  )
-                                }
-                                className="border border-gray-300 rounded-md px-2 py-1 w-full disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm"
-                              >
-                                <option value="">Select</option>
-                                <option value="Done">Done</option>
-                                <option value="Extend date">Extend</option>
-                              </select>
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4 bg-indigo-50">
-                              <input
-                                type="date"
-                                disabled={
-                                  !isSelected ||
-                                  statusData[task.id] !== "Extend date"
-                                }
-                                value={nextTargetDate[task.id] || ""}
-                                onChange={(e) => {
-                                  handleNextTargetDateChange(
-                                    task.id,
-                                    e.target.value
-                                  );
-                                }}
-                                className="border border-gray-300 rounded-md px-2 py-1 w-full disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm"
-                              />
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[150px] max-w-[250px] bg-purple-50">
-                              <textarea
-                                placeholder="Enter remarks"
-                                disabled={!isSelected}
-                                value={remarksData[task.id] || ""}
-                                onChange={(e) =>
-                                  setRemarksData((prev) => ({
-                                    ...prev,
-                                    [task.id]: e.target.value,
-                                  }))
-                                }
-                                className="border border-gray-300 rounded-md px-3 py-2 w-full h-8 sm:h-auto min-h-[32px] sm:min-h-[64px] disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm resize-none"
-                              />
-                            </td>
-                            <td className="px-2 sm:px-6 py-2 sm:py-4 bg-orange-50">
-                              {uploadedImages[task.id] ? (
-                                <div className="flex items-center space-x-2 p-1 bg-green-50 rounded border border-green-200">
-                                  <span className="text-[10px] text-green-700 truncate max-w-[80px]">
-                                    {uploadedImages[task.id].name}
-                                  </span>
-                                  <button
-                                    onClick={() =>
-                                      setUploadedImages((prev) => {
-                                        const newState = { ...prev };
-                                        delete newState[task.id];
-                                        return newState;
-                                      })
-                                    }
-                                    className="text-red-500 hover:text-red-700"
-                                  >
-                                    <X size={14} />
-                                  </button>
-                                </div>
-                              ) : task.image ? (
-                                <div className="flex items-center space-x-2">
-                                  <img
-                                    src={task.image}
-                                    className="w-8 h-8 rounded object-cover border"
-                                    alt="preview"
-                                  />
-                                  <button
-                                    onClick={() => {
-                                      setViewerMedia({ url: task.image, type: 'image' });
-                                      setViewerOpen(true);
-                                    }}
-                                    className="text-purple-600 text-xs font-bold underline"
-                                  >
-                                    View
-                                  </button>
-                                </div>
-                              ) : (
-                                <label className="cursor-pointer group">
-                                  <div className={`flex items-center justify-center p-2 rounded-lg border-2 border-dashed transition-all ${isSelected ? "border-purple-300 group-hover:border-purple-500 bg-purple-50" : "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"}`}>
-                                    <Upload
-                                      size={18}
-                                      className={isSelected ? "text-purple-500" : "text-gray-400"}
-                                    />
-                                    {task.require_attachment?.toUpperCase() ===
-                                      "YES" && (
-                                        <span className="ml-1 text-[10px] text-red-500 font-bold">
-                                          *
-                                        </span>
-                                      )}
-                                  </div>
-                                  <input
-                                    type="file"
-                                    className="hidden"
-                                    accept="image/*"
-                                    disabled={!isSelected}
-                                    onChange={(e) =>
-                                      handleImageUpload(task.id, e)
-                                    }
-                                  />
-                                </label>
-                              )}
-                            </td>
-                          </tr>
-                        </Fragment>
-                      );
-                    })
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan={11}
-                          className="px-4 sm:px-6 py-4 text-center text-gray-500 text-xs sm:text-sm"
-                        >
-                          {searchTerm
-                            ? "No tasks matching your search"
-                            : "No pending tasks found"}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
 
-              {/* Mobile view Toolbar */}
-              {!showHistory && (
-                <div className="md:hidden sticky top-[header_height] z-30 transition-all duration-300">
-                  <div className="bg-white border-b border-purple-100 px-4 py-3 flex items-center justify-between shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="relative flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={(() => {
-                            const submittableTasks = paginatedTasks.filter(t => t.timeStatus !== "Upcoming");
-                            return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
-                          })()}
-                          onChange={handleSelectAllItems}
-                          className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition-all cursor-pointer"
-                        />
-                      </div>
-                      <span className="text-sm font-black text-gray-700 uppercase tracking-tight">Select All Tasks</span>
-                    </div>
-                    
-                    {selectedItems.size > 0 && (
-                      <button 
-                        onClick={() => { 
-                          setSelectedItems(new Set()); 
-                          setRemarksData({}); 
-                          setUploadedImages({}); 
-                          setStatusData({}); 
-                          setNextTargetDate({});
-                        }}
-                        className="text-[10px] font-black text-red-500 uppercase tracking-widest hover:text-red-700 transition-colors"
+                    {(startDate || endDate || searchTerm) && (
+                      <button
+                        onClick={resetFilters}
+                        className="px-3 py-1 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-xs sm:text-sm w-full sm:w-auto"
                       >
-                        Clear Selection
+                        Clear All Filters
                       </button>
                     )}
                   </div>
+                  <PaginationUI />
                 </div>
-              )}
 
-              {/* Mobile Regular Task Cards */}
-              <div className="md:hidden space-y-4 p-4 bg-gray-50/50 pb-24">
-                {paginatedTasks.length > 0 ? (
-                  paginatedTasks.map((task, index) => {
-                    const isSelected = selectedItems.has(task.id);
-                    const showHeader = index === 0 || task.timeStatus !== paginatedTasks[index - 1].timeStatus;
-                    
-                    return (
-                      <Fragment key={index}>
-                        {showHeader && (
-                          <div className={`mt-4 mb-2 px-3 py-1 rounded-full w-fit text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${
-                            task.timeStatus === "Overdue" ? "bg-red-50 text-red-600 border border-red-100" :
-                            task.timeStatus === "Today" ? "bg-amber-50 text-amber-600 border border-amber-100" :
-                            "bg-blue-50 text-blue-600 border border-blue-100"
-                          }`}>
-                             <div className={`w-1.5 h-1.5 rounded-full ${
-                              task.timeStatus === "Overdue" ? "bg-red-500" :
-                              task.timeStatus === "Today" ? "bg-amber-500" :
-                              "bg-blue-500"
-                            }`} />
-                            {task.timeStatus} Tasks
-                          </div>
+                {/* History Table - Mobile Responsive */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0 z-20 shadow-sm">
+                      <tr>
+                        <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Task ID
+                        </th>
+                        <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Level
+                        </th>
+                        <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
+                          Task
+                        </th>
+                        <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Timestamp
+                        </th>
+                        <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Status
+                        </th>
+                        <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Next Target
+                        </th>
+                        <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                          Remarks
+                        </th>
+                        <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Image
+                        </th>
+                        {userRole === "admin" && (
+                          <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            User
+                          </th>
                         )}
-                        <div key={index} className={`bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden ${isSelected ? "ring-2 ring-purple-400" : ""}`}>
+                        <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Given By
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {paginatedTasks.length > 0 ? (
+                        paginatedTasks.map((history, index) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-3 sm:px-6 py-2 sm:py-4">
+                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                {history.id || "—"}
+                              </div>
+                            </td>
+                            <td className="px-3 sm:px-6 py-2 sm:py-4">
+                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                {history.task_level || "—"}
+                              </div>
+                            </td>
+                            <td className="px-3 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
+                              <RenderDescription text={history.task_description} audioUrl={history.audio_url} instructionUrl={history.instruction_attachment_url} instructionType={history.instruction_attachment_type} />
+                            </td>
+                            <td className="px-3 sm:px-6 py-2 sm:py-4">
+                              <div className="text-xs sm:text-sm font-medium text-gray-900 whitespace-normal break-words">
+                                {formatDateTimeForDisplay(history.created_at) ||
+                                  "—"}
+                              </div>
+                            </td>
+                            <td className="px-3 sm:px-6 py-2 sm:py-4">
+                              <span
+                                className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${history.status === "done"
+                                  ? (history.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
+                                  : history.status === "rejected"
+                                    ? "bg-red-100 text-red-800"
+                                    : history.status === "extend"
+                                      ? "bg-yellow-100 text-yellow-800"
+                                      : history.status === "pending"
+                                        ? "bg-orange-100 text-orange-800"
+                                        : "bg-gray-100 text-gray-800"
+                                  }`}
+                              >
+                                {history.status === "done"
+                                  ? (history.admin_done ? "Approved" : "Pending Approval")
+                                  : (history.status === "pending" ? "Pending Approval" :
+                                    history.status === "rejected" ? "Rejected" :
+                                      history.status === "extend" ? "Extended" :
+                                        (history.status || "—"))}
+                              </span>
+                            </td>
+                            <td className="px-3 sm:px-6 py-2 sm:py-4">
+                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                {formatDateTimeForDisplay(
+                                  history.next_extend_date
+                                ) || "—"}
+                              </div>
+                            </td>
+                            <td className="px-3 sm:px-6 py-2 sm:py-4 bg-purple-50 min-w-[150px] max-w-[250px]">
+                              <div
+                                className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
+                                title={history.reason}
+                              >
+                                {history.reason || "—"}
+                              </div>
+                            </td>
+                            <td className="px-3 sm:px-6 py-2 sm:py-4">
+                              {history.image_url ? (
+                                <a
+                                  href={history.image_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 underline flex items-center"
+                                >
+                                  <img
+                                    src={
+                                      history.image_url ||
+                                      "/api/placeholder/32/32"
+                                    }
+                                    alt="Attachment"
+                                    className="h-6 w-6 sm:h-8 sm:w-8 object-cover rounded-md mr-2 flex-shrink-0"
+                                  />
+                                  <span className="text-xs whitespace-normal break-words">
+                                    View
+                                  </span>
+                                </a>
+                              ) : (
+                                <span className="text-gray-400 text-xs">
+                                  No file
+                                </span>
+                              )}
+                            </td>
+                            {userRole === "admin" && (
+                              <td className="px-3 sm:px-6 py-2 sm:py-4">
+                                <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                  {history.name || "—"}
+                                </div>
+                              </td>
+                            )}
+                            <td className="px-3 sm:px-6 py-2 sm:py-4">
+                              <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                {history.given_by || "—"}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td
+                            colSpan={userRole === "admin" ? 9 : 8}
+                            className="px-4 sm:px-6 py-4 text-center text-gray-500 text-xs sm:text-sm"
+                          >
+                            {searchTerm || startDate || endDate
+                              ? "No historical records matching your filters"
+                              : "No completed records found"}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile History Cards */}
+                <div className="md:hidden space-y-4 p-4 bg-gray-50/50">
+                  {paginatedTasks.length > 0 ? (
+                    paginatedTasks.map((history, index) => (
+                      <div key={index} className="bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden">
                         <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                              checked={isSelected}
-                              onChange={(e) => handleCheckboxClick(e, task.id)}
-                            />
-                            <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">#{task.id}</span>
-                            {task.task_level && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-purple-800">#{history.id || index}</span>
+                            {history.task_level && (
                               <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
-                                {task.task_level}
+                                {history.task_level}
                               </span>
                             )}
                           </div>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${task.timeStatus === "Overdue" ? "bg-red-100 text-red-700" :
-                            task.timeStatus === "Today" ? "bg-amber-100 text-amber-700" :
-                              task.timeStatus === "Upcoming" ? "bg-blue-100 text-blue-700" :
-                                "bg-gray-100 text-gray-700"
-                            }`}>
-                            {task.timeStatus}
+                          <span
+                            className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${history.status?.toLowerCase() === "done"
+                              ? (history.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
+                              : history.status === "pending_approval"
+                                ? "bg-orange-100 text-orange-800"
+                                : history.status === "extend"
+                                  ? "bg-yellow-100 text-yellow-800"
+                                  : "bg-gray-100 text-gray-800"
+                              }`}
+                          >
+                            {history.status === "done"
+                              ? (history.admin_done ? "Approved" : "Pending Approval")
+                              : (history.status === "pending" ? "Pending Approval" :
+                                history.status === "rejected" ? "Rejected" :
+                                  history.status === "extend" ? "Extended" :
+                                    (history.status || "—"))}
                           </span>
                         </div>
-                        <div className="p-4 space-y-4">
+                        <div className="p-4 space-y-3">
                           <div className="space-y-1">
-                            <p className="text-[10px] text-gray-400 uppercase font-semibold">Description</p>
-                            <div className="text-sm text-gray-800">
-                              <RenderDescription text={task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
-                            </div>
+                            <p className="text-[10px] text-gray-400 uppercase font-semibold">Task</p>
+                            <RenderDescription text={history.task_description} audioUrl={history.audio_url} instructionUrl={history.instruction_attachment_url} instructionType={history.instruction_attachment_type} />
                           </div>
-
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
-                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Shop</p>
-                              <p className="text-xs font-bold text-gray-700">{task.shop || "—"}</p>
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Timestamp</p>
+                              <p className="text-xs text-gray-700">{formatDateTimeForDisplay(history.created_at)}</p>
                             </div>
                             <div className="space-y-1">
                               <p className="text-[10px] text-gray-400 uppercase font-semibold">Given By</p>
-                              <p className="text-xs font-bold text-gray-700">{task.given_by || "—"}</p>
+                              <p className="text-xs text-gray-700 font-bold">{history.given_by || "—"}</p>
                             </div>
                           </div>
-
-                          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50">
+                          {history.next_extend_date && (
                             <div className="space-y-1">
-                              <p className="text-[10px] text-green-500 uppercase font-semibold">Planned Date</p>
-                              <p className="text-xs font-black text-gray-900">{formatDateTimeForDisplay(task.planned_date)}</p>
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Next Target</p>
+                              <p className="text-xs text-indigo-600 font-bold">{formatDateTimeForDisplay(history.next_extend_date)}</p>
                             </div>
-                            <div className="space-y-1 text-right">
-                              <p className="text-[10px] text-purple-600 uppercase font-semibold">Last Activity</p>
-                              <p className="text-[10px] font-bold text-gray-900">{task.submission_date ? formatDateTimeForDisplay(task.submission_date) : "New Task"}</p>
+                          )}
+                          {history.reason && (
+                            <div className="space-y-1 p-2 bg-purple-50 rounded">
+                              <p className="text-[10px] text-purple-400 uppercase font-semibold">Remarks</p>
+                              <p className="text-xs text-purple-700 italic">{history.reason}</p>
                             </div>
-                          </div>
-
-                          <div className="space-y-3 pt-3 border-t border-gray-50">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Status</p>
-                                <select
-                                  disabled={!isSelected}
-                                  value={statusData[task.id] || ""}
-                                  onChange={(e) => handleStatusChange(task.id, e.target.value)}
-                                  className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:ring-purple-400"
-                                >
-                                  <option value="">Select</option>
-                                  <option value="Done">Done</option>
-                                  <option value="Extend date">Extend</option>
-                                </select>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Next Target</p>
-                                <input
-                                  type="date"
-                                  disabled={!isSelected || statusData[task.id] !== "Extend date"}
-                                  value={nextTargetDate[task.id] || ""}
-                                  onChange={(e) => handleNextTargetDateChange(task.id, e.target.value)}
-                                  className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs disabled:bg-gray-50"
-                                />
-                              </div>
+                          )}
+                          {history.image_url && (
+                            <div className="pt-2 border-t border-gray-50">
+                              <a href={history.image_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 font-bold text-xs">
+                                <img src={history.image_url} className="w-8 h-8 rounded object-cover border" alt="preview" />
+                                View Attachment
+                              </a>
                             </div>
-
-                            <div className="space-y-1">
-                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Remarks</p>
-                              <textarea
-                                placeholder="Enter remarks"
-                                disabled={!isSelected}
-                                value={remarksData[task.id] || ""}
-                                onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs focus:ring-purple-400 resize-none"
-                                rows="2"
-                              />
-                            </div>
-
-                            <div className="space-y-1">
-                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Attachment</p>
-                              {uploadedImages[task.id] ? (
-                                <div className="flex items-center gap-2 p-2 bg-green-50 rounded border border-green-100">
-                                  <Upload className="h-4 w-4 text-green-600" />
-                                  <span className="text-[10px] text-green-700 font-bold truncate flex-1">{uploadedImages[task.id].name}</span>
-                                  <button onClick={() => setUploadedImages(prev => { const next = { ...prev }; delete next[task.id]; return next; })} className="text-red-400"><X size={14} /></button>
-                                </div>
-                              ) : task.image ? (
-                                <div className="flex items-center gap-2 p-2 bg-purple-50 rounded border border-purple-100">
-                                  <img src={task.image} className="w-8 h-8 rounded object-cover" alt="preview" />
-                                  <span className="text-[10px] text-purple-700 font-bold">Uploaded</span>
-                                  <button onClick={() => {
-                                    setViewerMedia({ url: task.image, type: 'image' });
-                                    setViewerOpen(true);
-                                  }} className="ml-auto text-purple-600 text-[10px] font-bold">View</button>
-                                </div>
-                              ) : (
-                                <label className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-xl transition-all ${isSelected ? "border-purple-200 bg-purple-50 text-purple-600" : "border-gray-100 bg-gray-50 text-gray-300"}`}>
-                                  <Upload size={16} />
-                                  <span className="text-xs font-bold">{task.require_attachment?.toUpperCase() === "YES" ? "Required*" : "Upload"}</span>
-                                  <input type="file" className="hidden" accept="image/*" disabled={!isSelected} onChange={(e) => handleImageUpload(task.id, e)} />
-                                </label>
-                              )}
-                            </div>
-                          </div>
+                          )}
                         </div>
                       </div>
-                    </Fragment>
-                  )
-                })
-                ) : (
-                  <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-200">
-                    <Search size={40} className="text-gray-100 mx-auto mb-3" />
-                    <p className="text-gray-400 text-sm">No tasks found</p>
-                  </div>
-                )}
-              </div>
+                    ))) : (
+                    <div className="text-center py-10 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+                      <p>No records found</p>
+                    </div>
+                  )}
+                </div>
+                <PaginationUI />
+              </>
+            ) : (
+              <>
+                {/* Regular Tasks Table - Mobile Responsive */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            checked={
+                              (() => {
+                                const selectableTasks = paginatedTasks.filter(t => t.timeStatus !== "Upcoming");
+                                return selectableTasks.length > 0 && selectableTasks.every(t => selectedItems.has(t.id));
+                              })()
+                            }
+                            onChange={handleSelectAllItems}
+                          />
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Time Status
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Task ID
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Level
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
+                          Task Description
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Shop
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Given By
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Name
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Last Activity
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-green-50">
+                          Planned Date
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-blue-50">
+                          Select Status
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-indigo-50">
+                          Next Target
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px] bg-purple-50">
+                          Remarks
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-orange-50">
+                          Upload
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {paginatedTasks.length > 0 ? (
+                        paginatedTasks.map((task, index) => {
+                          const isSelected = selectedItems.has(task.id);
+                          const showHeader = index === 0 || task.timeStatus !== paginatedTasks[index - 1].timeStatus;
 
-              {/* Mobile Floating Submit Bar */}
-              {!showHistory && selectedItems.size > 0 && (
-                <div className="md:hidden fixed bottom-6 left-4 right-4 z-40 animate-in slide-in-from-bottom-8 duration-500">
-                  <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-purple-100 p-2 overflow-hidden">
-                    <div className="flex items-center justify-between">
-                      <div className="pl-4">
-                        <p className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em] mb-0.5">Delegation</p>
-                        <p className="text-xs font-bold text-gray-500">{selectedItems.size} task{selectedItems.size !== 1 ? 's' : ''} selected</p>
+                          return (
+                            <Fragment key={index}>
+                              {showHeader && (
+                                <tr className="bg-gray-100/50">
+                                  <td colSpan={13} className="px-6 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className={`w-2 h-2 rounded-full ${task.timeStatus === "Overdue" ? "bg-red-500" :
+                                          task.timeStatus === "Today" ? "bg-amber-500" :
+                                            "bg-blue-500"
+                                        }`} />
+                                      <span className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-500">
+                                        {task.timeStatus} Tasks
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                              <tr
+                                className={`${isSelected ? "bg-purple-50" : ""} hover:bg-gray-50`}
+                              >
+                                <td className="px-2 sm:px-6 py-2 sm:py-4">
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
+                                    checked={isSelected}
+                                    disabled={task.timeStatus === "Upcoming"}
+                                    title={task.timeStatus === "Upcoming" ? "Cannot submit upcoming tasks" : ""}
+                                    onChange={(e) =>
+                                      handleCheckboxClick(e, task.id)
+                                    }
+                                  />
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4">
+                                  <div className="text-[10px] font-bold">
+                                    <span className={`px-2 py-0.5 rounded-full ${task.timeStatus === "Overdue" ? "bg-red-100 text-red-700" :
+                                      task.timeStatus === "Today" ? "bg-amber-100 text-amber-700" :
+                                        task.timeStatus === "Upcoming" ? "bg-blue-100 text-blue-700" :
+                                          "bg-gray-100 text-gray-700"
+                                      }`}>
+                                      {task.timeStatus}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4">
+                                  <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                    {task.id || "—"}
+                                  </div>
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4">
+                                  <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                    {task.task_level || "—"}
+                                  </div>
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
+                                  <div
+                                    className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
+                                  >
+                                    <RenderDescription text={task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                                  </div>
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4">
+                                  <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                    {task.shop || task.shop_name || "—"}
+                                  </div>
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4">
+                                  <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                    {task.given_by || "—"}
+                                  </div>
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4">
+                                  <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                    {task.name || "—"}
+                                  </div>
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4">
+                                  <div className="text-[10px] text-purple-600 font-bold whitespace-nowrap">
+                                    {task.submission_date ? formatDateTimeForDisplay(task.submission_date) : "New Task"}
+                                  </div>
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4 bg-green-50">
+                                  <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                    {formatDateTimeForDisplay(task.planned_date)}
+                                  </div>
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4 bg-blue-50">
+                                  <select
+                                    disabled={!isSelected}
+                                    value={statusData[task.id] || ""}
+                                    onChange={(e) =>
+                                      handleStatusChange(
+                                        task.id,
+                                        e.target.value
+                                      )
+                                    }
+                                    className="border border-gray-300 rounded-md px-2 py-1 w-full disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm"
+                                  >
+                                    <option value="">Select</option>
+                                    <option value="Done">Done</option>
+                                    <option value="Extend date">Extend</option>
+                                  </select>
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4 bg-indigo-50">
+                                  <input
+                                    type="date"
+                                    disabled={
+                                      !isSelected ||
+                                      statusData[task.id] !== "Extend date"
+                                    }
+                                    value={nextTargetDate[task.id] || ""}
+                                    onChange={(e) => {
+                                      handleNextTargetDateChange(
+                                        task.id,
+                                        e.target.value
+                                      );
+                                    }}
+                                    className="border border-gray-300 rounded-md px-2 py-1 w-full disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm"
+                                  />
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[150px] max-w-[250px] bg-purple-50">
+                                  <textarea
+                                    placeholder="Enter remarks"
+                                    disabled={!isSelected}
+                                    value={remarksData[task.id] || ""}
+                                    onChange={(e) =>
+                                      setRemarksData((prev) => ({
+                                        ...prev,
+                                        [task.id]: e.target.value,
+                                      }))
+                                    }
+                                    className="border border-gray-300 rounded-md px-3 py-2 w-full h-8 sm:h-auto min-h-[32px] sm:min-h-[64px] disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm resize-none"
+                                  />
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4 bg-orange-50">
+                                  {uploadedImages[task.id] ? (
+                                    <div className="flex items-center space-x-2 p-1 bg-green-50 rounded border border-green-200">
+                                      <span className="text-[10px] text-green-700 truncate max-w-[80px]">
+                                        {uploadedImages[task.id].name}
+                                      </span>
+                                      <button
+                                        onClick={() =>
+                                          setUploadedImages((prev) => {
+                                            const newState = { ...prev };
+                                            delete newState[task.id];
+                                            return newState;
+                                          })
+                                        }
+                                        className="text-red-500 hover:text-red-700"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </div>
+                                  ) : task.image ? (
+                                    <div className="flex items-center space-x-2">
+                                      <img
+                                        src={task.image}
+                                        className="w-8 h-8 rounded object-cover border"
+                                        alt="preview"
+                                      />
+                                      <button
+                                        onClick={() => {
+                                          setViewerMedia({ url: task.image, type: 'image' });
+                                          setViewerOpen(true);
+                                        }}
+                                        className="text-purple-600 text-xs font-bold underline"
+                                      >
+                                        View
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <label className="cursor-pointer group">
+                                      <div className={`flex items-center justify-center p-2 rounded-lg border-2 border-dashed transition-all ${isSelected ? "border-purple-300 group-hover:border-purple-500 bg-purple-50" : "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"}`}>
+                                        <Upload
+                                          size={18}
+                                          className={isSelected ? "text-purple-500" : "text-gray-400"}
+                                        />
+                                        {task.require_attachment?.toUpperCase() ===
+                                          "YES" && (
+                                            <span className="ml-1 text-[10px] text-red-500 font-bold">
+                                              *
+                                            </span>
+                                          )}
+                                      </div>
+                                      <input
+                                        type="file"
+                                        className="hidden"
+                                        accept="image/*"
+                                        disabled={!isSelected}
+                                        onChange={(e) =>
+                                          handleImageUpload(task.id, e)
+                                        }
+                                      />
+                                    </label>
+                                  )}
+                                </td>
+                              </tr>
+                            </Fragment>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td
+                            colSpan={11}
+                            className="px-4 sm:px-6 py-4 text-center text-gray-500 text-xs sm:text-sm"
+                          >
+                            {searchTerm
+                              ? "No tasks matching your search"
+                              : "No pending tasks found"}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile view Toolbar */}
+                {!showHistory && (
+                  <div className="md:hidden sticky top-[header_height] z-30 transition-all duration-300">
+                    <div className="bg-white border-b border-purple-100 px-4 py-3 flex items-center justify-between shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={(() => {
+                              const submittableTasks = paginatedTasks.filter(t => t.timeStatus !== "Upcoming");
+                              return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
+                            })()}
+                            onChange={handleSelectAllItems}
+                            className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition-all cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-sm font-black text-gray-700 uppercase tracking-tight">Select All Tasks</span>
                       </div>
-                      <button
-                        onClick={handleSubmit}
-                        disabled={isSubmitting}
-                        className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-sm font-black rounded-xl shadow-lg shadow-purple-200 transition-all active:scale-95 flex items-center gap-2"
-                      >
-                        {isSubmitting ? (
-                          <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Submitting</>
-                        ) : (
-                          <><CheckCircle2 className="w-4 h-4" /> Submit Now</>
-                        )}
-                      </button>
+
+                      {selectedItems.size > 0 && (
+                        <button
+                          onClick={() => {
+                            setSelectedItems(new Set());
+                            setRemarksData({});
+                            setUploadedImages({});
+                            setStatusData({});
+                            setNextTargetDate({});
+                          }}
+                          className="text-[10px] font-black text-red-500 uppercase tracking-widest hover:text-red-700 transition-colors"
+                        >
+                          Clear Selection
+                        </button>
+                      )}
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <PaginationUI />
-            </>
-          )}
+                {/* Mobile Regular Task Cards */}
+                <div className="md:hidden space-y-4 p-4 bg-gray-50/50 pb-24">
+                  {paginatedTasks.length > 0 ? (
+                    paginatedTasks.map((task, index) => {
+                      const isSelected = selectedItems.has(task.id);
+                      const showHeader = index === 0 || task.timeStatus !== paginatedTasks[index - 1].timeStatus;
+
+                      return (
+                        <Fragment key={index}>
+                          {showHeader && (
+                            <div className={`mt-4 mb-2 px-3 py-1 rounded-full w-fit text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${task.timeStatus === "Overdue" ? "bg-red-50 text-red-600 border border-red-100" :
+                                task.timeStatus === "Today" ? "bg-amber-50 text-amber-600 border border-amber-100" :
+                                  "bg-blue-50 text-blue-600 border border-blue-100"
+                              }`}>
+                              <div className={`w-1.5 h-1.5 rounded-full ${task.timeStatus === "Overdue" ? "bg-red-500" :
+                                  task.timeStatus === "Today" ? "bg-amber-500" :
+                                    "bg-blue-500"
+                                }`} />
+                              {task.timeStatus} Tasks
+                            </div>
+                          )}
+                          <div key={index} className={`bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden ${isSelected ? "ring-2 ring-purple-400" : ""}`}>
+                            <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                  checked={isSelected}
+                                  onChange={(e) => handleCheckboxClick(e, task.id)}
+                                />
+                                <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">#{task.id}</span>
+                                {task.task_level && (
+                                  <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                                    {task.task_level}
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${task.timeStatus === "Overdue" ? "bg-red-100 text-red-700" :
+                                task.timeStatus === "Today" ? "bg-amber-100 text-amber-700" :
+                                  task.timeStatus === "Upcoming" ? "bg-blue-100 text-blue-700" :
+                                    "bg-gray-100 text-gray-700"
+                                }`}>
+                                {task.timeStatus}
+                              </span>
+                            </div>
+                            <div className="p-4 space-y-4">
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Description</p>
+                                <div className="text-sm text-gray-800">
+                                  <RenderDescription text={task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Shop</p>
+                                  <p className="text-xs font-bold text-gray-700">{task.shop || "—"}</p>
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Given By</p>
+                                  <p className="text-xs font-bold text-gray-700">{task.given_by || "—"}</p>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50">
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-green-500 uppercase font-semibold">Planned Date</p>
+                                  <p className="text-xs font-black text-gray-900">{formatDateTimeForDisplay(task.planned_date)}</p>
+                                </div>
+                                <div className="space-y-1 text-right">
+                                  <p className="text-[10px] text-purple-600 uppercase font-semibold">Last Activity</p>
+                                  <p className="text-[10px] font-bold text-gray-900">{task.submission_date ? formatDateTimeForDisplay(task.submission_date) : "New Task"}</p>
+                                </div>
+                              </div>
+
+                              <div className="space-y-3 pt-3 border-t border-gray-50">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Status</p>
+                                    <select
+                                      disabled={!isSelected}
+                                      value={statusData[task.id] || ""}
+                                      onChange={(e) => handleStatusChange(task.id, e.target.value)}
+                                      className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:ring-purple-400"
+                                    >
+                                      <option value="">Select</option>
+                                      <option value="Done">Done</option>
+                                      <option value="Extend date">Extend</option>
+                                    </select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Next Target</p>
+                                    <input
+                                      type="date"
+                                      disabled={!isSelected || statusData[task.id] !== "Extend date"}
+                                      value={nextTargetDate[task.id] || ""}
+                                      onChange={(e) => handleNextTargetDateChange(task.id, e.target.value)}
+                                      className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs disabled:bg-gray-50"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Remarks</p>
+                                  <textarea
+                                    placeholder="Enter remarks"
+                                    disabled={!isSelected}
+                                    value={remarksData[task.id] || ""}
+                                    onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs focus:ring-purple-400 resize-none"
+                                    rows="2"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Attachment</p>
+                                  {uploadedImages[task.id] ? (
+                                    <div className="flex items-center gap-2 p-2 bg-green-50 rounded border border-green-100">
+                                      <Upload className="h-4 w-4 text-green-600" />
+                                      <span className="text-[10px] text-green-700 font-bold truncate flex-1">{uploadedImages[task.id].name}</span>
+                                      <button onClick={() => setUploadedImages(prev => { const next = { ...prev }; delete next[task.id]; return next; })} className="text-red-400"><X size={14} /></button>
+                                    </div>
+                                  ) : task.image ? (
+                                    <div className="flex items-center gap-2 p-2 bg-purple-50 rounded border border-purple-100">
+                                      <img src={task.image} className="w-8 h-8 rounded object-cover" alt="preview" />
+                                      <span className="text-[10px] text-purple-700 font-bold">Uploaded</span>
+                                      <button onClick={() => {
+                                        setViewerMedia({ url: task.image, type: 'image' });
+                                        setViewerOpen(true);
+                                      }} className="ml-auto text-purple-600 text-[10px] font-bold">View</button>
+                                    </div>
+                                  ) : (
+                                    <label className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-xl transition-all ${isSelected ? "border-purple-200 bg-purple-50 text-purple-600" : "border-gray-100 bg-gray-50 text-gray-300"}`}>
+                                      <Upload size={16} />
+                                      <span className="text-xs font-bold">{task.require_attachment?.toUpperCase() === "YES" ? "Required*" : "Upload"}</span>
+                                      <input type="file" className="hidden" accept="image/*" disabled={!isSelected} onChange={(e) => handleImageUpload(task.id, e)} />
+                                    </label>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </Fragment>
+                      )
+                    })
+                  ) : (
+                    <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-200">
+                      <Search size={40} className="text-gray-100 mx-auto mb-3" />
+                      <p className="text-gray-400 text-sm">No tasks found</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Mobile Floating Submit Bar */}
+                {!showHistory && selectedItems.size > 0 && (
+                  <div className="md:hidden fixed bottom-6 left-4 right-4 z-40 animate-in slide-in-from-bottom-8 duration-500">
+                    <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-purple-100 p-2 overflow-hidden">
+                      <div className="flex items-center justify-between">
+                        <div className="pl-4">
+                          <p className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em] mb-0.5">Delegation</p>
+                          <p className="text-xs font-bold text-gray-500">{selectedItems.size} task{selectedItems.size !== 1 ? 's' : ''} selected</p>
+                        </div>
+                        <button
+                          onClick={handleSubmit}
+                          disabled={isSubmitting}
+                          className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-sm font-black rounded-xl shadow-lg shadow-purple-200 transition-all active:scale-95 flex items-center gap-2"
+                        >
+                          {isSubmitting ? (
+                            <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Submitting</>
+                          ) : (
+                            <><CheckCircle2 className="w-4 h-4" /> Submit Now</>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <PaginationUI />
+              </>
+            )}
+          </div>
         </div>
-      </div>
-      <MediaViewer 
-        isOpen={viewerOpen} 
-        onClose={() => setViewerOpen(false)} 
-        media={viewerMedia} 
-      />
+        <MediaViewer
+          isOpen={viewerOpen}
+          onClose={() => setViewerOpen(false)}
+          media={viewerMedia}
+        />
       </>
-     </AdminLayout>
+    </AdminLayout>
   );
 }
 

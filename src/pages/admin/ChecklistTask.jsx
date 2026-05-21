@@ -1045,7 +1045,7 @@ export default function ChecklistTask() {
                             onClick={() => navigate('/dashboard/bulk-import')}
                             className="flex items-center gap-2 px-4 py-2 bg-white border border-purple-200 text-purple-700 rounded-xl text-xs font-black hover:bg-purple-50 transition-all shadow-sm active:scale-95"
                         >
-                            <Database className="w-3.5 h-3.5" /> Bulk Import
+                            <Database className="w-3.5 h-3.5" /> Add Tasks
                         </button>
                         <button onClick={() => navigate('/dashboard/assign-task')} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
                             <X className="w-5 h-5" />

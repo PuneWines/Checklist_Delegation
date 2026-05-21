@@ -45,8 +45,13 @@ const isAudioUrl = (url) => {
 
 const getWorkTaskTimeBounds = (task) => {
   const startStr = task.task_assignments?.start_datetime;
+  const endStr = task.task_assignments?.end_datetime;
+
   let startHour = 0;
   let startMin = 0;
+  let endHour = 23;
+  let endMin = 59;
+
   if (startStr) {
     const parts = startStr.split('T');
     if (parts[1]) {
@@ -55,6 +60,16 @@ const getWorkTaskTimeBounds = (task) => {
       startMin = parseInt(timeParts[1]) || 0;
     }
   }
+
+  if (endStr) {
+    const parts = endStr.split('T');
+    if (parts[1]) {
+      const timeParts = parts[1].split(':');
+      endHour = parseInt(timeParts[0]) || 0;
+      endMin = parseInt(timeParts[1]) || 0;
+    }
+  }
+
   // Be defensive: some task objects may not have `current_date`.
   let year, month, day;
   if (task.current_date && typeof task.current_date === 'string' && task.current_date.includes('-')) {
@@ -70,15 +85,17 @@ const getWorkTaskTimeBounds = (task) => {
     day = today.getDate();
   }
   const taskStart = new Date(year, month - 1, day, startHour, startMin, 0);
-  
-  // TEMPORARY: Commented out duration condition as per request
-  // const duration = task.duration || 0; // minutes
-  // const taskEnd = new Date(taskStart.getTime() + duration * 60 * 1000);
-  
+
+  const estimatedMins = task.duration || 0; // minutes
+  const baseEnd = new Date(year, month - 1, day, endHour, endMin, 0);
+
+  // Total time allowed is end time + estimated_min
+  const taskEnd = new Date(baseEnd.getTime() + estimatedMins * 60 * 1000);
+
   // Task is available for the entire day (until 23:59:59)
-  const taskEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
-  
-  return { taskStart, taskEnd };
+  const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
+
+  return { taskStart, taskEnd, endOfDay };
 };
 
 const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
@@ -86,11 +103,11 @@ const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
   if (task.status === "SUBMITTED" || task.status === "Done" || task.status === "done" || task.submission_date) return "SUBMITTED";
   if (task.status === "REJECTED") return "REJECTED";
 
-  const { taskStart, taskEnd } = getWorkTaskTimeBounds(task);
+  const { taskStart, endOfDay } = getWorkTaskTimeBounds(task);
 
   if (currentTime < taskStart) {
     return "UPCOMING";
-  } else if (currentTime >= taskStart && currentTime < taskEnd) {
+  } else if (currentTime <= endOfDay) {
     return "ACTIVE";
   } else {
     return "NOT_DONE";
@@ -503,33 +520,59 @@ const AllTasks = () => {
       const isSuperAdmin = currentUsername.toLowerCase() === "admin";
 
       let reportingUsers = [currentUsername];
-      if (!isSuperAdmin) {
-        if (currentUserRole === "admin" || currentUserRole === "hod") {
-          const { data: reports } = await supabase
-            .from("users")
-            .select("user_name")
-            .eq("reported_by", username);
-          if (reports && reports.length > 0) {
-            reportingUsers = [currentUsername, ...reports.map((r) => (r.user_name || ""))];
+      let applyNameFilter = true;
+
+      if (isSuperAdmin) {
+        applyNameFilter = false;
+      } else if (currentUserRole === "admin") {
+        applyNameFilter = false; // Admins see all tasks, not restricted by name
+
+        // Shop based logic for admin
+        const userAccess = localStorage.getItem("user_access") || "";
+        if (userAccess && userAccess.toLowerCase() !== "all") {
+          const allowedShops = userAccess.split(',').map(shop => shop.trim()).filter(d => d && d.toLowerCase() !== 'all');
+          if (allowedShops.length > 0) {
+            // regular tab uses 'shop', others use 'shop_name'
+            if (activeTab === 'regular') {
+              query = query.in('shop', allowedShops);
+            } else if (activeTab === 'ea' || activeTab === 'repair') {
+              // ea_tasks and repair_tasks typically don't have a shop column, we skip filtering to avoid DB error. 
+              // Since EA/Repair are usually cross-shop, maybe we just don't filter, or we check if they have specific access.
+              const tabNameStr = activeTab === 'ea' ? 'EA' : 'Repair';
+              if (!allowedShops.includes(tabNameStr) && !allowedShops.includes(tabNameStr.toLowerCase())) {
+                // If they don't have explicit access and are restricted to shops, maybe they shouldn't see these tasks
+                query = query.eq('id', -1); // returns empty
+              }
+            } else {
+              query = query.in('shop_name', allowedShops);
+            }
           }
-        } else if (currentUserRole === "manager") {
-          const { data: allDbUsers } = await supabase
-            .from("users")
-            .select("user_name, shop_name, user_access");
-          if (allDbUsers) {
-            const userAccess = localStorage.getItem("user_access") || "";
-            const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-            const matchedUsers = allDbUsers.filter(u => {
-              const userShop = (u.shop_name || u.user_access || "").toLowerCase();
-              const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
-              return userShopsList.some(s => managerShops.includes(s));
-            }).map(u => u.user_name || "");
-            reportingUsers = [...new Set([currentUsername, ...matchedUsers])].filter(Boolean);
-          }
+        }
+      } else if (currentUserRole === "hod") {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        if (reports && reports.length > 0) {
+          reportingUsers = [currentUsername, ...reports.map((r) => (r.user_name || ""))];
+        }
+      } else if (currentUserRole === "manager") {
+        const { data: allDbUsers } = await supabase
+          .from("users")
+          .select("user_name, shop_name, user_access");
+        if (allDbUsers) {
+          const userAccess = localStorage.getItem("user_access") || "";
+          const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+          const matchedUsers = allDbUsers.filter(u => {
+            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+            return userShopsList.some(s => managerShops.includes(s));
+          }).map(u => u.user_name || "");
+          reportingUsers = [...new Set([currentUsername, ...matchedUsers])].filter(Boolean);
         }
       }
 
-      if (!isSuperAdmin) {
+      if (applyNameFilter) {
         // Checklist, Maintenance, Repair, EA all have a field for the assigned person
         // Repair uses assigned_person, EA uses doer_name, others use name
         query = query.in(nameField, reportingUsers);
@@ -582,7 +625,7 @@ const AllTasks = () => {
       if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
         const cleanTerm = debouncedSearchTerm.trim();
         let searchFields = [];
-        
+
         switch (activeTab) {
           case "maintenance":
             searchFields = ["task_description", "shop", "machine_name", "part_name", "part_area", "name", "given_by"];
@@ -748,7 +791,7 @@ const AllTasks = () => {
         const descKey = task.task_description || task.issue_description || "";
         const nameKey = task.name || task.assigned_person || task.doer_name || "";
         const shopKey = task.shop || task.shop_name || "";
-        
+
         // Use series_id or assignment_id as the unique identifier if available, otherwise fallback to the old key
         let seriesBase = task.series_id || task.assignment_id || `${shopKey}::${descKey}::${nameKey}`;
 
@@ -896,7 +939,7 @@ const AllTasks = () => {
       if (imagePreviews[id]) {
         URL.revokeObjectURL(imagePreviews[id]);
       }
-      
+
       const previewUrl = URL.createObjectURL(file);
       setUploadedImages((prev) => ({ ...prev, [id]: file }));
       setImagePreviews((prev) => ({ ...prev, [id]: previewUrl }));
@@ -1370,19 +1413,19 @@ const AllTasks = () => {
                               { id: 'today', label: 'Today' },
                               { id: 'upcoming', label: 'Upcoming' }
                             ].filter(f => activeTab !== 'work' || f.id !== 'overdue')
-                            .map((filter) => (
-                              <button
-                                key={filter.id}
-                                onClick={() => {
-                                  setDateFilter(filter.id);
-                                  setSelectedItems(new Set());
-                                  setDropdownOpen(prev => ({ ...prev, dateFilter: false }));
-                                }}
-                                className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${dateFilter === filter.id ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
-                              >
-                                {filter.label}
-                              </button>
-                            ))}
+                              .map((filter) => (
+                                <button
+                                  key={filter.id}
+                                  onClick={() => {
+                                    setDateFilter(filter.id);
+                                    setSelectedItems(new Set());
+                                    setDropdownOpen(prev => ({ ...prev, dateFilter: false }));
+                                  }}
+                                  className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${dateFilter === filter.id ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
+                                >
+                                  {filter.label}
+                                </button>
+                              ))}
                           </div>
                         )}
                       </div>
@@ -1547,9 +1590,9 @@ const AllTasks = () => {
                                       disabled={
                                         activeTab === "work"
                                           ? (() => {
-                                              const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                              return ds === "UPCOMING" || ds === "NOT_DONE";
-                                            })()
+                                            const ds = getWorkTaskDynamicStatus(task, currentTime);
+                                            return ds === "UPCOMING" || ds === "NOT_DONE";
+                                          })()
                                           : getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"
                                       }
                                       className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
@@ -1639,11 +1682,11 @@ const AllTasks = () => {
                                         {header.id === "time_status"
                                           ? activeTab === "work"
                                             ? (() => {
-                                                const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                                const badgeColors = ds === 'NOT_DONE' ? 'bg-red-50 text-red-500' : ds === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
-                                                const label = ds === 'NOT_DONE' ? 'Not Done' : ds === 'ACTIVE' ? 'Active' : 'Upcoming';
-                                                return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${badgeColors}`}>{label}</span>;
-                                              })()
+                                              const ds = getWorkTaskDynamicStatus(task, currentTime);
+                                              const badgeColors = ds === 'NOT_DONE' ? 'bg-red-50 text-red-500' : ds === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
+                                              const label = ds === 'NOT_DONE' ? 'Not Done' : ds === 'ACTIVE' ? 'Active' : 'Upcoming';
+                                              return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${badgeColors}`}>{label}</span>;
+                                            })()
                                             : (
                                               <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task[statusDateColumn], task.status) === 'Overdue' ? 'bg-red-100 text-red-800' :
                                                 getTimeStatus(task[statusDateColumn], task.status) === 'Today' ? 'bg-green-100 text-green-800' :
@@ -1676,62 +1719,62 @@ const AllTasks = () => {
                                                     </div>
                                                   )
                                                   : formatDateWithTime(task[header.id])
-                                                 : header.id === "status"
-                                                   ? activeTab === "work"
-                                                     ? (() => {
-                                                         const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                                         if (ds === "APPROVED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>;
-                                                         if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
-                                                         if (ds === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
-                                                         if (ds === "UPCOMING") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>;
-                                                         if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
-                                                         return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>;
-                                                       })()
-                                                   : !showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")
-                                                    ? (
-                                                      <select
-                                                        value={statusData[task.id] || task.status || ""}
-                                                        onChange={(e) => setStatusData(prev => ({ ...prev, [task.id]: e.target.value }))}
-                                                        disabled={!selectedItems.has(task.id)}
-                                                        className="block w-full py-1.5 pl-3 pr-8 text-xs sm:text-sm text-gray-700 bg-white border border-gray-200 rounded-md focus:border-purple-500 focus:outline-none disabled:bg-gray-50/50 disabled:text-gray-400 appearance-none shadow-sm cursor-pointer hover:border-gray-300 transition-colors"
-                                                        style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                      >
-                                                        <option value="">Select Status</option>
-                                                        {activeTab === "ea" ? (
-                                                          <>
-                                                            <option value="done">Done</option>
-                                                            <option value="extended">Extend</option>
-                                                          </>
-                                                        ) : activeTab === "work" ? (
-                                                          <>
-                                                            <option value="SUBMITTED">Done</option>
-                                                          </>
-                                                        ) : (
-                                                          <>
-                                                            <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'yes' : 'Done'}>Done</option>
-                                                            <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'no' : 'Not Done'}>Not Done</option>
-                                                          </>
-                                                        )}
-                                                      </select>
-                                                    )
-                                                    : (
-                                                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${activeTab === "ea"
-                                                        ? (task[header.id]?.toLowerCase() === "approved" ? "bg-green-100 text-green-800" : task[header.id]?.toLowerCase() === "done" ? "bg-orange-100 text-orange-800" : (task[header.id]?.toLowerCase() === "pending" || task[header.id]?.toLowerCase() === "extend" || task[header.id]?.toLowerCase() === "extended") ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-800")
-                                                        : (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "approved" || task[header.id] === "Completed")
-                                                          ? (task.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
-                                                          : (task[header.id] === "extend" || task[header.id] === "pending" || task[header.id] === "extended")
-                                                            ? "bg-yellow-100 text-yellow-800"
-                                                            : "bg-gray-100 text-gray-800"
-                                                        }`}>
-                                                        {activeTab === "ea" && showHistory
-                                                          ? (task[header.id]?.toLowerCase() === "approved" || (task[header.id]?.toLowerCase() === "done" && task.admin_done) ? "Completed" : task[header.id]?.toLowerCase() === "done" ? "Pending Approval" : (task[header.id]?.toLowerCase() === "extended" || task[header.id]?.toLowerCase() === "extend") ? "Extended" : task[header.id])
-                                                          : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && !task.admin_done)
-                                                            ? "Pending Approval"
-                                                            : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && task.admin_done)
-                                                              ? "Approved"
-                                                              : task[header.id]}
-                                                      </span>
-                                                    )
+                                                : header.id === "status"
+                                                  ? activeTab === "work"
+                                                    ? (() => {
+                                                      const ds = getWorkTaskDynamicStatus(task, currentTime);
+                                                      if (ds === "APPROVED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>;
+                                                      if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
+                                                      if (ds === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
+                                                      if (ds === "UPCOMING") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>;
+                                                      if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
+                                                      return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>;
+                                                    })()
+                                                    : !showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")
+                                                      ? (
+                                                        <select
+                                                          value={statusData[task.id] || task.status || ""}
+                                                          onChange={(e) => setStatusData(prev => ({ ...prev, [task.id]: e.target.value }))}
+                                                          disabled={!selectedItems.has(task.id)}
+                                                          className="block w-full py-1.5 pl-3 pr-8 text-xs sm:text-sm text-gray-700 bg-white border border-gray-200 rounded-md focus:border-purple-500 focus:outline-none disabled:bg-gray-50/50 disabled:text-gray-400 appearance-none shadow-sm cursor-pointer hover:border-gray-300 transition-colors"
+                                                          style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
+                                                        >
+                                                          <option value="">Select Status</option>
+                                                          {activeTab === "ea" ? (
+                                                            <>
+                                                              <option value="done">Done</option>
+                                                              <option value="extended">Extend</option>
+                                                            </>
+                                                          ) : activeTab === "work" ? (
+                                                            <>
+                                                              <option value="SUBMITTED">Done</option>
+                                                            </>
+                                                          ) : (
+                                                            <>
+                                                              <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'yes' : 'Done'}>Done</option>
+                                                              <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'no' : 'Not Done'}>Not Done</option>
+                                                            </>
+                                                          )}
+                                                        </select>
+                                                      )
+                                                      : (
+                                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${activeTab === "ea"
+                                                          ? (task[header.id]?.toLowerCase() === "approved" ? "bg-green-100 text-green-800" : task[header.id]?.toLowerCase() === "done" ? "bg-orange-100 text-orange-800" : (task[header.id]?.toLowerCase() === "pending" || task[header.id]?.toLowerCase() === "extend" || task[header.id]?.toLowerCase() === "extended") ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-800")
+                                                          : (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "approved" || task[header.id] === "Completed")
+                                                            ? (task.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
+                                                            : (task[header.id] === "extend" || task[header.id] === "pending" || task[header.id] === "extended")
+                                                              ? "bg-yellow-100 text-yellow-800"
+                                                              : "bg-gray-100 text-gray-800"
+                                                          }`}>
+                                                          {activeTab === "ea" && showHistory
+                                                            ? (task[header.id]?.toLowerCase() === "approved" || (task[header.id]?.toLowerCase() === "done" && task.admin_done) ? "Completed" : task[header.id]?.toLowerCase() === "done" ? "Pending Approval" : (task[header.id]?.toLowerCase() === "extended" || task[header.id]?.toLowerCase() === "extend") ? "Extended" : task[header.id])
+                                                            : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && !task.admin_done)
+                                                              ? "Pending Approval"
+                                                              : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && task.admin_done)
+                                                                ? "Approved"
+                                                                : task[header.id]}
+                                                        </span>
+                                                      )
                                                   : (header.id === "enable_reminders" || header.id === "require_attachment" || header.id === "enable_reminder" || header.id === "attachment")
                                                     ? (task[header.id] ? "Yes" : "No")
                                                     : (header.id === 'name' || header.id === 'assigned_person' || header.id === 'doer_name')
@@ -1795,21 +1838,21 @@ const AllTasks = () => {
                                           <div className="flex flex-col gap-2">
                                             {imagePreviews[task.id] && (
                                               <div className="relative w-16 h-16 mb-1 group">
-                                                <img 
-                                                  src={imagePreviews[task.id]} 
-                                                  className="w-full h-full object-cover rounded-md border-2 border-purple-200 shadow-sm" 
-                                                  alt="Preview" 
+                                                <img
+                                                  src={imagePreviews[task.id]}
+                                                  className="w-full h-full object-cover rounded-md border-2 border-purple-200 shadow-sm"
+                                                  alt="Preview"
                                                 />
-                                                <button 
+                                                <button
                                                   onClick={() => {
                                                     URL.revokeObjectURL(imagePreviews[task.id]);
                                                     setImagePreviews(prev => {
-                                                      const next = {...prev};
+                                                      const next = { ...prev };
                                                       delete next[task.id];
                                                       return next;
                                                     });
                                                     setUploadedImages(prev => {
-                                                      const next = {...prev};
+                                                      const next = { ...prev };
                                                       delete next[task.id];
                                                       return next;
                                                     });
@@ -2096,44 +2139,44 @@ const AllTasks = () => {
                                     />
                                   </div>
                                   <div className="flex flex-col gap-3">
-                                      {imagePreviews[task.id] && (
-                                        <div className="relative w-full h-32 rounded-lg border-2 border-dashed border-purple-200 bg-purple-50/30 flex items-center justify-center overflow-hidden">
-                                          <img src={imagePreviews[task.id]} className="w-full h-full object-contain" alt="Preview" />
-                                          <button 
-                                            onClick={() => {
-                                              URL.revokeObjectURL(imagePreviews[task.id]);
-                                              setImagePreviews(prev => {
-                                                const next = {...prev};
-                                                delete next[task.id];
-                                                return next;
-                                              });
-                                              setUploadedImages(prev => {
-                                                const next = {...prev};
-                                                delete next[task.id];
-                                                return next;
-                                              });
-                                            }}
-                                            className="absolute top-2 right-2 bg-red-500/80 backdrop-blur-sm text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"
-                                          >
-                                            <X size={14} />
-                                          </button>
-                                        </div>
-                                      )}
-                                      <div className="flex gap-2">
-                                        {activeTab !== "work" && (
-                                          <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-purple-200 bg-purple-50 text-purple-600 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
-                                            <Upload className="h-3.5 w-3.5" />
-                                            <span>{uploadedImages[task.id] ? "Change" : "Upload"}</span>
-                                            <input type="file" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
-                                          </label>
-                                        )}
-                                        <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
-                                          <Camera className="h-3.5 w-3.5" />
-                                          <span>{uploadedImages[task.id] ? "Retake" : "Photo"}</span>
-                                          <input type="file" accept="image/*" {...(activeTab === "work" ? { capture: "environment" } : {})} className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
-                                        </label>
+                                    {imagePreviews[task.id] && (
+                                      <div className="relative w-full h-32 rounded-lg border-2 border-dashed border-purple-200 bg-purple-50/30 flex items-center justify-center overflow-hidden">
+                                        <img src={imagePreviews[task.id]} className="w-full h-full object-contain" alt="Preview" />
+                                        <button
+                                          onClick={() => {
+                                            URL.revokeObjectURL(imagePreviews[task.id]);
+                                            setImagePreviews(prev => {
+                                              const next = { ...prev };
+                                              delete next[task.id];
+                                              return next;
+                                            });
+                                            setUploadedImages(prev => {
+                                              const next = { ...prev };
+                                              delete next[task.id];
+                                              return next;
+                                            });
+                                          }}
+                                          className="absolute top-2 right-2 bg-red-500/80 backdrop-blur-sm text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"
+                                        >
+                                          <X size={14} />
+                                        </button>
                                       </div>
+                                    )}
+                                    <div className="flex gap-2">
+                                      {activeTab !== "work" && (
+                                        <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-purple-200 bg-purple-50 text-purple-600 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
+                                          <Upload className="h-3.5 w-3.5" />
+                                          <span>{uploadedImages[task.id] ? "Change" : "Upload"}</span>
+                                          <input type="file" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
+                                        </label>
+                                      )}
+                                      <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
+                                        <Camera className="h-3.5 w-3.5" />
+                                        <span>{uploadedImages[task.id] ? "Retake" : "Photo"}</span>
+                                        <input type="file" accept="image/*" {...(activeTab === "work" ? { capture: "environment" } : {})} className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
+                                      </label>
                                     </div>
+                                  </div>
                                 </div>
                               )}
 
