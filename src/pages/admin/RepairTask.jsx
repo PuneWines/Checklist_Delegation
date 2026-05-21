@@ -308,6 +308,7 @@ export default function RepairTask() {
     const removeTask = (id) => setTasks(prev => prev.filter(t => t.id !== id));
 
     const handleSubmitAll = async () => {
+        if (isSubmitting) return;
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i];
             if (!t.filledBy) {

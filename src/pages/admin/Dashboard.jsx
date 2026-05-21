@@ -370,7 +370,7 @@ export default function AdminDashboard() {
 
   const fetchShopDataWithDateRange = async (startDate, endDate, page = 1, append = false) => {
     try {
-      const data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', shopFilter);
+      const data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', shopFilter, startDate, endDate);
 
       // Filter data by date range on client side
       const start = new Date(startDate);
@@ -892,7 +892,7 @@ export default function AdminDashboard() {
   }
 
   const fetchShops = async () => {
-    if (dashboardType === 'checklist' || dashboardType === 'delegation') {
+    if (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'work') {
       try {
         // Fetch all shops from the shops table — admins see all
         const shops = await getUniqueShopsApi();
@@ -912,7 +912,7 @@ export default function AdminDashboard() {
 
   // Reset staff filter when shop filter changes
   useEffect(() => {
-    if (dashboardType === 'checklist' || dashboardType === 'delegation') {
+    if (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'work') {
       setDashboardStaffFilter("all");
     }
   }, [shopFilter, dashboardType]);

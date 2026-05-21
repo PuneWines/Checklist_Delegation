@@ -631,6 +631,7 @@ export default function MaintenanceTask() {
         return generatedList;
     };
     const handlePreview = async () => {
+        if (isSubmitting) return;
         setIsSubmitting(true);
         try {
             // Parallel Validation
@@ -688,6 +689,7 @@ export default function MaintenanceTask() {
     };
 
     const confirmSubmission = async () => {
+        if (isSubmitting) return;
         setIsSubmitting(true);
         try {
             // 1. Parallelize Audio Uploads

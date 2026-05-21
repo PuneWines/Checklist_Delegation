@@ -643,6 +643,7 @@ export default function ChecklistTask() {
     };
 
     const handlePreview = async () => {
+        if (isSubmitting) return;
         setIsSubmitting(true);
         try {
             // Parallel Validation
@@ -780,6 +781,7 @@ export default function ChecklistTask() {
     };
 
     const confirmSubmission = async () => {
+        if (isSubmitting) return;
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i];
             if (!t.shop || !t.givenBy) {

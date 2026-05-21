@@ -68,7 +68,7 @@ export default function DashboardHeader({
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div className="flex items-center gap-3">
                 <h1 className="text-xl font-bold tracking-tight text-purple-500">Dashboard</h1>
-                {isAdmin && mainTab === "default" && (
+                {isAdmin && (mainTab === "default" || mainTab === "work") && (
                     <div className="flex items-center gap-2 ml-auto mr-5">
                         <div className="text-sm text-gray-600">
                             {shopFilter !== "all" ? `Users in ${shopFilter}` : "Total Users"}
@@ -82,7 +82,7 @@ export default function DashboardHeader({
                 )}
             </div>
 
-            {mainTab === "default" && (
+            {(mainTab === "default" || mainTab === "work") && (
                 <>
                     {/* Mobile & Tablet View - Improved Filter Layout */}
                     <div className="md:hidden w-full">
@@ -153,19 +153,21 @@ export default function DashboardHeader({
                                 </div>
                             )}
 
-                            <div className="relative">
-                                <select
-                                    value={dashboardType}
-                                    onChange={(e) => setDashboardType(e.target.value)}
-                                    className="w-full appearance-none rounded-lg border border-purple-200 p-3 pr-8 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
-                                >
-                                    <option value="checklist">Checklist View</option>
-                                    <option value="delegation">Delegation View</option>
-                                </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-purple-400">
-                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                            {mainTab === "default" && (
+                                <div className="relative">
+                                    <select
+                                        value={dashboardType}
+                                        onChange={(e) => setDashboardType(e.target.value)}
+                                        className="w-full appearance-none rounded-lg border border-purple-200 p-3 pr-8 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
+                                    >
+                                        <option value="checklist">Checklist View</option>
+                                        <option value="delegation">Delegation View</option>
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-purple-400">
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
                             {/* Shop Filter - Show for checklist and delegation */}
                             {(dashboardType === "checklist" || dashboardType === "delegation" || dashboardType === "work") && isAdmin && (
@@ -282,14 +284,16 @@ export default function DashboardHeader({
                             </div>
                         )}
 
-                        <select
-                            value={dashboardType}
-                            onChange={(e) => setDashboardType(e.target.value)}
-                            className="w-[110px] sm:w-[140px] rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                        >
-                            <option value="checklist">Checklist</option>
-                            <option value="delegation">Delegation</option>
-                        </select>
+                        {mainTab === "default" && (
+                            <select
+                                value={dashboardType}
+                                onChange={(e) => setDashboardType(e.target.value)}
+                                className="w-[110px] sm:w-[140px] rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            >
+                                <option value="checklist">Checklist</option>
+                                <option value="delegation">Delegation</option>
+                            </select>
+                        )}
 
                         {/* Shop Filter - Show for checklist and delegation */}
                         {(dashboardType === "checklist" || dashboardType === "delegation" || dashboardType === "work") && isAdmin && (

@@ -460,6 +460,7 @@ export default function EATask() {
     };
 
     const handleSubmitAll = async () => {
+        if (isSubmitting) return;
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i];
             if (!t.given_by) {
