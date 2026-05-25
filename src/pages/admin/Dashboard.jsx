@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import supabase from "../../SupabaseClient"
 import AdminLayout from "../../components/layout/AdminLayout.jsx"
@@ -54,6 +54,9 @@ export default function AdminDashboard() {
   const [shopFilter, setShopFilter] = useState("all")
   const [availableShops, setAvailableShops] = useState([])
   const [mainTab, setMainTab] = useState("default") // "default", "maintenance", "repair", "ea"
+
+  // Caching mechanism
+  const shopDataCache = useRef({});
 
   // State for shop data
   const [shopData, setShopData] = useState({
@@ -533,6 +536,21 @@ export default function AdminDashboard() {
 
   const fetchShopData = async (page = 1, append = false) => {
     try {
+      const cacheKey = `${dashboardType}-${mainTab}-${shopFilter}-${dashboardStaffFilter}-${page}`;
+      
+      // If we have cached data and it's less than 2 minutes old, use it and return instantly
+      if (!append && shopDataCache.current[cacheKey]) {
+        const cached = shopDataCache.current[cacheKey];
+        if (Date.now() - cached.timestamp < 2 * 60 * 1000) {
+          setShopData(cached.shopData);
+          setAvailableStaff(cached.availableStaff);
+          if (page === 1 && cached.summary) {
+            setFilteredDateStats(cached.summary);
+          }
+          return; // Instant load, skip API calls
+        }
+      }
+
       setIsLoadingMore(true);
       if (page === 1) {
         setHasMoreData(true);
@@ -564,6 +582,33 @@ export default function AdminDashboard() {
         // Checklist / Delegation: single page fetch
         data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', shopFilter);
       }
+
+      // --- MOVED UP: Generate Staff List BEFORE Early Return ---
+      // This ensures the staff dropdown updates correctly even if a shop has 0 tasks.
+      const currentUsername = localStorage.getItem("user-name")
+      const currentUserRoleForStaff = (localStorage.getItem("role") || "").toLowerCase()
+      
+      let uniqueStaff;
+      if (mainTab === 'maintenance' || mainTab === 'repair' ||
+        shopFilter === 'Maintenance' || shopFilter === 'Repair') {
+        uniqueStaff = [...new Set((data || []).map((task) => task.name).filter((name) => name && name.trim() !== ""))];
+      } else {
+        try {
+          uniqueStaff = await getStaffNamesByShopApi(shopFilter !== 'all' ? shopFilter : null);
+        } catch (error) {
+          console.error('Error fetching staff from users table:', error);
+          uniqueStaff = [...new Set((data || []).map((task) => task.name).filter((name) => name && name.trim() !== ""))];
+        }
+      }
+
+      if (currentUserRoleForStaff !== "admin" && currentUsername) {
+        if (!uniqueStaff.some(staff => staff.toLowerCase() === currentUsername.toLowerCase())) {
+          uniqueStaff.push(currentUsername)
+        }
+      }
+
+      setAvailableStaff(uniqueStaff);
+      // --------------------------------------------------------
 
       if (!data || (data.length === 0 && page === 1)) {
         if (page === 1) {
@@ -617,36 +662,7 @@ export default function AdminDashboard() {
       // FIRST: Filter data by dashboard type - REMOVE this filter for checklist to include all tasks
       let filteredData = data
 
-      // Extract unique staff names for the dropdown BEFORE staff filtering
-      let uniqueStaff;
 
-      if (mainTab === 'maintenance' || mainTab === 'repair' ||
-        shopFilter === 'Maintenance' || shopFilter === 'Repair') {
-        // For maintenance/repair tabs, extract from task data (no users table link)
-        uniqueStaff = [...new Set(data.map((task) => task.name).filter((name) => name && name.trim() !== ""))];
-      } else {
-        // For checklist/delegation: always fetch from users table (shop-aware)
-        // This shows ALL users in the selected shop, not just those with tasks in the current batch
-        try {
-          uniqueStaff = await getStaffNamesByShopApi(shopFilter !== 'all' ? shopFilter : null);
-          // Cross-filter: only show staff who actually have tasks assigned (in the full task table)
-          const staffWithTasks = new Set(data.map((task) => (task.name || '').trim().toLowerCase()));
-          uniqueStaff = uniqueStaff.filter(name => staffWithTasks.has((name || '').trim().toLowerCase()));
-        } catch (error) {
-          console.error('Error fetching staff from users table:', error);
-          // Fallback: extract from loaded task data
-          uniqueStaff = [...new Set(data.map((task) => task.name).filter((name) => name && name.trim() !== ""))];
-        }
-      }
-
-      // For non-admin users, always ensure current user appears in staff dropdown
-      if (userRole !== "admin" && username) {
-        if (!uniqueStaff.some(staff => staff.toLowerCase() === username.toLowerCase())) {
-          uniqueStaff.push(username)
-        }
-      }
-
-      setAvailableStaff(uniqueStaff)
 
       // SECOND: Apply dashboard staff filter ONLY if not "all"
       if (dashboardStaffFilter !== "all") {
@@ -853,31 +869,44 @@ export default function AdminDashboard() {
           ? [...prev.allTasks, ...processedTasks]
           : processedTasks
 
-      const finalTotalTasks = summary ? summary.totalTasks : prev.totalTasks;
-      const finalCompletedTasks = summary ? summary.completedTasks : prev.completedTasks;
-      const finalPendingTasks = summary ? summary.pendingTasks : prev.pendingTasks;
-      const finalOverdueTasks = summary ? summary.overdueTasks : prev.overdueTasks;
-      const finalCompletionRate = summary ? summary.completionRate : prev.completionRate;
+        const finalTotalTasks = summary ? summary.totalTasks : prev.totalTasks;
+        const finalCompletedTasks = summary ? summary.completedTasks : prev.completedTasks;
+        const finalPendingTasks = summary ? summary.pendingTasks : prev.pendingTasks;
+        const finalOverdueTasks = summary ? summary.overdueTasks : prev.overdueTasks;
+        const finalCompletionRate = summary ? summary.completionRate : prev.completionRate;
 
-      return {
-        allTasks: updatedTasks,
-        staffMembers,
-        totalTasks: finalTotalTasks,
-        completedTasks: finalCompletedTasks,
-        pendingTasks: finalPendingTasks,
-        overdueTasks: finalOverdueTasks,
-        completionRate: finalCompletionRate,
-        barChartData,
-        pieChartData: [
-          { name: "Completed", value: finalCompletedTasks, color: "#22c55e" },
-          { name: "Pending", value: finalPendingTasks, color: "#facc15" },
-          { name: "Overdue", value: finalOverdueTasks, color: "#ef4444" },
-        ],
-        completedRatingOne: append ? prev.completedRatingOne + completedRatingOne : completedRatingOne,
-        completedRatingTwo: append ? prev.completedRatingTwo + completedRatingTwo : completedRatingTwo,
-        completedRatingThreePlus: append ? prev.completedRatingThreePlus + completedRatingThreePlus : completedRatingThreePlus,
-      }
-    })
+        const newShopData = {
+          allTasks: updatedTasks,
+          staffMembers,
+          totalTasks: finalTotalTasks,
+          completedTasks: finalCompletedTasks,
+          pendingTasks: finalPendingTasks,
+          overdueTasks: finalOverdueTasks,
+          completionRate: finalCompletionRate,
+          barChartData,
+          pieChartData: [
+            { name: "Completed", value: finalCompletedTasks, color: "#22c55e" },
+            { name: "Pending", value: finalPendingTasks, color: "#facc15" },
+            { name: "Overdue", value: finalOverdueTasks, color: "#ef4444" },
+          ],
+          completedRatingOne: append ? prev.completedRatingOne + completedRatingOne : completedRatingOne,
+          completedRatingTwo: append ? prev.completedRatingTwo + completedRatingTwo : completedRatingTwo,
+          completedRatingThreePlus: append ? prev.completedRatingThreePlus + completedRatingThreePlus : completedRatingThreePlus,
+        }
+
+        // Save fresh data to cache
+        if (!append) {
+          const cacheKey = `${dashboardType}-${mainTab}-${shopFilter}-${dashboardStaffFilter}-${page}`;
+          shopDataCache.current[cacheKey] = {
+            timestamp: Date.now(),
+            shopData: newShopData,
+            availableStaff: uniqueStaff,
+            summary: summary || null
+          };
+        }
+
+        return newShopData;
+      })
 
       // Check if we have more data to load
       if (data.length < batchSize) {

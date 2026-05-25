@@ -14,7 +14,6 @@ export const fetchDashboardDataApi = async (
   endDate = null
 ) => {
   try {
-    console.log('Fetching dashboard data:', { dashboardType, staffFilter, page, limit, taskView, shopFilter });
 
     const from = (page - 1) * limit;
     const to = from + limit - 1;
@@ -842,7 +841,7 @@ export const getStaffNamesByShopApi = async (shopFilter = null) => {
 
     let query = supabase
       .from('users')
-      .select('user_name, user_access, status, reported_by')
+      .select('user_name, user_access, shop_name, status, reported_by')
       .not('user_name', 'is', null)
       .not('user_name', 'eq', '')
       .eq('status', 'active');
@@ -854,8 +853,7 @@ export const getStaffNamesByShopApi = async (shopFilter = null) => {
       throw error;
     }
 
-    // Exclude admins (user_access === 'admin')
-    let staff = data.filter(user => (user.user_access || '').toLowerCase() !== 'admin');
+    let staff = data;
 
     // Filter by HOD reports if applicable
     if (role === 'HOD' && username) {
@@ -876,9 +874,19 @@ export const getStaffNamesByShopApi = async (shopFilter = null) => {
     // Filter by shop if provided
     if (shopFilter && shopFilter !== 'all') {
       staff = staff.filter(user => {
-        if (!user.user_access) return false;
-        const userShops = user.user_access.split(',').map(dept => dept.trim().toLowerCase());
-        return userShops.includes(shopFilter.toLowerCase());
+        const userAccessStr = (user.user_access || "").toLowerCase();
+        const shopFilterLower = shopFilter.toLowerCase();
+        
+        // If user_access contains admin, check their shop_name
+        if (userAccessStr === 'admin' || userAccessStr.includes('admin')) {
+          const userShopNameStr = (user.shop_name || "").toLowerCase();
+          const shopNameList = userShopNameStr.split(',').map(dept => dept.trim());
+          return shopNameList.includes(shopFilterLower);
+        }
+        
+        // Otherwise, check user_access
+        const userAccessList = userAccessStr.split(',').map(dept => dept.trim());
+        return userAccessList.includes(shopFilterLower);
       });
     }
 

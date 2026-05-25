@@ -597,7 +597,7 @@ const AllTasks = () => {
         if (activeTab === "repair") {
           query = query.is("submission_date", null).order(dateColumn, { ascending: false });
         } else if (activeTab === "work") {
-          query = query.is('submission_date', null).order('current_date', { ascending: true });
+          query = query.or('submission_date.is.null,status.eq.REJECTED').order('current_date', { ascending: true });
           if (!isSuperAdmin) {
             query = query.in('name', reportingUsers);
           }
@@ -659,12 +659,26 @@ const AllTasks = () => {
       if (activeTab === "work") {
         const { data, error: fetchError } = await query;
         if (fetchError) throw fetchError;
-        const mappedData = (data || []).map(item => ({
-          ...item,
-          id: item.id || item.task_id,
-          _table: item._table || tableName,
-          shop: item.shop || item.shop_name || "-"
-        }));
+        const mappedData = (data || []).map(item => {
+          const mapped = {
+            ...item,
+            id: item.id || item.task_id,
+            _table: item._table || tableName,
+            shop: item.shop || item.shop_name || "-"
+          };
+
+          // Override for REJECTED work tasks to make them reappear on their rejected date
+          // Per user request: they should appear in "Today" section so users know they can submit it.
+          if (mapped.status === "REJECTED") {
+            // Get today's local date (IST)
+            const todayStr = new Date(new Date().getTime() + (330 * 60000)).toISOString().split('T')[0];
+            mapped.current_date = todayStr;
+            mapped.submission_date = null; // Clear it so it behaves like a pending task
+          }
+
+          return mapped;
+        });
+        
         if (showHistory) {
           // Keep tasks that are NOT_DONE or have submission_date not null
           const historyTasks = mappedData.filter(item => {
@@ -880,10 +894,9 @@ const AllTasks = () => {
   const handleSelectAll = useCallback(
     (e) => {
       if (e.target.checked) {
-        // Use the same dateColumn logic as in the render loop
-        const col = activeTab === "repair" ? "created_at" : "planned_date"; // Changed to planned_date for EA and others
         const submittableTasks = filteredPendingTasks.filter(t => {
-          const timeStatus = getTimeStatus(t[col], t.status);
+          // Use statusDateColumn instead of hardcoded ternary for robust support across all tabs (including work)
+          const timeStatus = getTimeStatus(t[statusDateColumn], t.status);
           return timeStatus !== "Upcoming";
         });
         setSelectedItems(new Set(submittableTasks.map((t) => t.id)));
