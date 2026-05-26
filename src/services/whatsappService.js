@@ -892,39 +892,6 @@ export const sendMultipleWorkTasksNotification = async (doerName, tasks) => {
         return false;
     }
 };
-
-/**
- * Send daily reminder with the count of tasks assigned for the day (scheduled 9 AM - 10 AM)
- * @param {Object} reminderDetails - Reminder details
- * @param {string} reminderDetails.doerName - Employee name
- * @param {number} reminderDetails.pendingTasksCount - Count of pending tasks
- * @returns {Promise<boolean>} - Success status
- */
-export const sendDailyTaskSummaryReminder = async (reminderDetails) => {
-    try {
-        const { doerName, pendingTasksCount } = reminderDetails;
-        const phoneNumber = await getUserPhoneNumber(doerName);
-
-        if (!phoneNumber) {
-            console.warn(`No phone number found for user: ${doerName}`);
-            return false;
-        }
-
-        const message = `☀️ *DAILY TASK REMINDER*\n\n` +
-            `Good Morning ${doerName},\n\n` +
-            `You have *${pendingTasksCount} pending/assigned task(s)* for today.\n\n` +
-            `🔗 Please click here to view and start your tasks:\n` +
-            `https://checklist-delegation-five.vercel.app/login\n\n` +
-            `Have a productive day!\n\n` +
-            `_Drinqkart_`;
-
-        return await sendWhatsAppMessage(phoneNumber, message);
-    } catch (error) {
-        console.error('Error sending daily task summary reminder:', error);
-        return false;
-    }
-};
-
 export default {
     sendUrgentTaskNotification,
     sendTaskExtensionNotification,
@@ -941,6 +908,5 @@ export default {
     sendMasterTaskAssignmentNotification,
     sendPasswordResetOTP,
     sendAdminExtensionRemarkNotification,
-    sendMultipleWorkTasksNotification,
-    sendDailyTaskSummaryReminder
+    sendMultipleWorkTasksNotification
 };

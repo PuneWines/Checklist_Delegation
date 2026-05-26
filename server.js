@@ -1,6 +1,7 @@
 import express from "express";
 import axios from "axios";
 import cors from "cors";
+import { startDailyRemindersCron } from "./src/cron/dailyReminderJob.js";
 
 const app = express();
 app.use(cors());
@@ -15,5 +16,7 @@ app.get("/proxy", async (req, res) => {
   }
 });
 
-app.listen(5000, () => console.log("Server running on port 5000"));
+// Start background cron jobs
+startDailyRemindersCron();
 
+app.listen(5000, () => console.log("Server running on port 5000"));
