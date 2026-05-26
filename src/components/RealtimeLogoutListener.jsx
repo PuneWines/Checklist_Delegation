@@ -87,7 +87,7 @@ const RealtimeLogoutListener = () => {
           }
         }
       )
-      .subscribe((status) => console.log("✅ Subscribed to admin Realtime:", status));
+      .subscribe();
 
     return () => {
       supabase.removeChannel(adminSubscription);

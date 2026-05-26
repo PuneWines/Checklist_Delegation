@@ -54,6 +54,20 @@ export default function AdminDashboard() {
   const [shopFilter, setShopFilter] = useState("all")
   const [availableShops, setAvailableShops] = useState([])
   const [mainTab, setMainTab] = useState("default") // "default", "maintenance", "repair", "ea"
+  const handleShopFilterChange = (newShop) => {
+    setShopFilter(newShop)
+    setDashboardStaffFilter("all")
+    setCurrentPage(1)
+    setHasMoreData(true)
+  }
+
+  const handleDashboardTypeChange = (newType) => {
+    setDashboardType(newType)
+    setDashboardStaffFilter("all")
+    setShopFilter("all")
+    setCurrentPage(1)
+    setHasMoreData(true)
+  }
 
   // Caching mechanism
   const shopDataCache = useRef({});
@@ -196,13 +210,26 @@ export default function AdminDashboard() {
     }
   };
 
-  const fetchSummaryStats = async () => {
+  const fetchSummaryStats = async (
+    currentShopFilter = shopFilter,
+    currentStaffFilter = dashboardStaffFilter,
+    currentType = dashboardType
+  ) => {
     try {
       const summary = await getDashboardSummaryApi(
-        dashboardType, 
-        dashboardStaffFilter === 'all' ? null : dashboardStaffFilter, 
-        shopFilter === 'all' ? null : shopFilter
+        currentType, 
+        currentStaffFilter === 'all' ? null : currentStaffFilter, 
+        currentShopFilter === 'all' ? null : currentShopFilter
       );
+      
+      // Guard against race conditions: only update state if filters haven't changed since request started
+      if (
+        currentShopFilter !== shopFilter ||
+        currentStaffFilter !== dashboardStaffFilter ||
+        currentType !== dashboardType
+      ) {
+        return;
+      }
       
       setShopData(prev => ({
         ...prev,
@@ -534,18 +561,32 @@ export default function AdminDashboard() {
     return date.getTime() === tomorrow.getTime()
   }
 
-  const fetchShopData = async (page = 1, append = false) => {
+  const fetchShopData = async (
+    page = 1,
+    append = false,
+    currentShopFilter = shopFilter,
+    currentStaffFilter = dashboardStaffFilter,
+    currentType = dashboardType,
+    currentMainTab = mainTab
+  ) => {
     try {
-      const cacheKey = `${dashboardType}-${mainTab}-${shopFilter}-${dashboardStaffFilter}-${page}`;
+      const cacheKey = `${currentType}-${currentMainTab}-${currentShopFilter}-${currentStaffFilter}-${page}`;
       
       // If we have cached data and it's less than 2 minutes old, use it and return instantly
       if (!append && shopDataCache.current[cacheKey]) {
         const cached = shopDataCache.current[cacheKey];
         if (Date.now() - cached.timestamp < 2 * 60 * 1000) {
-          setShopData(cached.shopData);
-          setAvailableStaff(cached.availableStaff);
-          if (page === 1 && cached.summary) {
-            setFilteredDateStats(cached.summary);
+          if (
+            currentShopFilter === shopFilter &&
+            currentStaffFilter === dashboardStaffFilter &&
+            currentType === dashboardType &&
+            currentMainTab === mainTab
+          ) {
+            setShopData(cached.shopData);
+            setAvailableStaff(cached.availableStaff);
+            if (page === 1 && cached.summary) {
+              setFilteredDateStats(cached.summary);
+            }
           }
           return; // Instant load, skip API calls
         }
@@ -566,21 +607,21 @@ export default function AdminDashboard() {
       if (page === 1) {
         // Fetch summary statistics first for accurate counts across all pages
         summary = await getDashboardSummaryApi(
-          dashboardType, 
-          dashboardStaffFilter === 'all' ? null : dashboardStaffFilter, 
-          shopFilter === 'all' ? null : shopFilter
+          currentType, 
+          currentStaffFilter === 'all' ? null : currentStaffFilter, 
+          currentShopFilter === 'all' ? null : currentShopFilter
         );
       }
 
-      if (mainTab === 'maintenance' || shopFilter === 'Maintenance') {
+      if (currentMainTab === 'maintenance' || currentShopFilter === 'Maintenance') {
         const result = await fetchAllMaintenanceTasksForDashboard(page, batchSize);
         data = result.data || [];
-      } else if (mainTab === 'repair' || shopFilter === 'Repair') {
+      } else if (currentMainTab === 'repair' || currentShopFilter === 'Repair') {
         const result = await fetchAllRepairTasks(page, batchSize);
         data = result.data || [];
       } else {
         // Checklist / Delegation: single page fetch
-        data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', shopFilter);
+        data = await fetchDashboardDataApi(currentType, currentStaffFilter, page, batchSize, 'all', currentShopFilter);
       }
 
       // --- MOVED UP: Generate Staff List BEFORE Early Return ---
@@ -589,12 +630,12 @@ export default function AdminDashboard() {
       const currentUserRoleForStaff = (localStorage.getItem("role") || "").toLowerCase()
       
       let uniqueStaff;
-      if (mainTab === 'maintenance' || mainTab === 'repair' ||
-        shopFilter === 'Maintenance' || shopFilter === 'Repair') {
+      if (currentMainTab === 'maintenance' || currentMainTab === 'repair' ||
+        currentShopFilter === 'Maintenance' || currentShopFilter === 'Repair') {
         uniqueStaff = [...new Set((data || []).map((task) => task.name).filter((name) => name && name.trim() !== ""))];
       } else {
         try {
-          uniqueStaff = await getStaffNamesByShopApi(shopFilter !== 'all' ? shopFilter : null);
+          uniqueStaff = await getStaffNamesByShopApi(currentShopFilter !== 'all' ? currentShopFilter : null);
         } catch (error) {
           console.error('Error fetching staff from users table:', error);
           uniqueStaff = [...new Set((data || []).map((task) => task.name).filter((name) => name && name.trim() !== ""))];
@@ -605,6 +646,17 @@ export default function AdminDashboard() {
         if (!uniqueStaff.some(staff => staff.toLowerCase() === currentUsername.toLowerCase())) {
           uniqueStaff.push(currentUsername)
         }
+      }
+
+      // Guard against race conditions: only update state if filters haven't changed since request started
+      if (
+        currentShopFilter !== shopFilter ||
+        currentStaffFilter !== dashboardStaffFilter ||
+        currentType !== dashboardType ||
+        currentMainTab !== mainTab
+      ) {
+        setIsLoadingMore(false);
+        return;
       }
 
       setAvailableStaff(uniqueStaff);
@@ -665,9 +717,9 @@ export default function AdminDashboard() {
 
 
       // SECOND: Apply dashboard staff filter ONLY if not "all"
-      if (dashboardStaffFilter !== "all") {
+      if (currentStaffFilter !== "all") {
         filteredData = filteredData.filter(
-          (task) => task.name && task.name.toLowerCase() === dashboardStaffFilter.toLowerCase(),
+          (task) => task.name && task.name.toLowerCase() === currentStaffFilter.toLowerCase(),
         )
       }
 
@@ -715,7 +767,7 @@ export default function AdminDashboard() {
                               (statusLower === 'yes') || 
                               (statusLower.includes('done')) || 
                               (statusLower.includes('completed')) || 
-                              (dashboardType === 'delegation' && task.admin_done === true);
+                              (currentType === 'delegation' && task.admin_done === true);
 
           // Determine task status accurately
           let status;
@@ -742,7 +794,7 @@ export default function AdminDashboard() {
             totalTasks++; // Analyzed = everything up to today
             if (status === "completed") {
               completedTasks++;
-              if (dashboardType === "delegation" && task.submission_date) {
+              if (currentType === "delegation" && task.submission_date) {
                 if (task.color_code_for === 1) completedRatingOne++;
                 else if (task.color_code_for === 2) completedRatingTwo++;
                 else if (task.color_code_for >= 3) completedRatingThreePlus++;
@@ -768,7 +820,7 @@ export default function AdminDashboard() {
           }
 
           // Determine status based on task type or dates
-          if (mainTab === 'repair' || mainTab === 'maintenance' || shopFilter === 'Maintenance' || shopFilter === 'Repair') {
+          if (currentMainTab === 'repair' || currentMainTab === 'maintenance' || currentShopFilter === 'Maintenance' || currentShopFilter === 'Repair') {
             // For repair/maintenance, use the explicit status if available, fallback to calculated
             if (task.status) {
               const taskStatus = task.status.toLowerCase();
@@ -896,7 +948,7 @@ export default function AdminDashboard() {
 
         // Save fresh data to cache
         if (!append) {
-          const cacheKey = `${dashboardType}-${mainTab}-${shopFilter}-${dashboardStaffFilter}-${page}`;
+          const cacheKey = `${currentType}-${currentMainTab}-${currentShopFilter}-${currentStaffFilter}-${page}`;
           shopDataCache.current[cacheKey] = {
             timestamp: Date.now(),
             shopData: newShopData,
@@ -907,6 +959,39 @@ export default function AdminDashboard() {
 
         return newShopData;
       })
+
+      console.group(`🔍 Dashboard Filter Execution Flow debug [Type: ${currentType}]`);
+      console.log("📍 Active Selection State:", {
+        mainTab: currentMainTab,
+        dashboardType: currentType,
+        shopFilter: currentShopFilter,
+        dashboardStaffFilter: currentStaffFilter,
+        currentPage,
+        dateRangeFiltered: dateRange.filtered,
+        dateRangeSpan: `${dateRange.startDate} to ${dateRange.endDate}`
+      });
+      console.log("📥 API Summary Counts Received:", {
+        apiTotal: summary?.totalTasks ?? "N/A",
+        apiCompleted: summary?.completedTasks ?? "N/A",
+        apiPending: summary?.pendingTasks ?? "N/A",
+        apiOverdue: summary?.overdueTasks ?? "N/A",
+        apiCompletionRate: summary?.completionRate ?? "N/A"
+      });
+      console.log("👥 Staff Dropdown Updated:", {
+        count: uniqueStaff?.length || 0,
+        names: uniqueStaff
+      });
+      console.log("📋 Processed Tasks for Table View:", {
+        fetchedCount: data?.length || 0,
+        afterFilteringCount: processedTasks?.length || 0
+      });
+      console.log("👥 Staff Grouped Performance Scores:", staffMembers.map(s => ({
+        name: s.name,
+        tasksCount: s.totalTasks,
+        completed: s.completedTasks,
+        score: s.ontime_score
+      })));
+      console.groupEnd();
 
       // Check if we have more data to load
       if (data.length < batchSize) {
@@ -969,10 +1054,10 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     // Fetch summary stats quickly
-    fetchSummaryStats()
+    fetchSummaryStats(shopFilter, dashboardStaffFilter, dashboardType)
     
     // Fetch detailed data for charts and tables (first page)
-    fetchShopData(1, false)
+    fetchShopData(1, false, shopFilter, dashboardStaffFilter, dashboardType, mainTab)
 
     // Update Redux state counts with staff and shop filters
     dispatch(
@@ -1196,6 +1281,7 @@ export default function AdminDashboard() {
               setActiveTab={(tabId) => {
                 // Clear current tasks immediately to prevent showing old data on new tab
                 setShopData(prev => ({ ...prev, allTasks: [] }));
+                setDashboardStaffFilter("all");
                 
                 if (tabId === 'checklist') {
                   setMainTab("default")
@@ -1225,14 +1311,14 @@ export default function AdminDashboard() {
         <DashboardHeader
           mainTab={mainTab}
           dashboardType={dashboardType}
-          setDashboardType={setDashboardType}
+          setDashboardType={handleDashboardTypeChange}
           dashboardStaffFilter={dashboardStaffFilter}
           setDashboardStaffFilter={setDashboardStaffFilter}
           availableStaff={availableStaff}
           userRole={userRole}
           username={username}
           shopFilter={shopFilter}
-          setShopFilter={setShopFilter}
+          setShopFilter={handleShopFilterChange}
           availableShops={availableShops}
           isLoadingMore={isLoadingMore}
           onDateRangeChange={handleDateRangeChange}

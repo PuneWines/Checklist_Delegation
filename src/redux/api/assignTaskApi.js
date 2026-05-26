@@ -2,7 +2,7 @@ import supabase from "../../SupabaseClient";
 
 export const fetchUniqueShopDataApi = async () => {
   try {
-    console.log("🔍 Fetching unique shops from shop table...");
+    // console.log("🔍 Fetching unique shops from shop table...");
 
     const { data, error } = await supabase
       .from("shop")
@@ -17,7 +17,7 @@ export const fetchUniqueShopDataApi = async () => {
       .filter(shop => shop && shop.trim() !== "")
     )].sort();
 
-    console.log("✅ Unique shops found:", uniqueShops);
+    // console.log("✅ Unique shops found:", uniqueShops);
     return uniqueShops;
   } catch (error) {
     console.error("❌ Error fetching shops from shop table:", error);
@@ -30,7 +30,7 @@ export const fetchUniqueShopDataApi = async () => {
 
 export const fetchUniqueGivenByDataApi = async () => {
   try {
-    console.log("🔍 API: Fetching 'Assign From' list from database...");
+    // console.log("🔍 API: Fetching 'Assign From' list from database...");
 
     const { data, error } = await supabase
       .from('assign_from')
@@ -59,7 +59,7 @@ export const fetchUniqueGivenByDataApi = async () => {
     }).filter(val => val && val.toString().trim() !== "");
 
     const uniqueNames = [...new Set(extractedNames)].sort();
-    console.log("✅ API: Loaded Assigners:", uniqueNames);
+    // console.log("✅ API: Loaded Assigners:", uniqueNames);
     return uniqueNames;
   } catch (error) {
     console.error("❌ API: Unexpected failure fetching assigners:", error);
@@ -69,7 +69,7 @@ export const fetchUniqueGivenByDataApi = async () => {
 
 export const fetchUniqueDoerNameDataApi = async (shop) => {
   try {
-    console.log("🔍 Fetching doer data for shop:", shop);
+    // console.log("🔍 Fetching doer data for shop:", shop);
 
     let query = supabase
       .from("users")

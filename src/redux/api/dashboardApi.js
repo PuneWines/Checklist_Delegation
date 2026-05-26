@@ -398,7 +398,7 @@ export const getDashboardSummaryApi = async (dashboardType, staffFilter = null, 
 // Alternative version if you want to see detailed task breakdown for debugging
 export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, shopFilter = null, page = 1, limit = 20, selectedMonth = null) => {
   try {
-    console.log('Fetching staff tasks data:', { dashboardType, staffFilter, shopFilter, page, limit, selectedMonth });
+    // console.log('Fetching staff tasks data:', { dashboardType, staffFilter, shopFilter, page, limit, selectedMonth });
 
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
@@ -421,14 +421,14 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
     const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
                        (dashboardType === 'work') ? 'current_date' : 'created_at';
 
-    console.log('Date range for filtering:', {
-      startDate,
-      endDate,
-      year,
-      month,
-      lastDayOfMonth,
-      selectedMonth
-    });
+    // console.log('Date range for filtering:', {
+    //   startDate,
+    //   endDate,
+    //   year,
+    //   month,
+    //   lastDayOfMonth,
+    //   selectedMonth
+    // });
 
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
                       dashboardType === 'ea' ? 'doer_name' : 'name';
@@ -508,7 +508,7 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
       throw error;
     }
 
-    console.log(`Found ${tasksData.length} tasks in date range ${startDate} to ${endDate}`);
+    // console.log(`Found ${tasksData.length} tasks in date range ${startDate} to ${endDate}`);
 
     // Process data to match SQL query structure
     const summary = {};
@@ -613,7 +613,7 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
     const to = from + limit;
     const paginatedResults = staffResults.slice(from, to);
 
-    console.log(`Fetched ${paginatedResults.length} staff members with task data for ${month}/${year}`);
+    // console.log(`Fetched ${paginatedResults.length} staff members with task data for ${month}/${year}`);
     return paginatedResults;
 
   } catch (error) {
@@ -729,7 +729,7 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, s
       const nameVal = item.name || item.assigned_person || item.doer_name || 'Unnamed Staff';
       return `${shopVal}-${nameVal}`;
     }));
-    console.log(`Total unique staff count for ${month}/${year}: ${uniqueStaff.size}`);
+    // console.log(`Total unique staff count for ${month}/${year}: ${uniqueStaff.size}`);
     return uniqueStaff.size;
 
   } catch (error) {
@@ -792,7 +792,7 @@ export const getTotalUsersCountApi = async (shopFilter = null) => {
       throw error;
     }
 
-    console.log(`Total users count${shopFilter && shopFilter !== 'all' ? ` for shop ${shopFilter}` : ''}: ${count}`);
+    // console.log(`Total users count${shopFilter && shopFilter !== 'all' ? ` for shop ${shopFilter}` : ''}: ${count}`);
     return count || 0;
   } catch (error) {
     console.error("Error from Supabase:", error);

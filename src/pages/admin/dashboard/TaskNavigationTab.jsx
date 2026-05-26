@@ -202,13 +202,13 @@ export default function TaskNavigationTabs({
     try {
       setIsLoadingMore(true)
 
-      console.log('Loading tasks with filters:', {
-        dashboardType,
-        dashboardStaffFilter,
-        taskView,
-        page,
-        shopFilter
-      });
+      // console.log('Loading tasks with filters:', {
+      //   dashboardType,
+      //   dashboardStaffFilter,
+      //   taskView,
+      //   page,
+      //   shopFilter
+      // });
 
       // Use shopFilter for server call (only affects table data)
       const data = await fetchDashboardDataApi(
@@ -235,7 +235,7 @@ export default function TaskNavigationTabs({
         return
       }
 
-      console.log('Raw data received:', data.length, 'records');
+      // console.log('Raw data received:', data.length, 'records');
 
       // Process the data similar to your existing logic
       const seen = new Set();
@@ -289,7 +289,7 @@ export default function TaskNavigationTabs({
         }
       })
 
-      console.log('Processed tasks:', processedTasks.length, 'records');
+      // console.log('Processed tasks:', processedTasks.length, 'records');
 
       // Apply client-side search filter AND smart deduplication
       let filteredTasks = processedTasks.filter((task) => {
@@ -340,7 +340,7 @@ export default function TaskNavigationTabs({
         return true
       })
 
-      console.log('Final filtered tasks:', filteredTasks.length, 'records');
+      // console.log('Final filtered tasks:', filteredTasks.length, 'records');
 
       if (append) {
         setDisplayedTasks(prev => [...prev, ...filteredTasks])

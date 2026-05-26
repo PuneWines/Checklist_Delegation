@@ -266,7 +266,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
             localStorage.setItem("page_access", JSON.stringify(Array.isArray(finalAccess) ? finalAccess : []));
             setPageAccess(Array.isArray(finalAccess) ? finalAccess : []);
           }
-          console.log("✅ User data synced from DB");
+          // console.log("✅ User data synced from DB");
         }
       } catch (err) {
         console.error("❌ Error syncing user data:", err);
