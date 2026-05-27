@@ -154,6 +154,7 @@ export default function StaffTasksTable({
       {/* Month Selection and Filters - Minimal Premium Style */}
       <div className="bg-white/50 backdrop-blur-sm p-4 rounded-xl border border-gray-100/80 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         {/* Month Selection */}
+        {/* OLD:
         <div className="flex flex-col gap-2">
           <label htmlFor="month-select" className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">
             Performance Month
@@ -176,6 +177,7 @@ export default function StaffTasksTable({
             </div>
           </div>
         </div>
+        */}
 
         {/* Status Info and Active Filters */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 w-full lg:w-auto">

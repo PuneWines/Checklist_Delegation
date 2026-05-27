@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useDispatch, useSelector } from "react-redux"
 import supabase from "../../SupabaseClient"
 import AdminLayout from "../../components/layout/AdminLayout.jsx"
@@ -70,7 +71,8 @@ export default function AdminDashboard() {
   }
 
   // Caching mechanism
-  const shopDataCache = useRef({});
+  // OLD: const shopDataCache = useRef({});
+  const queryClient = useQueryClient();
 
   // State for shop data
   const [shopData, setShopData] = useState({
@@ -122,13 +124,26 @@ export default function AdminDashboard() {
         setIsLoadingMore(true);
         
         // Fetch summary statistics first for instant card update
-        const summary = await getDashboardSummaryApi(
-          dashboardType, 
-          dashboardStaffFilter === 'all' ? null : dashboardStaffFilter, 
-          shopFilter === 'all' ? null : shopFilter, 
-          startDate, 
-          endDate
-        );
+        // OLD:
+        // const summary = await getDashboardSummaryApi(
+        //   dashboardType, 
+        //   dashboardStaffFilter === 'all' ? null : dashboardStaffFilter, 
+        //   shopFilter === 'all' ? null : shopFilter, 
+        //   startDate, 
+        //   endDate
+        // );
+        // NEW: React Query cached fetch
+        const summary = await queryClient.fetchQuery({
+          queryKey: ['dashboardSummary', dashboardType, dashboardStaffFilter, shopFilter, startDate, endDate],
+          queryFn: () => getDashboardSummaryApi(
+            dashboardType, 
+            dashboardStaffFilter === 'all' ? null : dashboardStaffFilter, 
+            shopFilter === 'all' ? null : shopFilter, 
+            startDate, 
+            endDate
+          ),
+          staleTime: 2 * 60 * 1000
+        });
         
         setFilteredDateStats({
           totalTasks: summary.totalTasks,
@@ -139,8 +154,18 @@ export default function AdminDashboard() {
         });
 
         if (mainTab === 'maintenance' || shopFilter === 'Maintenance') {
-          const result = await fetchAllMaintenanceTasksForDashboard(1, batchSize);
-          const data = result.data || [];
+          // OLD:
+          // const result = await fetchAllMaintenanceTasksForDashboard(1, batchSize);
+          // const data = result.data || [];
+          // NEW: React Query cached fetch
+          const data = await queryClient.fetchQuery({
+            queryKey: ['dashboardTasks', dashboardType, mainTab, shopFilter, dashboardStaffFilter, 1, startDate, endDate],
+            queryFn: async () => {
+              const result = await fetchAllMaintenanceTasksForDashboard(1, batchSize);
+              return result.data || [];
+            },
+            staleTime: 2 * 60 * 1000
+          });
 
           // Filter data by date range on client side for the table view
           const start = new Date(startDate);
@@ -149,40 +174,65 @@ export default function AdminDashboard() {
           end.setHours(23, 59, 59, 999);
 
           const filteredData = data.filter(task => {
-            const taskDate = parseTaskStartDate(task.planned_date || task.task_start_date);
+            const taskDate = parseTaskStartDate(task.planned_date || task.task_start_date || task.current_date || task.created_at);
             return taskDate && taskDate >= start && taskDate <= end;
           });
 
           await processFilteredData(filteredData, summary);
         } else if (mainTab === 'repair' || shopFilter === 'Repair') {
-          const result = await fetchAllRepairTasks(1, batchSize);
-          const data = result.data || [];
+          // OLD:
+          // const result = await fetchAllRepairTasks(1, batchSize);
+          // const data = result.data || [];
+          // NEW: React Query cached fetch
+          const data = await queryClient.fetchQuery({
+            queryKey: ['dashboardTasks', dashboardType, mainTab, shopFilter, dashboardStaffFilter, 1, startDate, endDate],
+            queryFn: async () => {
+              const result = await fetchAllRepairTasks(1, batchSize);
+              return result.data || [];
+            },
+            staleTime: 2 * 60 * 1000
+          });
 
           // Client side filter
           const start = new Date(startDate); start.setHours(0, 0, 0, 0);
           const end = new Date(endDate); end.setHours(23, 59, 59, 999);
           const filteredData = data.filter(task => {
-            const taskDate = parseTaskStartDate(task.planned_date || task.task_start_date);
+            const taskDate = parseTaskStartDate(task.planned_date || task.task_start_date || task.current_date || task.created_at);
             return taskDate && taskDate >= start && taskDate <= end;
           });
           await processFilteredData(filteredData, summary);
         } else if (dashboardType === "checklist") {
           // Use the date range API for checklist tasks (first page)
-          const filteredData = await fetchChecklistDataByDateRangeApi(
-            startDate,
-            endDate,
-            dashboardStaffFilter,
-            shopFilter,
-            1,
-            batchSize,
-            'all'
-          );
+          // OLD:
+          // const filteredData = await fetchChecklistDataByDateRangeApi(
+          //   startDate,
+          //   endDate,
+          //   dashboardStaffFilter,
+          //   shopFilter,
+          //   1,
+          //   batchSize,
+          //   'all'
+          // );
+          // NEW: React Query cached fetch
+          const filteredData = await queryClient.fetchQuery({
+            queryKey: ['dashboardTasks', dashboardType, mainTab, shopFilter, dashboardStaffFilter, 1, startDate, endDate],
+            queryFn: () => fetchChecklistDataByDateRangeApi(
+              startDate,
+              endDate,
+              dashboardStaffFilter,
+              shopFilter,
+              1,
+              batchSize,
+              'all'
+            ),
+            staleTime: 2 * 60 * 1000
+          });
 
           // Process the filtered data for the table
           await processFilteredData(filteredData, summary);
         } else {
-          // For delegation, use the existing logic with date filtering
-          await fetchShopDataWithDateRange(startDate, endDate);
+          // For delegation and work, use the existing logic with date filtering
+          await fetchShopDataWithDateRange(startDate, endDate, 1, false, summary);
         }
       } catch (error) {
         console.error("Error fetching date range data:", error);
@@ -216,11 +266,22 @@ export default function AdminDashboard() {
     currentType = dashboardType
   ) => {
     try {
-      const summary = await getDashboardSummaryApi(
-        currentType, 
-        currentStaffFilter === 'all' ? null : currentStaffFilter, 
-        currentShopFilter === 'all' ? null : currentShopFilter
-      );
+      // OLD:
+      // const summary = await getDashboardSummaryApi(
+      //   currentType, 
+      //   currentStaffFilter === 'all' ? null : currentStaffFilter, 
+      //   currentShopFilter === 'all' ? null : currentShopFilter
+      // );
+      // NEW: React Query cached fetch
+      const summary = await queryClient.fetchQuery({
+        queryKey: ['dashboardSummary', currentType, currentStaffFilter, currentShopFilter],
+        queryFn: () => getDashboardSummaryApi(
+          currentType, 
+          currentStaffFilter === 'all' ? null : currentStaffFilter, 
+          currentShopFilter === 'all' ? null : currentShopFilter
+        ),
+        staleTime: 2 * 60 * 1000
+      });
       
       // Guard against race conditions: only update state if filters haven't changed since request started
       if (
@@ -398,9 +459,16 @@ export default function AdminDashboard() {
     });
   };
 
-  const fetchShopDataWithDateRange = async (startDate, endDate, page = 1, append = false) => {
+  const fetchShopDataWithDateRange = async (startDate, endDate, page = 1, append = false, summary = null) => {
     try {
-      const data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', shopFilter, startDate, endDate);
+      // OLD:
+      // const data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', shopFilter, startDate, endDate);
+      // NEW: React Query cached fetch
+      const data = await queryClient.fetchQuery({
+        queryKey: ['dashboardTasks', dashboardType, mainTab, shopFilter, dashboardStaffFilter, page, startDate, endDate],
+        queryFn: () => fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', shopFilter, startDate, endDate),
+        staleTime: 2 * 60 * 1000
+      });
 
       // Filter data by date range on client side
       const start = new Date(startDate);
@@ -410,50 +478,20 @@ export default function AdminDashboard() {
       end.setHours(23, 59, 59, 999);
 
       const filteredData = data.filter(task => {
-        const taskDate = parseTaskStartDate(task.planned_date || task.task_start_date);
+        const dateValue = dashboardType === 'work' ? task.current_date : (task.planned_date || task.task_start_date || task.created_at);
+        const taskDate = parseTaskStartDate(dateValue);
         return taskDate && taskDate >= start && taskDate <= end;
       });
 
-      // Calculate stats manually with proper logic
-      let totalTasks = filteredData.length;
-      let completedTasks = 0;
-      let pendingTasks = 0;
-      let overdueTasks = 0;
-      let notDoneTasks = 0;
-
-      filteredData.forEach(task => {
-        const taskStartDate = parseTaskStartDate(task.planned_date || task.task_start_date || task.created_at);
-        const completionDate = task.submission_date ? parseTaskStartDate(task.submission_date) : null;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        let taskStatus = "pending";
-        if (completionDate || task.status === 'yes' || (task.status && task.status.toLowerCase().includes('done'))) {
-          taskStatus = "completed";
-        } else if (taskStartDate && isDateInPast(taskStartDate)) {
-          taskStatus = "overdue";
-        }
-
-        totalTasks++;
-        if (taskStatus === "completed") {
-          completedTasks++;
-        } else if (taskStatus === "overdue") {
-          overdueTasks++;
-        } else {
-          pendingTasks++;
-        }
+      // Pass the filtered data to process function
+      // Use the true summary passed from handleDateRangeChange, or fallback to an empty stats object
+      processFilteredData(filteredData, summary || {
+        totalTasks: 0,
+        completedTasks: 0,
+        pendingTasks: 0,
+        overdueTasks: 0,
+        completionRate: 0
       });
-
-      const stats = {
-        totalTasks,
-        completedTasks,
-        pendingTasks,
-        overdueTasks,
-        notDoneTasks,
-        completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100) : 0
-      };
-
-      processFilteredData(filteredData, stats);
     } catch (error) {
       console.error("Error fetching data with date range:", error);
     }
@@ -570,12 +608,32 @@ export default function AdminDashboard() {
     currentMainTab = mainTab
   ) => {
     try {
-      const cacheKey = `${currentType}-${currentMainTab}-${currentShopFilter}-${currentStaffFilter}-${page}`;
-      
       // If we have cached data and it's less than 2 minutes old, use it and return instantly
-      if (!append && shopDataCache.current[cacheKey]) {
-        const cached = shopDataCache.current[cacheKey];
-        if (Date.now() - cached.timestamp < 2 * 60 * 1000) {
+      // OLD:
+      // if (!append && shopDataCache.current[cacheKey]) {
+      //   const cached = shopDataCache.current[cacheKey];
+      //   if (Date.now() - cached.timestamp < 2 * 60 * 1000) {
+      //     if (
+      //       currentShopFilter === shopFilter &&
+      //       currentStaffFilter === dashboardStaffFilter &&
+      //       currentType === dashboardType &&
+      //       currentMainTab === mainTab
+      //     ) {
+      //       setShopData(cached.shopData);
+      //       setAvailableStaff(cached.availableStaff);
+      //       if (page === 1 && cached.summary) {
+      //         setFilteredDateStats(cached.summary);
+      //       }
+      //     }
+      //     return; // Instant load, skip API calls
+      //   }
+      // }
+      // NEW: React Query based cache check for processed data
+      const queryKey = ['dashboardProcessedData', currentType, currentMainTab, currentShopFilter, currentStaffFilter, page];
+      if (!append) {
+        const cachedQueryState = queryClient.getQueryState(queryKey);
+        if (cachedQueryState && cachedQueryState.data && (Date.now() - cachedQueryState.dataUpdatedAt < 2 * 60 * 1000)) {
+          const cached = cachedQueryState.data;
           if (
             currentShopFilter === shopFilter &&
             currentStaffFilter === dashboardStaffFilter &&
@@ -606,23 +664,51 @@ export default function AdminDashboard() {
 
       if (page === 1) {
         // Fetch summary statistics first for accurate counts across all pages
-        summary = await getDashboardSummaryApi(
-          currentType, 
-          currentStaffFilter === 'all' ? null : currentStaffFilter, 
-          currentShopFilter === 'all' ? null : currentShopFilter
-        );
+        // OLD:
+        // summary = await getDashboardSummaryApi(
+        //   currentType, 
+        //   currentStaffFilter === 'all' ? null : currentStaffFilter, 
+        //   currentShopFilter === 'all' ? null : currentShopFilter
+        // );
+        // NEW: React Query cached fetch
+        summary = await queryClient.fetchQuery({
+          queryKey: ['dashboardSummary', currentType, currentStaffFilter, currentShopFilter],
+          queryFn: () => getDashboardSummaryApi(
+            currentType, 
+            currentStaffFilter === 'all' ? null : currentStaffFilter, 
+            currentShopFilter === 'all' ? null : currentShopFilter
+          ),
+          staleTime: 2 * 60 * 1000
+        });
       }
 
-      if (currentMainTab === 'maintenance' || currentShopFilter === 'Maintenance') {
-        const result = await fetchAllMaintenanceTasksForDashboard(page, batchSize);
-        data = result.data || [];
-      } else if (currentMainTab === 'repair' || currentShopFilter === 'Repair') {
-        const result = await fetchAllRepairTasks(page, batchSize);
-        data = result.data || [];
-      } else {
-        // Checklist / Delegation: single page fetch
-        data = await fetchDashboardDataApi(currentType, currentStaffFilter, page, batchSize, 'all', currentShopFilter);
-      }
+      // OLD:
+      // if (currentMainTab === 'maintenance' || currentShopFilter === 'Maintenance') {
+      //   const result = await fetchAllMaintenanceTasksForDashboard(page, batchSize);
+      //   data = result.data || [];
+      // } else if (currentMainTab === 'repair' || currentShopFilter === 'Repair') {
+      //   const result = await fetchAllRepairTasks(page, batchSize);
+      //   data = result.data || [];
+      // } else {
+      //   // Checklist / Delegation: single page fetch
+      //   data = await fetchDashboardDataApi(currentType, currentStaffFilter, page, batchSize, 'all', currentShopFilter);
+      // }
+      // NEW: React Query cached fetch
+      data = await queryClient.fetchQuery({
+        queryKey: ['dashboardTasks', currentType, currentMainTab, currentShopFilter, currentStaffFilter, page],
+        queryFn: async () => {
+          if (currentMainTab === 'maintenance' || currentShopFilter === 'Maintenance') {
+            const result = await fetchAllMaintenanceTasksForDashboard(page, batchSize);
+            return result.data || [];
+          } else if (currentMainTab === 'repair' || currentShopFilter === 'Repair') {
+            const result = await fetchAllRepairTasks(page, batchSize);
+            return result.data || [];
+          } else {
+            return await fetchDashboardDataApi(currentType, currentStaffFilter, page, batchSize, 'all', currentShopFilter);
+          }
+        },
+        staleTime: 2 * 60 * 1000
+      });
 
       // --- MOVED UP: Generate Staff List BEFORE Early Return ---
       // This ensures the staff dropdown updates correctly even if a shop has 0 tasks.
@@ -635,7 +721,14 @@ export default function AdminDashboard() {
         uniqueStaff = [...new Set((data || []).map((task) => task.name).filter((name) => name && name.trim() !== ""))];
       } else {
         try {
-          uniqueStaff = await getStaffNamesByShopApi(currentShopFilter !== 'all' ? currentShopFilter : null);
+          // OLD:
+          // uniqueStaff = await getStaffNamesByShopApi(currentShopFilter !== 'all' ? currentShopFilter : null);
+          // NEW: React Query cached fetch
+          uniqueStaff = await queryClient.fetchQuery({
+            queryKey: ['staffList', currentShopFilter],
+            queryFn: () => getStaffNamesByShopApi(currentShopFilter !== 'all' ? currentShopFilter : null),
+            staleTime: 5 * 60 * 1000
+          });
         } catch (error) {
           console.error('Error fetching staff from users table:', error);
           uniqueStaff = [...new Set((data || []).map((task) => task.name).filter((name) => name && name.trim() !== ""))];
@@ -757,8 +850,13 @@ export default function AdminDashboard() {
             }
           }
 
-          // FIXED: Use correct field name from your Supabase data - prefer planned_date
-          const taskStartDate = parseTaskStartDate(task.planned_date || task.task_start_date || task.created_at);
+          // OLD: // FIXED: Use correct field name from your Supabase data - prefer planned_date
+          // OLD: const taskStartDate = parseTaskStartDate(task.planned_date || task.task_start_date || task.created_at);
+          // NEW: Use correct date column per dashboard type
+          const taskDateValue = currentType === 'work' ? task.current_date
+            : currentType === 'checklist' ? (task.task_start_date || task.planned_date || task.created_at)
+            : (task.planned_date || task.task_start_date || task.created_at);
+          const taskStartDate = parseTaskStartDate(taskDateValue);
           const completionDate = task.submission_date ? parseTaskStartDate(task.submission_date) : null;
 
           // Robust completion check across all categories
@@ -842,8 +940,11 @@ export default function AdminDashboard() {
             title: task.task_description || task.issue_description || "No Description",
             task_description: task.task_description || task.issue_description,
             assignedTo: task.name || task.assigned_person || "Unassigned",
-            taskStartDate: formatDateToDDMMYYYY(taskStartDate || (task.planned_date ? new Date(task.planned_date) : (task.task_start_date ? new Date(task.task_start_date) : (task.created_at ? new Date(task.created_at) : null)))),
-            originalTaskStartDate: task.planned_date || task.task_start_date || task.created_at,
+            // OLD: taskStartDate: formatDateToDDMMYYYY(taskStartDate || (task.planned_date ? new Date(task.planned_date) : (task.task_start_date ? new Date(task.task_start_date) : (task.created_at ? new Date(task.created_at) : null)))),
+            // OLD: originalTaskStartDate: task.planned_date || task.task_start_date || task.created_at,
+            // NEW: Use the already-resolved taskDateValue
+            taskStartDate: formatDateToDDMMYYYY(taskStartDate || (taskDateValue ? new Date(taskDateValue) : null)),
+            originalTaskStartDate: taskDateValue || task.created_at,
             submission_date: task.submission_date,
             status,
             frequency: task.frequency || task.freq || "one-time",
@@ -947,14 +1048,24 @@ export default function AdminDashboard() {
         }
 
         // Save fresh data to cache
+        // OLD:
+        // if (!append) {
+        //   const cacheKey = `${currentType}-${currentMainTab}-${currentShopFilter}-${currentStaffFilter}-${page}`;
+        //   shopDataCache.current[cacheKey] = {
+        //     timestamp: Date.now(),
+        //     shopData: newShopData,
+        //     availableStaff: uniqueStaff,
+        //     summary: summary || null
+        //   };
+        // }
+        // NEW: Save fresh data to React Query cache
         if (!append) {
-          const cacheKey = `${currentType}-${currentMainTab}-${currentShopFilter}-${currentStaffFilter}-${page}`;
-          shopDataCache.current[cacheKey] = {
-            timestamp: Date.now(),
+          const queryKey = ['dashboardProcessedData', currentType, currentMainTab, currentShopFilter, currentStaffFilter, page];
+          queryClient.setQueryData(queryKey, {
             shopData: newShopData,
             availableStaff: uniqueStaff,
             summary: summary || null
-          };
+          });
         }
 
         return newShopData;
@@ -1009,7 +1120,14 @@ export default function AdminDashboard() {
     if (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'work') {
       try {
         // Fetch all shops from the shops table — admins see all
-        const shops = await getUniqueShopsApi();
+        // OLD:
+        // const shops = await getUniqueShopsApi();
+        // NEW: React Query cached fetch
+        const shops = await queryClient.fetchQuery({
+          queryKey: ['uniqueShops', dashboardType],
+          queryFn: () => getUniqueShopsApi(),
+          staleTime: 10 * 60 * 1000 // 10 minutes
+        });
         setAvailableShops(shops);
       } catch (error) {
         console.error('Error fetching shops:', error);

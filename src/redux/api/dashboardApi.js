@@ -1,5 +1,18 @@
 import supabase from "../../SupabaseClient";
 
+// ── Centralized date column mapping (NEW) ──
+const getDateColumn = (dashboardType) => {
+  switch (dashboardType) {
+    case 'checklist': return 'task_start_date';
+    case 'delegation': return 'planned_date';
+    case 'work': return 'current_date';
+    case 'maintenance': return 'planned_date';
+    case 'ea': return 'planned_date';
+    case 'repair': return 'created_at';
+    default: return 'created_at';
+  }
+};
+
 /**
  * Fetch dashboard data with proper server-side filtering and pagination
  */
@@ -21,8 +34,9 @@ export const fetchDashboardDataApi = async (
     const username = localStorage.getItem('user-name');
     const today = new Date().toISOString().split('T')[0];
 
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
-                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+    // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+    //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
+    const dateColumn = getDateColumn(dashboardType);
     // Use ascending order for checklist/delegation/maintenance/work to show oldest/most overdue first
     const isAscending = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'work');
 
@@ -160,8 +174,9 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
     const today = new Date().toISOString().split('T')[0];
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
-                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+    // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+    //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
+    const dateColumn = getDateColumn(dashboardType);
 
     const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
                       dashboardType === 'repair' ? 'repair_tasks' :
@@ -266,8 +281,9 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
 
   try {
     const today = new Date().toISOString().split('T')[0];
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
-                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+    // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+    //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
+    const dateColumn = getDateColumn(dashboardType);
 
     let query;
     if (dashboardType === 'delegation') {
@@ -418,8 +434,9 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
     const lastDayOfMonth = new Date(year, month, 0).getDate();
     const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
 
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
-                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+    // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+    //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
+    const dateColumn = getDateColumn(dashboardType);
 
     // console.log('Date range for filtering:', {
     //   startDate,
@@ -641,8 +658,9 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, s
     const lastDayOfMonth = new Date(year, month, 0).getDate();
     const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
 
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
-                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+    // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+    //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
+    const dateColumn = getDateColumn(dashboardType);
 
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
                       dashboardType === 'ea' ? 'doer_name' : 'name';
@@ -930,7 +948,8 @@ export const fetchChecklistDataByDateRangeApi = async (
       dashboardType === 'repair' ? 'repair_tasks' :
         dashboardType === 'ea' ? 'ea_tasks' : 'checklist';
 
-    const dateColumn = 'planned_date'; // This API is specific to checklist
+    // OLD: const dateColumn = 'planned_date'; // This API is specific to checklist
+    const dateColumn = 'task_start_date'; // Checklist uses task_start_date column
 
     let query = supabase
       .from(tableName)
@@ -1031,7 +1050,8 @@ export const getChecklistDateRangeCountApi = async (
       .from(tableName)
       .select('*'); // Removed { count: 'exact', head: true } to actually fetch data
 
-    const dateColumn = 'planned_date'; // checklist specific
+    // OLD: const dateColumn = 'planned_date'; // checklist specific
+    const dateColumn = 'task_start_date'; // Checklist uses task_start_date column
 
     // Apply date range filter ONLY - no today date restrictions
     if (startDate && endDate) {
@@ -1118,7 +1138,8 @@ export const getChecklistDateRangeStatsApi = async (
       startDate, endDate, staffFilter, shopFilter
     });
 
-    const dateColumn = 'planned_date'; // checklist specific
+    // OLD: const dateColumn = 'planned_date'; // checklist specific
+    const dateColumn = 'task_start_date'; // Checklist uses task_start_date column
 
     const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
       dashboardType === 'repair' ? 'repair_tasks' :
@@ -1374,8 +1395,9 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
     const start = startDate ? `${startDate}T00:00:00` : defaultStart;
     const end = endDate ? `${endDate}T23:59:59` : defaultEnd;
     
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
-                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+    // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+    //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
+    const dateColumn = getDateColumn(dashboardType);
     
     const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
       dashboardType === 'repair' ? 'repair_tasks' :
@@ -1471,8 +1493,9 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
     const start = startDate ? `${startDate}T00:00:00` : defaultStart;
     const end = endDate ? `${endDate}T23:59:59` : defaultEnd;
     
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
-                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+    // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+    //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
+    const dateColumn = getDateColumn(dashboardType);
     let query;
 
     if (dashboardType === 'delegation') {
@@ -1588,8 +1611,9 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     const { start: defaultStart, todayStart } = getCurrentMonthRange();
     const start = startDate ? `${startDate}T00:00:00` : defaultStart;
     
-    const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
-                       (dashboardType === 'work') ? 'current_date' : 'created_at';
+    // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
+    //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
+    const dateColumn = getDateColumn(dashboardType);
     let query;
 
     if (dashboardType === 'delegation') {

@@ -1,7 +1,7 @@
 import express from "express";
 import axios from "axios";
 import cors from "cors";
-import { startDailyRemindersCron } from "./src/cron/dailyReminderJob.js";
+import { startDailyRemindersCron, runDailyReminders } from "./src/cron/dailyReminderJob.js";
 
 const app = express();
 app.use(cors());
@@ -14,6 +14,15 @@ app.get("/proxy", async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+app.get("/api/test-reminders", async (req, res) => {
+    try {
+        await runDailyReminders();
+        res.json({ success: true, message: "Daily reminders executed successfully." });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 // Start background cron jobs
