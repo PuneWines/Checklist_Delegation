@@ -53,6 +53,7 @@ export default function DefaultView({
                 isLoadingMore={isLoadingMore}
                 hasMoreData={hasMoreData}
                 userRole={userRole}
+                dateRange={dateRange}
             />
 
             {activeTab === "overview" && (

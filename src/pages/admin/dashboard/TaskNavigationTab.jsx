@@ -34,7 +34,8 @@ export default function TaskNavigationTabs({
   getFrequencyColor,
   dashboardStaffFilter,
   shopFilter,
-  userRole // Add this prop
+  userRole,
+  dateRange
 }) {
   const [currentPage, setCurrentPage] = useState(1)
   const [displayedTasks, setDisplayedTasks] = useState([])

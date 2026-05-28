@@ -169,13 +169,11 @@ export const fetchDashboardDataApi = async (
   }
 };
 
-export const getDashboardDataCount = async (dashboardType, staffFilter = null, taskView = 'recent', shopFilter = null) => {
+export const getDashboardDataCount = async (dashboardType, staffFilter = null, taskView = 'recent', shopFilter = null, startDate = null, endDate = null) => {
   try {
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
     const today = new Date().toISOString().split('T')[0];
-    // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
-    //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
     const dateColumn = getDateColumn(dashboardType);
 
     const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
@@ -251,7 +249,16 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
       }
 
       case 'all':
-        // No date filters
+        {
+          const now2 = new Date();
+          const prevMonthStart = new Date(now2.getFullYear(), now2.getMonth() - 1, 1)
+            .toISOString().split('T')[0];
+          const upperBound = endDate || today;
+          const lowerBound = startDate || prevMonthStart;
+          query = query
+            .gte(dateColumn, `${lowerBound}T00:00:00`)
+            .lte(dateColumn, `${upperBound}T23:59:59`);
+        }
         break;
       default:
         if (dashboardType !== 'checklist' && dashboardType !== 'delegation') {
@@ -1716,3 +1723,30 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     throw error;
   }
 };
+
+/**
+ * Invoke the Edge Function to compute combined dashboard data and statistics
+ */
+export const fetchDashboardStatsApi = async (filters) => {
+  try {
+    const { data, error } = await supabase.functions.invoke('calculate-dashboard-stats', {
+      body: {
+        dashboardType: filters.dashboardType,
+        shopFilter: filters.shopFilter,
+        staffFilter: filters.staffFilter,
+        startDate: filters.startDate,
+        endDate: filters.endDate
+      }
+    })
+    
+    if (error) {
+      console.error("Error calling edge function:", error)
+      return null
+    }
+    
+    return data // Returns: { tasks, summaryStats }
+  } catch (err) {
+    console.error("Exception calling edge function:", err)
+    return null
+  }
+}

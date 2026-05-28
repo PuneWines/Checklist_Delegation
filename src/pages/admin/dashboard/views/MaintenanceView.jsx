@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from "react"
 import { isToday, isThisWeek, isThisMonth } from "date-fns"
-import { Settings, Calendar, CheckCircle, Clock, AlertTriangle, IndianRupee, FileText, Play, Pause, Edit, Save, X } from "lucide-react"
+import { Settings, Calendar, CheckCircle, Clock, AlertTriangle, IndianRupee, FileText, Save, X } from "lucide-react"
 import AudioPlayer from "../../../../components/AudioPlayer"
 import { useDispatch } from "react-redux"
 import { updateMaintenanceTask } from "../../../../redux/slice/maintenanceSlice"
@@ -30,7 +30,7 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
     </div>
 )
 
-export default function MaintenanceView({ stats: originalStats, chartData, tasks = [] }) {
+export default function MaintenanceView({ tasks = [] }) {
     const [maintFilter, setMaintFilter] = useState('all');
     const [isSaving, setIsSaving] = useState(false);
     const [viewerOpen, setViewerOpen] = useState(false);

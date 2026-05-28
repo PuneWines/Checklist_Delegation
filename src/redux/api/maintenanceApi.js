@@ -266,7 +266,7 @@ export const postMaintenanceTaskApi = async (taskData) => {
         // Map any description/audio fields if they come from UI in different names
         const payload = Array.isArray(taskData)
             ? taskData.map(t => {
-                const { instruction_attachment_type, instruction_attachment_url, ...rest } = t;
+                const { instruction_attachment_type: _type, instruction_attachment_url: _url, ...rest } = t;
                 return { ...rest, audio_url: rest.audio_url || null };
             })
             : Object.fromEntries(
