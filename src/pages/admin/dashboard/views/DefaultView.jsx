@@ -69,6 +69,7 @@ export default function DefaultView({
                                 dashboardStaffFilter={dashboardStaffFilter}
                                 shopFilter={shopFilter}
                                 parseTaskStartDate={parseTaskStartDate}
+                                dateRange={dateRange}
                             />
                         </div>
                     </div>

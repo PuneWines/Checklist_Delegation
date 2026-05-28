@@ -7,7 +7,8 @@ export default function StaffTasksTable({
   dashboardType,
   dashboardStaffFilter,
   shopFilter,
-  parseTaskStartDate
+  parseTaskStartDate,
+  dateRange
 }) {
   const [currentPage, setCurrentPage] = useState(1)
   const [staffMembers, setStaffMembers] = useState([])
@@ -48,7 +49,7 @@ export default function StaffTasksTable({
     setStaffMembers([])
     setHasMoreData(true)
     setTotalStaffCount(0)
-  }, [dashboardType, dashboardStaffFilter, shopFilter, selectedMonth])
+  }, [dashboardType, dashboardStaffFilter, shopFilter, selectedMonth, dateRange])
 
   // Function to load staff data from server
   const loadStaffData = useCallback(async (page = 1, append = false) => {
@@ -57,6 +58,11 @@ export default function StaffTasksTable({
     try {
       setIsLoadingMore(true)
 
+      const useDateRange = dateRange && dateRange.filtered;
+      const startParam = useDateRange ? dateRange.startDate : null;
+      const endParam = useDateRange ? dateRange.endDate : null;
+      const monthParam = useDateRange ? null : selectedMonth;
+
       // Fetch staff data with their task summaries
       const data = await fetchStaffTasksDataApi(
         dashboardType,
@@ -64,13 +70,22 @@ export default function StaffTasksTable({
         shopFilter,
         page,
         itemsPerPage,
-        selectedMonth
+        monthParam,
+        startParam,
+        endParam
       )
 
       // Get total counts for both staff with tasks and total users
       if (page === 1) {
         const [staffCount, usersCount] = await Promise.all([
-          getStaffTasksCountApi(dashboardType, dashboardStaffFilter, shopFilter, selectedMonth),
+          getStaffTasksCountApi(
+            dashboardType,
+            dashboardStaffFilter,
+            shopFilter,
+            monthParam,
+            startParam,
+            endParam
+          ),
           getTotalUsersCountApi(shopFilter) // Pass shop filter to users count API
         ]);
         setTotalStaffCount(staffCount)
@@ -100,14 +115,14 @@ export default function StaffTasksTable({
     } finally {
       setIsLoadingMore(false)
     }
-  }, [dashboardType, dashboardStaffFilter, shopFilter, selectedMonth, isLoadingMore])
+  }, [dashboardType, dashboardStaffFilter, shopFilter, selectedMonth, dateRange, isLoadingMore])
 
   // Initial load when component mounts or dependencies change
   useEffect(() => {
-    if (selectedMonth) {
+    if (selectedMonth || (dateRange && dateRange.filtered)) {
       loadStaffData(1, false)
     }
-  }, [dashboardType, dashboardStaffFilter, shopFilter, selectedMonth])
+  }, [dashboardType, dashboardStaffFilter, shopFilter, selectedMonth, dateRange])
 
   // Function to load more data when scrolling
   const loadMoreData = () => {
@@ -143,6 +158,9 @@ export default function StaffTasksTable({
 
   // Format month for display
   const getDisplayMonth = () => {
+    if (dateRange && dateRange.filtered) {
+      return `${dateRange.startDate} to ${dateRange.endDate}`;
+    }
     if (!selectedMonth) return '';
     const [year, month] = selectedMonth.split('-');
     const date = new Date(year, month - 1);

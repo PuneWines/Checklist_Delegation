@@ -85,9 +85,14 @@ export const fetchDashboardDataApi = async (
     // Apply task view filtering on server side
     switch (taskView) {
       case 'recent':
-        // Today's tasks only
-        query = query.gte(dateColumn, `${today}T00:00:00`)
-          .lte(dateColumn, `${today}T23:59:59`);
+        // Today's tasks only (or restricted to custom date range)
+        if (startDate && endDate) {
+          query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
+                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`));
+        } else {
+          query = query.gte(dateColumn, `${today}T00:00:00`)
+                       .lte(dateColumn, `${today}T23:59:59`);
+        }
         if (dashboardType === 'ea') {
           query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
         } else if (dashboardType === 'checklist' || dashboardType === 'maintenance' || dashboardType === 'delegation' || dashboardType === 'work') {
@@ -97,13 +102,25 @@ export const fetchDashboardDataApi = async (
         break;
 
       case 'upcoming':
-        // All future tasks (after today)
-        query = query.gt(dateColumn, `${today}T23:59:59`);
+        // All future tasks (after today, restricted to custom date range if present)
+        if (startDate && endDate) {
+          query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
+                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
+                       .gt(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
+        } else {
+          query = query.gt(dateColumn, `${today}T23:59:59`);
+        }
         break;
 
       case 'overdue': {
-        // Tasks before today that are not completed
-        query = query.lt(dateColumn, `${today}T00:00:00`);
+        // Tasks before today that are not completed (restricted to custom date range if present)
+        if (startDate && endDate) {
+          query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
+                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
+                       .lt(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`));
+        } else {
+          query = query.lt(dateColumn, `${today}T00:00:00`);
+        }
 
         if (dashboardType === 'ea') {
           query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
@@ -218,8 +235,13 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     // Apply task view filtering
     switch (taskView) {
       case 'recent':
-        query = query.gte(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`))
-          .lte(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
+        if (startDate && endDate) {
+          query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
+                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`));
+        } else {
+          query = query.gte(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`))
+                       .lte(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
+        }
         
         if (dashboardType === 'ea') {
           query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
@@ -230,12 +252,24 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
 
       case 'upcoming':
         // All future tasks (after today)
-        query = query.gt(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
+        if (startDate && endDate) {
+          query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
+                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
+                       .gt(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
+        } else {
+          query = query.gt(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
+        }
         break;
 
       case 'overdue': {
         // Tasks before today that are not completed
-        query = query.lt(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`));
+        if (startDate && endDate) {
+          query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
+                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
+                       .lt(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`));
+        } else {
+          query = query.lt(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`));
+        }
 
         if (dashboardType === 'ea') {
           query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
@@ -419,7 +453,16 @@ export const getDashboardSummaryApi = async (dashboardType, staffFilter = null, 
 };
 
 // Alternative version if you want to see detailed task breakdown for debugging
-export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, shopFilter = null, page = 1, limit = 20, selectedMonth = null) => {
+export const fetchStaffTasksDataApi = async (
+  dashboardType,
+  staffFilter = null,
+  shopFilter = null,
+  page = 1,
+  limit = 20,
+  selectedMonth = null,
+  startDateParam = null,
+  endDateParam = null
+) => {
   try {
     // console.log('Fetching staff tasks data:', { dashboardType, staffFilter, shopFilter, page, limit, selectedMonth });
 
@@ -436,10 +479,10 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
       month = now.getMonth() + 1;
     }
 
-    // Calculate start and end dates for the selected month
-    const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+    // Calculate start and end dates for the selected month, or use params
+    const startDate = startDateParam || `${year}-${month.toString().padStart(2, '0')}-01`;
     const lastDayOfMonth = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
+    const endDate = endDateParam || `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
 
     // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
     //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
@@ -646,7 +689,14 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
   }
 };
 
-export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, shopFilter = null, selectedMonth = null) => {
+export const getStaffTasksCountApi = async (
+  dashboardType,
+  staffFilter = null,
+  shopFilter = null,
+  selectedMonth = null,
+  startDateParam = null,
+  endDateParam = null
+) => {
   try {
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
@@ -661,9 +711,9 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, s
       month = now.getMonth() + 1;
     }
 
-    const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+    const startDate = startDateParam || `${year}-${month.toString().padStart(2, '0')}-01`;
     const lastDayOfMonth = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
+    const endDate = endDateParam || `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
 
     // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
     //                        (dashboardType === 'work') ? 'current_date' : 'created_at';

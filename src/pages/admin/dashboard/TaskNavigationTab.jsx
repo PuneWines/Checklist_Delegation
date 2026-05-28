@@ -194,7 +194,7 @@ export default function TaskNavigationTabs({
     setDisplayedTasks([])
     setHasMoreData(true)
     setTotalCount(0)
-  }, [taskView, dashboardType, dashboardStaffFilter, shopFilter]) // Add shopFilter
+  }, [taskView, dashboardType, dashboardStaffFilter, shopFilter, dateRange]) // Add shopFilter & dateRange
 
   // Function to load tasks from server
   const loadTasksFromServer = useCallback(async (page = 1, append = false) => {
@@ -203,13 +203,9 @@ export default function TaskNavigationTabs({
     try {
       setIsLoadingMore(true)
 
-      // console.log('Loading tasks with filters:', {
-      //   dashboardType,
-      //   dashboardStaffFilter,
-      //   taskView,
-      //   page,
-      //   shopFilter
-      // });
+      const useDateRange = dateRange && dateRange.filtered;
+      const startParam = useDateRange ? dateRange.startDate : null;
+      const endParam = useDateRange ? dateRange.endDate : null;
 
       // Use shopFilter for server call (only affects table data)
       const data = await fetchDashboardDataApi(
@@ -218,12 +214,21 @@ export default function TaskNavigationTabs({
         page,
         itemsPerPage,
         taskView,
-        shopFilter // Pass shop filter to API
+        shopFilter, // Pass shop filter to API
+        startParam,
+        endParam
       )
 
       // Get total count for this view (only on first load)
       if (page === 1) {
-        const count = await getDashboardDataCount(dashboardType, dashboardStaffFilter, taskView, shopFilter)
+        const count = await getDashboardDataCount(
+          dashboardType,
+          dashboardStaffFilter,
+          taskView,
+          shopFilter,
+          startParam,
+          endParam
+        )
         setTotalCount(count)
       }
 
@@ -357,7 +362,7 @@ export default function TaskNavigationTabs({
     } finally {
       setIsLoadingMore(false)
     }
-  }, [dashboardType, dashboardStaffFilter, taskView, searchQuery, shopFilter, isLoadingMore, itemsPerPage])
+  }, [dashboardType, dashboardStaffFilter, taskView, searchQuery, shopFilter, dateRange, isLoadingMore, itemsPerPage])
 
   // Helper functions
   const parseTaskStartDate = (dateStr) => {
@@ -426,7 +431,7 @@ export default function TaskNavigationTabs({
       setDoersList(doers);
     };
     fetchDropdownData();
-  }, [taskView, dashboardType, dashboardStaffFilter, shopFilter])
+  }, [taskView, dashboardType, dashboardStaffFilter, shopFilter, dateRange])
 
   // Load more when search changes (client-side filter)
   useEffect(() => {
