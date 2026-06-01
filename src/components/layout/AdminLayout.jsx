@@ -26,6 +26,7 @@ import {
   X,
   Bell,
   LayoutGrid,
+  BarChart3,
 } from "lucide-react";
 
 export default function AdminLayout({ children, darkMode, toggleDarkMode, showLayout = true }) {
@@ -134,6 +135,13 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       icon: BookmarkCheck,
       active: location.pathname === "/dashboard/admin-approval",
       showFor: ["admin", "HOD", "manager"],
+    },
+    {
+      href: "/dashboard/mis-report",
+      label: "MIS Report",
+      icon: BarChart3,
+      active: location.pathname === "/dashboard/mis-report",
+      showFor: ["admin"],
     },
     {
       href: "/dashboard/setting",

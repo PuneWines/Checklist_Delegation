@@ -44,18 +44,23 @@ function StaffTasksPage() {
     }, [staffMembers, searchQuery])
 
     // Combine checklist and delegation data
-    const combineStaffData = (checklistData, delegationData) => {
+    // Combine checklist, delegation, and work data
+    const combineStaffData = (checklistData, delegationData, workData) => {
         const combinedMap = new Map()
 
         // Process checklist data
         if (checklistData) {
             checklistData.forEach(staff => {
+                const total = staff.totalTasks || staff.total_tasks || 0
+                const completed = staff.completedTasks || staff.total_completed_tasks || 0
+                const pending = staff.pendingTasks || (total - completed) || 0
+                const progress = staff.progress || staff.completion_score || 0
                 combinedMap.set(staff.name, {
                     ...staff,
-                    checklistTotal: staff.totalTasks || 0,
-                    checklistCompleted: staff.completedTasks || 0,
-                    checklistPending: staff.pendingTasks || 0,
-                    checklistProgress: staff.progress || 0
+                    checklistTotal: total,
+                    checklistCompleted: completed,
+                    checklistPending: pending,
+                    checklistProgress: progress
                 })
             })
         }
@@ -63,18 +68,21 @@ function StaffTasksPage() {
         // Process delegation data
         if (delegationData) {
             delegationData.forEach(staff => {
+                const total = staff.totalTasks || staff.total_tasks || 0
+                const completed = staff.completedTasks || staff.total_completed_tasks || 0
+                const pending = staff.pendingTasks || (total - completed) || 0
+                const progress = staff.progress || staff.completion_score || 0
+
                 const existing = combinedMap.get(staff.name)
                 if (existing) {
-                    // Update existing staff member
                     combinedMap.set(staff.name, {
                         ...existing,
-                        delegationTotal: staff.totalTasks || 0,
-                        delegationCompleted: staff.completedTasks || 0,
-                        delegationPending: staff.pendingTasks || 0,
-                        delegationProgress: staff.progress || 0
+                        delegationTotal: total,
+                        delegationCompleted: completed,
+                        delegationPending: pending,
+                        delegationProgress: progress
                     })
                 } else {
-                    // Add new staff member from delegation data
                     combinedMap.set(staff.name, {
                         ...staff,
                         name: staff.name,
@@ -83,10 +91,49 @@ function StaffTasksPage() {
                         checklistCompleted: 0,
                         checklistPending: 0,
                         checklistProgress: 0,
-                        delegationTotal: staff.totalTasks || 0,
-                        delegationCompleted: staff.completedTasks || 0,
-                        delegationPending: staff.pendingTasks || 0,
-                        delegationProgress: staff.progress || 0
+                        delegationTotal: total,
+                        delegationCompleted: completed,
+                        delegationPending: pending,
+                        delegationProgress: progress
+                    })
+                }
+            })
+        }
+
+        // Process work data
+        if (workData) {
+            workData.forEach(staff => {
+                const total = staff.totalTasks || staff.total_tasks || 0
+                const completed = staff.completedTasks || staff.total_completed_tasks || 0
+                const pending = staff.pendingTasks || (total - completed) || 0
+                const progress = staff.progress || staff.completion_score || 0
+
+                const existing = combinedMap.get(staff.name)
+                if (existing) {
+                    combinedMap.set(staff.name, {
+                        ...existing,
+                        workTotal: total,
+                        workCompleted: completed,
+                        workPending: pending,
+                        workProgress: progress
+                    })
+                } else {
+                    combinedMap.set(staff.name, {
+                        ...staff,
+                        name: staff.name,
+                        email: staff.email,
+                        checklistTotal: 0,
+                        checklistCompleted: 0,
+                        checklistPending: 0,
+                        checklistProgress: 0,
+                        delegationTotal: 0,
+                        delegationCompleted: 0,
+                        delegationPending: 0,
+                        delegationProgress: 0,
+                        workTotal: total,
+                        workCompleted: completed,
+                        workPending: pending,
+                        workProgress: progress
                     })
                 }
             })
@@ -94,18 +141,38 @@ function StaffTasksPage() {
 
         // Calculate combined totals and return array
         return Array.from(combinedMap.values()).map(staff => {
-            const totalTasks = (staff.checklistTotal || 0) + (staff.delegationTotal || 0)
-            const completed = (staff.checklistCompleted || 0) + (staff.delegationCompleted || 0)
-            const pending = (staff.checklistPending || 0) + (staff.delegationPending || 0)
+            const checklistTotal = staff.checklistTotal || 0
+            const checklistCompleted = staff.checklistCompleted || 0
+            const checklistPending = staff.checklistPending || 0
+
+            const delegationTotal = staff.delegationTotal || 0
+            const delegationCompleted = staff.delegationCompleted || 0
+            const delegationPending = staff.delegationPending || 0
+
+            const workTotal = staff.workTotal || 0
+            const workCompleted = staff.workCompleted || 0
+            const workPending = staff.workPending || 0
+
+            const totalTasks = checklistTotal + delegationTotal + workTotal
+            const completed = checklistCompleted + delegationCompleted + workCompleted
+            const pending = checklistPending + delegationPending + workPending
             const progress = totalTasks > 0 ? Math.round((completed / totalTasks) * 100) : 0
 
             return {
                 ...staff,
+                checklistTotal,
+                checklistCompleted,
+                checklistPending,
+                delegationTotal,
+                delegationCompleted,
+                delegationPending,
+                workTotal,
+                workCompleted,
+                workPending,
                 totalTasks,
                 completedTasks: completed,
                 pendingTasks: pending,
-                progress: progress,
-                delegationPending: staff.delegationPending || 0
+                progress
             }
         })
     }
@@ -117,11 +184,12 @@ function StaffTasksPage() {
         try {
             setIsLoading(true)
 
-            // Load both checklist and delegation data in parallel
+            // Load checklist, delegation, and work data in parallel
             if (page === 1) {
-                const [checklistData, delegationData, staffCount, usersCount] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, page, itemsPerPage),
-                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, page, itemsPerPage),
+                const [checklistData, delegationData, workData, staffCount, usersCount] = await Promise.all([
+                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage),
+                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage),
+                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage),
                     getStaffTasksCountApi("checklist", dashboardStaffFilter),
                     getTotalUsersCountApi()
                 ]);
@@ -129,7 +197,7 @@ function StaffTasksPage() {
                 setTotalStaffCount(staffCount)
                 setTotalUsersCount(usersCount)
 
-                const combinedData = combineStaffData(checklistData, delegationData)
+                const combinedData = combineStaffData(checklistData, delegationData, workData)
 
                 if (!combinedData || combinedData.length === 0) {
                     setHasMoreData(false)
@@ -142,13 +210,14 @@ function StaffTasksPage() {
                 setFilteredStaffMembers(combinedData)
                 setHasMoreData(combinedData.length === itemsPerPage)
             } else {
-                // For subsequent pages, load both data types
-                const [checklistData, delegationData] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, page, itemsPerPage),
-                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, page, itemsPerPage)
+                // For subsequent pages, load all data types
+                const [checklistData, delegationData, workData] = await Promise.all([
+                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage),
+                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage),
+                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage)
                 ])
 
-                const combinedData = combineStaffData(checklistData, delegationData)
+                const combinedData = combineStaffData(checklistData, delegationData, workData)
 
                 if (!combinedData || combinedData.length === 0) {
                     setHasMoreData(false)
@@ -187,12 +256,13 @@ function StaffTasksPage() {
     useEffect(() => {
         const fetchAvailableStaff = async () => {
             try {
-                const [checklistData, delegationData] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", "all", 1, 100),
-                    fetchStaffTasksDataApi("delegation", "all", 1, 100)
+                const [checklistData, delegationData, workData] = await Promise.all([
+                    fetchStaffTasksDataApi("checklist", "all", null, 1, 100),
+                    fetchStaffTasksDataApi("delegation", "all", null, 1, 100),
+                    fetchStaffTasksDataApi("work", "all", null, 1, 100)
                 ])
 
-                const combinedData = combineStaffData(checklistData, delegationData)
+                const combinedData = combineStaffData(checklistData, delegationData, workData)
                 const uniqueStaff = [...new Set(combinedData.map(staff => staff.name).filter(Boolean))]
 
                 if (userRole !== "admin" && username) {
@@ -209,6 +279,7 @@ function StaffTasksPage() {
 
         fetchAvailableStaff()
     }, [userRole, username])
+
 
     return (
         <AdminLayout>
@@ -262,7 +333,7 @@ function StaffTasksPage() {
                         <div className="flex justify-between items-center">
                             <div>
                                 <h3 className="text-purple-700 font-medium">Staff Performance Details</h3>
-                                <p className="text-xs text-gray-600">Showing combined checklist and delegation data</p>
+                                <p className="text-xs text-gray-600">Showing combined checklist, delegation and work tasks data</p>
                             </div>
 
                             {/* Active Filters Display */}
@@ -330,23 +401,23 @@ function StaffTasksPage() {
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                         Total Tasks
                                                         <div className="text-xs font-normal text-gray-400 mt-1">
-                                                            (C + D)
+                                                            (C + D + W)
                                                         </div>
                                                     </th>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                         Total Completed
                                                         <div className="text-xs font-normal text-gray-400 mt-1">
-                                                            (C + D)
+                                                            (C + D + W)
                                                         </div>
                                                     </th>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                         Checklist Pending
-                                                        {/* <div className="text-xs font-normal text-gray-400 mt-1">
-                                                            (Checklist + Delegation)
-                                                        </div> */}
                                                     </th>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                         Delegation Pending
+                                                    </th>
+                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        Work Pending
                                                     </th>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                         Progress
@@ -369,23 +440,23 @@ function StaffTasksPage() {
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                             <div className="font-medium">{staff.totalTasks}</div>
                                                             <div className="text-xs text-gray-400">
-                                                                ({staff.checklistTotal || 0} + {staff.delegationTotal || 0})
+                                                                ({staff.checklistTotal || 0} + {staff.delegationTotal || 0} + {staff.workTotal || 0})
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                             <div className="font-medium">{staff.completedTasks}</div>
                                                             <div className="text-xs text-gray-400">
-                                                                ({staff.checklistCompleted || 0} + {staff.delegationCompleted || 0})
+                                                                ({staff.checklistCompleted || 0} + {staff.delegationCompleted || 0} + {staff.workCompleted || 0})
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-red-500">
-                                                            <div className="font-medium">{staff.pendingTasks}</div>
-                                                            {/* <div className="text-xs text-gray-400">
-                                                                ({staff.checklistPending || 0})
-                                                            </div> */}
+                                                            <div className="font-medium">{staff.checklistPending || 0}</div>
                                                         </td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-red-500 font-medium">
                                                             {staff.delegationPending || 0}
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-500 font-medium">
+                                                            {staff.workPending || 0}
                                                         </td>
                                                         <td className="px-6 py-4 whitespace-nowrap">
                                                             <div className="flex items-center gap-2">
