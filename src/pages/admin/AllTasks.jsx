@@ -191,7 +191,7 @@ const AllTasks = () => {
 
   const statusDateColumn = activeTab === "repair" ? "created_at" : (activeTab === "work" ? "current_date" : "planned_date");
   // Use planned_date for checklist/delegation sort — task_start_date is same for all occurrences of a recurring task
-  const sortDateColumn = activeTab === "repair" ? "created_at" : "planned_date";
+  const sortDateColumn = activeTab === "repair" ? "created_at" : (activeTab === "work" ? "current_date" : "planned_date");
   const [holidaysList, setHolidaysList] = useState([]);
   const [workingDaysList, setWorkingDaysList] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -284,7 +284,13 @@ const AllTasks = () => {
 
   const getTimeStatus = useCallback((dateString, taskStatus) => {
     if (!dateString) return "—";
-    const date = new Date(dateString);
+    let date;
+    if (typeof dateString === 'string' && dateString.includes('-') && !dateString.includes('T') && !dateString.includes(' ')) {
+      const parts = dateString.split('-');
+      date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    } else {
+      date = new Date(dateString);
+    }
     if (isNaN(date.getTime())) return "—";
 
     const today = new Date();
@@ -583,7 +589,7 @@ const AllTasks = () => {
           query = query.not("submission_date", "is", null).order("submission_date", { ascending: false });
         } else if (activeTab === "ea") {
           query = supabase.from("ea_tasks_done").select("*").order("created_at", { ascending: false });
-          if (!isSuperAdmin) {
+          if (applyNameFilter) {
             query = query.in('doer_name', reportingUsers);
           }
         } else if (activeTab === "work") {
@@ -597,10 +603,11 @@ const AllTasks = () => {
         if (activeTab === "repair") {
           query = query.is("submission_date", null).order(dateColumn, { ascending: false });
         } else if (activeTab === "work") {
-          query = query.or('submission_date.is.null,status.eq.REJECTED').order('current_date', { ascending: true });
-          if (!isSuperAdmin) {
-            query = query.in('name', reportingUsers);
-          }
+          const todayStr = new Date(new Date().getTime() + (330 * 60000)).toISOString().split('T')[0];
+          query = query
+            .or('submission_date.is.null,status.eq.REJECTED')
+            .eq('current_date', todayStr)
+            .order('current_date', { ascending: true });
         } else if (activeTab === "ea") {
           query = query.in("status", ["pending", "extend", "extended"]).order("task_start_date", { ascending: true });
         } else if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance") {
@@ -628,7 +635,7 @@ const AllTasks = () => {
 
         switch (activeTab) {
           case "maintenance":
-            searchFields = ["task_description", "shop", "machine_name", "part_name", "part_area", "name", "given_by"];
+            searchFields = ["task_description", "shop_name", "machine_name", "part_name", "part_area", "name", "given_by", "freq"];
             break;
           case "repair":
             searchFields = ["issue_description", "filled_by", "assigned_person", "machine_name", "part_replaced", "vendor_name"];
@@ -642,13 +649,28 @@ const AllTasks = () => {
           case "checklist":
           case "delegation":
           default:
-            searchFields = ["task_description", "shop", "name", "given_by", "task_level"];
+            searchFields = ["task_description", "shop_name", "name", "given_by", "task_level", "task_id", "frequency"];
             break;
         }
 
         if (searchFields.length > 0) {
-          const orQuery = searchFields.map(f => `${f}.ilike.%${cleanTerm}%`).join(',');
-          query = query.or(orQuery);
+          const isNumeric = !isNaN(cleanTerm) && !isNaN(parseInt(cleanTerm, 10));
+          const orQueryParts = [];
+
+          searchFields.forEach(f => {
+            if (f === "task_id") {
+              if (isNumeric) {
+                orQueryParts.push(`task_id.eq.${parseInt(cleanTerm, 10)}`);
+              }
+            } else {
+              orQueryParts.push(`${f}.ilike.%${cleanTerm}%`);
+            }
+          });
+
+          if (orQueryParts.length > 0) {
+            const orQuery = orQueryParts.join(',');
+            query = query.or(orQuery);
+          }
         }
       }
 
@@ -732,7 +754,6 @@ const AllTasks = () => {
           setHistoryData(mappedData);
         } else {
           const missingIdCount = mappedData.filter(d => !d.series_id).length;
-          console.log(`[AllTasks Fetch Stats] Table: ${tableName} | Total: ${mappedData.length} | Missing series_id: ${missingIdCount}`);
           setTasks(mappedData);
         }
       } else {
