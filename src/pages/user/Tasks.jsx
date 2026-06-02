@@ -26,9 +26,26 @@ const getWorkTaskTimeBounds = (task) => {
 };
 
 const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
-  if (task.status === "APPROVED" || task.status === "APPROVED") return "APPROVED";
+  if (task.status === "APPROVED") return "APPROVED";
   if (task.status === "SUBMITTED" || task.status === "Done" || task.status === "done" || task.submission_date) return "SUBMITTED";
-  if (task.status === "REJECTED") return "REJECTED";
+  
+  if (task.status === "REJECTED") {
+    // Rejected task has to be completed again on same day as rejected date
+    const rejectionDateStr = task.admin_approval_date || task.manager_approval_date;
+    if (rejectionDateStr) {
+      const rejDate = new Date(rejectionDateStr);
+      const rejDateStr = `${rejDate.getFullYear()}-${String(rejDate.getMonth() + 1).padStart(2, '0')}-${String(rejDate.getDate()).padStart(2, '0')}`;
+      
+      const today = new Date(currentTime);
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      
+      if (rejDateStr === todayStr) {
+        // Time constraint will NOT appear for rejected task! It is always ACTIVE on the same day.
+        return "ACTIVE";
+      }
+    }
+    return "NOT_DONE";
+  }
 
   const { taskStart, taskEnd } = getWorkTaskTimeBounds(task);
 
@@ -256,6 +273,9 @@ const UserTasks = () => {
     if (ds === "NOT_DONE") {
       return <span className="px-2 py-0.5 bg-red-50 text-red-500 text-[10px] font-bold rounded-full uppercase tracking-wider">Not Done</span>;
     }
+    if (task.status === "REJECTED") {
+      return <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Rejected (Resubmit Today)</span>;
+    }
     return <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Active</span>;
   }
 
@@ -367,6 +387,13 @@ const UserTasks = () => {
                   <p className="text-gray-600 text-sm font-medium leading-relaxed mb-4">
                     {task.task_description}
                   </p>
+                  
+                  {task.rejection_reason && (
+                    <div className="text-xs text-red-600 mb-4 font-bold bg-red-50 px-3 py-2 rounded-2xl border border-red-100 flex flex-col gap-1">
+                      <span className="uppercase tracking-wider text-[9px] text-red-500">Rejection Reason:</span>
+                      <span className="font-medium text-red-800 leading-normal">{task.rejection_reason}</span>
+                    </div>
+                  )}
                   
                   <div className="flex items-center justify-between mt-auto">
                     <div className="flex items-center gap-4">

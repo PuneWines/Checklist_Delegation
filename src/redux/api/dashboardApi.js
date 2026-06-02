@@ -577,6 +577,39 @@ export const fetchStaffTasksDataApi = async (
 
     // console.log(`Found ${tasksData.length} tasks in date range ${startDate} to ${endDate}`);
 
+    // Fetch active users to map shop managers
+    const shopManagersMap = {};
+    const managerNames = [];
+    if (dashboardType === 'work') {
+      try {
+        const { data: dbUsers } = await supabase
+          .from('users')
+          .select('user_name, shop_name, user_access, role')
+          .eq('status', 'active');
+
+        if (dbUsers) {
+          dbUsers.forEach(u => {
+            const roleLower = (u.role || "").toLowerCase();
+            if (roleLower === 'manager') {
+              const accessStr = u.user_access || u.shop_name || "";
+              const shops = accessStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+              shops.forEach(shop => {
+                if (!shopManagersMap[shop]) {
+                  shopManagersMap[shop] = new Set();
+                }
+                shopManagersMap[shop].add(u.user_name);
+              });
+              if (!managerNames.includes(u.user_name)) {
+                managerNames.push(u.user_name);
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Error loading managers for scoring:", err);
+      }
+    }
+
     // Process data to match SQL query structure
     const summary = {};
 
@@ -626,10 +659,62 @@ export const fetchStaffTasksDataApi = async (
           }
         }
       }
+
+      // ── MANAGER SCORING ──
+      if (dashboardType === 'work') {
+        const shopKey = (task.shop_name || "").trim().toLowerCase();
+        const managersSet = shopManagersMap[shopKey];
+        const managers = managersSet ? Array.from(managersSet) : [];
+
+        if (task.submission_date) {
+          if (task.manager_approved_by) {
+            // Manager approved it
+            const mgrName = task.manager_approved_by;
+            const mgrKey = `${shopVal}-${mgrName}`;
+            if (!summary[mgrKey]) {
+              summary[mgrKey] = {
+                shop: shopVal,
+                name: mgrName,
+                total_tasks: 0,
+                total_completed_tasks: 0,
+                total_done_on_time: 0
+              };
+            }
+            summary[mgrKey].total_tasks++;
+            summary[mgrKey].total_completed_tasks++;
+
+            // Manager approved on time only if approved on the same day as task submission
+            const approvalDate = new Date(task.manager_approval_date || task.updated_at);
+            const submissionDate = new Date(task.submission_date);
+            const approvalDateOnly = new Date(approvalDate.getFullYear(), approvalDate.getMonth(), approvalDate.getDate());
+            const submissionDateOnly = new Date(submissionDate.getFullYear(), submissionDate.getMonth(), submissionDate.getDate());
+
+            if (approvalDateOnly.getTime() === submissionDateOnly.getTime()) {
+              summary[mgrKey].total_done_on_time++;
+            }
+          } else {
+            // Submitted but pending manager approval (counts as pending for all shop managers)
+            managers.forEach(mgrName => {
+              const mgrKey = `${shopVal}-${mgrName}`;
+              if (!summary[mgrKey]) {
+                summary[mgrKey] = {
+                  shop: shopVal,
+                  name: mgrName,
+                  total_tasks: 0,
+                  total_completed_tasks: 0,
+                  total_done_on_time: 0
+                };
+              }
+              summary[mgrKey].total_tasks++;
+            });
+          }
+        }
+      }
     });
 
-    // Fetch user images for the staff found
-    const uniqueNames = [...new Set(tasksData.map(t => t.name || t.assigned_person || t.doer_name).filter(Boolean))];
+    // Fetch user images for the staff and managers found
+    const staffNames = tasksData.map(t => t.name || t.assigned_person || t.doer_name).filter(Boolean);
+    const uniqueNames = [...new Set([...staffNames, ...managerNames])];
     let userImageMap = {};
 
     if (uniqueNames.length > 0) {

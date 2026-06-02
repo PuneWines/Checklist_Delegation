@@ -483,7 +483,9 @@ const AllTasks = () => {
             { id: "time_status", label: "Time" },
             { id: "id", label: "ID" },
             { id: "task_description", label: "Description" },
+            { id: "manager_name", label: "Manager Name" },
             { id: "shop_name", label: "Shop" },
+            { id: "department", label: "Department" },
             { id: "name", label: "Employee" },
             { id: "current_date", label: "Date" },
             { id: "duration", label: "Mins" },
@@ -516,7 +518,7 @@ const AllTasks = () => {
 
       let query;
       if (activeTab === "work") {
-        query = supabase.from(tableName).select("*, task_assignments:assignment_id(start_datetime, end_datetime)");
+        query = supabase.from(tableName).select("*, task_assignments:assignment_id(start_datetime, end_datetime, manager_name)");
       } else {
         query = supabase.from(tableName).select("*");
       }
@@ -686,7 +688,8 @@ const AllTasks = () => {
             ...item,
             id: item.id || item.task_id,
             _table: item._table || tableName,
-            shop: item.shop || item.shop_name || "-"
+            shop: item.shop || item.shop_name || "-",
+            manager_name: item.task_assignments?.manager_name || "—"
           };
 
           // Override for REJECTED work tasks to make them reappear on their rejected date
@@ -1811,7 +1814,7 @@ const AllTasks = () => {
                                                       )
                                                   : (header.id === "enable_reminders" || header.id === "require_attachment" || header.id === "enable_reminder" || header.id === "attachment")
                                                     ? (task[header.id] ? "Yes" : "No")
-                                                    : (header.id === 'name' || header.id === 'assigned_person' || header.id === 'doer_name')
+                                                    : (header.id === 'name' || header.id === 'assigned_person' || header.id === 'doer_name' || header.id === 'manager_name')
                                                       ? <span className="font-bold text-gray-900">{task[header.id] || "—"}</span>
                                                       : header.id === "machine_name"
                                                         ? (task.machine_name || (task.task_description ? task.task_description.split(' - ')[0] : "—"))
@@ -2093,10 +2096,22 @@ const AllTasks = () => {
                                   <p className="text-[10px] text-gray-400 uppercase font-semibold">Planned Date</p>
                                   <p className="text-sm font-bold text-purple-700">{activeTab === "work" ? (<>{formatDate(task.current_date)}{task.task_assignments?.start_datetime && (<span className="text-xs text-gray-500 font-normal block">{formatTimeOnly(task.task_assignments.start_datetime)}</span>)}</>) : (formatDate(task.planned_date || task.task_start_date || task.created_at))}</p>
                                 </div>
+                                {activeTab === "work" && task.manager_name && (
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Manager</p>
+                                    <p className="text-sm text-gray-800 text-[11px] font-bold">{task.manager_name}</p>
+                                  </div>
+                                )}
                                 {(task.shop || task.shop_name) && (
                                   <div className="space-y-1">
                                     <p className="text-[10px] text-gray-400 uppercase font-semibold">Shop</p>
                                     <p className="text-sm text-gray-800 uppercase text-[11px] font-bold">{task.shop || task.shop_name}</p>
+                                  </div>
+                                )}
+                                {activeTab === "work" && task.department && (
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Department</p>
+                                    <p className="text-sm text-gray-800 uppercase text-[11px] font-bold">{task.department}</p>
                                   </div>
                                 )}
                                 {task.task_level && (

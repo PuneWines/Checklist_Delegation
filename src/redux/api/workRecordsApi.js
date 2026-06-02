@@ -62,13 +62,13 @@ export const upsertTaskAssignmentsApi = async (assignments) => {
 export const generateWorkTasksApi = async (assignments) => {
   try {
     const tasksToInsert = [];
-    
+
     // Gather all employee names, dates, task descriptions, and task_ids to query comprehensively
     const employeeNames = [];
     const dateStrings = [];
     const taskDescriptions = [];
     const taskIds = [];
-    
+
     assignments.forEach(asgn => {
       if (asgn.employee_name) {
         asgn.employee_name.split(',').forEach(e => {
@@ -82,7 +82,7 @@ export const generateWorkTasksApi = async (assignments) => {
       if (asgn.task_id && !taskIds.includes(asgn.task_id)) {
         taskIds.push(asgn.task_id);
       }
-      
+
       const start = new Date(asgn.start_datetime);
       const end = new Date(asgn.end_datetime);
       const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
@@ -100,7 +100,7 @@ export const generateWorkTasksApi = async (assignments) => {
         .select('assignment_id, current_date, name, task_description, task_id')
         .in('name', employeeNames)
         .in('current_date', dateStrings);
-      
+
       if (!error && data) {
         existingTasks = data;
       }
@@ -117,7 +117,7 @@ export const generateWorkTasksApi = async (assignments) => {
     for (const asgn of assignments) {
       const start = new Date(asgn.start_datetime);
       const end = new Date(asgn.end_datetime);
-      
+
       const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
       const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
 
@@ -127,16 +127,16 @@ export const generateWorkTasksApi = async (assignments) => {
 
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        
+
         for (const empName of employeeNamesList) {
           const asgnKey = `${asgn.assignmentId}_${dateStr}_${empName}`;
           const descKey = `${empName}_${dateStr}_${asgn.task_name}`;
           const idKey = `${empName}_${dateStr}_${asgn.task_id}`;
 
           // Avoid inserting if it already exists in the database under any of the unique constraints
-          const existsInDb = 
-            (asgn.assignmentId && existingAsgnKeys.has(asgnKey)) || 
-            existingDescKeys.has(descKey) || 
+          const existsInDb =
+            (asgn.assignmentId && existingAsgnKeys.has(asgnKey)) ||
+            existingDescKeys.has(descKey) ||
             existingIdKeys.has(idKey);
 
           // Avoid inserting if we already added it in this run
@@ -154,10 +154,10 @@ export const generateWorkTasksApi = async (assignments) => {
               department: asgn.department,
               duration: asgn.estimated_minutes,
               "current_date": dateStr,
-              status: (new Date(d.getFullYear(), d.getMonth(), d.getDate()) < new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) 
-                ? 'OVERDUE' 
-                : (new Date(d.getFullYear(), d.getMonth(), d.getDate()) > new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) 
-                  ? 'UPCOMING' 
+              status: (new Date(d.getFullYear(), d.getMonth(), d.getDate()) < new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()))
+                ? 'OVERDUE'
+                : (new Date(d.getFullYear(), d.getMonth(), d.getDate()) > new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()))
+                  ? 'UPCOMING'
                   : 'PENDING',
               assignment_id: asgn.assignmentId
             });
@@ -264,12 +264,20 @@ export const submitWorkTaskApi = async (taskId, submissionData) => {
 /**
  * Fetches pending approvals for work tasks.
  */
-export const fetchPendingWorkApprovalsApi = async () => {
+export const fetchPendingWorkApprovalsApi = async (role) => {
   try {
-    const { data, error } = await supabase
-      .from('work_task')
-      .select('*')
-      .or('status.eq.SUBMITTED,status.eq.Done,status.eq.done')
+    const userRole = (role || "").toLowerCase();
+    let query = supabase.from('work_task').select('*');
+
+    if (userRole === 'manager') {
+      query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done');
+    } else if (userRole === 'admin') {
+      query = query.eq('status', 'MANAGER_APPROVED');
+    } else {
+      query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done');
+    }
+
+    const { data, error } = await query
       .not('submission_date', 'is', null)
       .order('submission_date', { ascending: true });
 
@@ -284,14 +292,24 @@ export const fetchPendingWorkApprovalsApi = async () => {
 /**
  * Fetches approved/rejected history for work tasks.
  */
-export const fetchWorkTaskHistoryApi = async () => {
+export const fetchWorkTaskHistoryApi = async (role, username) => {
   try {
-    const { data, error } = await supabase
-      .from('work_task')
-      .select('*')
-      .in('status', ['APPROVED', 'REJECTED'])
-      .order('admin_approval_date', { ascending: false });
+    const userRole = (role || localStorage.getItem("role") || "").toLowerCase();
+    const userName = username || localStorage.getItem("user-name");
+    let query = supabase.from('work_task').select('*');
 
+    if (userRole === 'manager') {
+      query = query
+        .eq('status', 'MANAGER_APPROVED')
+        .eq('manager_approved_by', userName)
+        .order('manager_approval_date', { ascending: false });
+    } else {
+      query = query
+        .in('status', ['APPROVED', 'REJECTED'])
+        .order('admin_approval_date', { ascending: false });
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return data || [];
   } catch (error) {
@@ -305,14 +323,29 @@ export const fetchWorkTaskHistoryApi = async () => {
  */
 export const approveWorkTaskApi = async (taskId) => {
   try {
-    const { data, error } = await supabase
-      .from('work_task')
-      .update({
+    const role = (localStorage.getItem("role") || "").toLowerCase();
+    const userName = localStorage.getItem("user-name");
+    const now = new Date().toISOString();
+
+    let updateFields = {};
+    if (role === 'manager') {
+      updateFields = {
+        status: 'MANAGER_APPROVED',
+        manager_approved_by: userName,
+        manager_approval_date: now
+      };
+    } else {
+      updateFields = {
         status: 'APPROVED',
         admin_done: true,
-        admin_approved_by: localStorage.getItem("user-name"),
-        admin_approval_date: new Date().toISOString()
-      })
+        admin_approved_by: userName,
+        admin_approval_date: now
+      };
+    }
+
+    const { data, error } = await supabase
+      .from('work_task')
+      .update(updateFields)
       .eq('id', taskId)
       .select();
 
@@ -329,15 +362,33 @@ export const approveWorkTaskApi = async (taskId) => {
  */
 export const rejectWorkTaskApi = async (taskId, reason) => {
   try {
-    const { data, error } = await supabase
-      .from('work_task')
-      .update({
+    const role = (localStorage.getItem("role") || "").toLowerCase();
+    const userName = localStorage.getItem("user-name");
+    const now = new Date().toISOString();
+
+    let updateFields = {};
+    if (role === 'manager') {
+      updateFields = {
         status: 'REJECTED',
         rejection_reason: reason,
+        submission_date: null,
+        manager_approved_by: userName,
+        manager_approval_date: now
+      };
+    } else {
+      updateFields = {
+        status: 'REJECTED',
+        rejection_reason: reason,
+        submission_date: null,
         admin_done: false,
-        admin_approved_by: localStorage.getItem("user-name"),
-        admin_approval_date: new Date().toISOString()
-      })
+        admin_approved_by: userName,
+        admin_approval_date: now
+      };
+    }
+
+    const { data, error } = await supabase
+      .from('work_task')
+      .update(updateFields)
       .eq('id', taskId)
       .select();
 

@@ -104,6 +104,17 @@ export default function AdminApprovalPage() {
     const loadTasks = useCallback(async () => {
         setLoading(true);
         setPendingTasks([]);
+        const userRole = localStorage.getItem("role");
+        const username = localStorage.getItem("user-name");
+        const currentUsername = (username || "").toLowerCase();
+        const currentUserRole = (userRole || "").toLowerCase();
+        const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
+        const managerShops = (localStorage.getItem("user_access") || "")
+            .toLowerCase()
+            .split(",")
+            .map(shop => shop.trim())
+            .filter(Boolean);
+
         let data = [];
         try {
             if (viewMode === "pending") {
@@ -112,7 +123,7 @@ export default function AdminApprovalPage() {
                 else if (activeTab === "repair") data = await fetchPendingRepairApprovals();
                 else if (activeTab === "ea") data = await fetchPendingEAApprovals();
                 else if (activeTab === "checklist") data = await fetchPendingChecklistApprovals();
-                else if (activeTab === "work") data = await fetchPendingWorkApprovalsApi();
+                else if (activeTab === "work") data = await fetchPendingWorkApprovalsApi(currentUserRole);
             } else {
                 // History Mode
                 if (activeTab === "delegation") data = await fetchDelegationHistory();
@@ -120,7 +131,7 @@ export default function AdminApprovalPage() {
                 else if (activeTab === "repair") data = await fetchApprovedRepairs();
                 else if (activeTab === "ea") data = await fetchApprovedEA();
                 else if (activeTab === "checklist") data = await fetchChecklistHistory();
-                else if (activeTab === "work") data = await fetchWorkTaskHistoryApi();
+                else if (activeTab === "work") data = await fetchWorkTaskHistoryApi(currentUserRole, username);
             }
 
             // Deduplicate data to ensure each task only shows once
@@ -137,16 +148,6 @@ export default function AdminApprovalPage() {
         } catch (error) {
             console.error("Error loading tasks:", error);
         }
-        const userRole = localStorage.getItem("role");
-        const username = localStorage.getItem("user-name");
-        const currentUsername = (username || "").toLowerCase();
-        const currentUserRole = (userRole || "").toLowerCase();
-        const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
-        const managerShops = (localStorage.getItem("user_access") || "")
-            .toLowerCase()
-            .split(",")
-            .map(shop => shop.trim())
-            .filter(Boolean);
 
         // Filter tasks if not super admin
         let filteredData = data || [];
@@ -693,7 +694,12 @@ export default function AdminApprovalPage() {
                                                 )}
                                                 {task.status && task.status !== 'extend' && (
                                                     <div className="text-[10px] font-bold text-blue-600 mt-2 uppercase bg-blue-50 px-2 py-0.5 rounded-sm inline-block tracking-widest">
-                                                        Status: {task.status}
+                                                        Status: {task.status === 'MANAGER_APPROVED' ? 'MANAGER APPROVED' : task.status}
+                                                    </div>
+                                                )}
+                                                {activeTab === 'work' && isManager && viewMode === 'pending' && (
+                                                    <div className="text-[10px] font-bold text-orange-600 mt-2 uppercase bg-orange-50 px-2 py-0.5 rounded-sm inline-block tracking-widest ml-2">
+                                                        Pending Manager Approval
                                                     </div>
                                                 )}
                                             </td>
@@ -804,10 +810,21 @@ export default function AdminApprovalPage() {
                                                         <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-orange-100 text-orange-800">
                                                             Pending Approval
                                                         </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-green-100 text-green-800">
-                                                            Approved
+                                                    ) : task.status === 'MANAGER_APPROVED' ? (
+                                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-blue-100 text-blue-800">
+                                                            Manager Approved
                                                         </span>
+                                                    ) : (
+                                                        <div className="flex flex-col gap-1 items-start">
+                                                            <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-green-100 text-green-800">
+                                                                Approved
+                                                            </span>
+                                                            {activeTab === 'work' && task.manager_approved_by && (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700">
+                                                                    Manager Approved
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     )
                                                 )}
                                             </td>
@@ -926,6 +943,20 @@ export default function AdminApprovalPage() {
                                                 )}
                                             </div>
                                         )}
+                                        {task.status && task.status !== 'extend' && (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                <span className="text-[9px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                                    Status: {task.status === 'MANAGER_APPROVED' ? 'MANAGER APPROVED' : task.status}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {activeTab === 'work' && isManager && viewMode === 'pending' && (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                <span className="text-[9px] font-black text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                                    Pending Manager Approval
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* proof & Metadata */}
@@ -1017,11 +1048,18 @@ export default function AdminApprovalPage() {
                                                 </div>
                                             )
                                         ) : (
-                                            <div className="text-center">
+                                            <div className="text-center space-y-1">
                                                 {task.rejection_reason ? (
                                                     <span className="block w-full py-1.5 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Rejected: {task.rejection_reason}</span>
+                                                ) : task.status === 'MANAGER_APPROVED' ? (
+                                                    <span className="block w-full py-1.5 bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Manager Approved</span>
                                                 ) : (
-                                                    <span className="block w-full py-1.5 bg-green-50 text-green-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Approved ✅</span>
+                                                    <div className="flex flex-col gap-1 items-center">
+                                                        <span className="block w-full py-1.5 bg-green-50 text-green-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Approved ✅</span>
+                                                        {activeTab === 'work' && task.manager_approved_by && (
+                                                            <span className="block text-[8px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-wider">Manager Approved</span>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                         )}
