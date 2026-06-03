@@ -185,7 +185,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     ];
 
     const storedRoleLower = (storedRole || "user").toLowerCase();
-    const isSuperAdminUser = storedUsername?.toLowerCase() === "admin";
+    const isSuperAdminUser = storedUsername?.toLowerCase() === "admin" || storedRoleLower === "admin";
     const pageAccessRaw = localStorage.getItem("page_access");
     let pageAccess = [];
     try {

@@ -620,6 +620,9 @@ export default function AdminApprovalPage() {
                                             activeTab === "maintenance" ? "Task/Machine" : "Issue/Machine"}
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shop</th>
+                                    {activeTab === 'work' && (
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                                    )}
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         {viewMode === "pending" ? "Submission Time" : "Approval Data"}
                                     </th>
@@ -630,7 +633,7 @@ export default function AdminApprovalPage() {
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={viewMode === 'pending' ? "7" : "6"} className="px-6 py-10 text-center text-gray-500">
+                                        <td colSpan={10} className="px-6 py-10 text-center text-gray-500">
                                             <div className="flex justify-center mb-2">
                                                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                                             </div>
@@ -639,7 +642,7 @@ export default function AdminApprovalPage() {
                                     </tr>
                                 ) : paginatedTasks.length === 0 ? (
                                     <tr>
-                                        <td colSpan={viewMode === 'pending' ? "7" : "6"} className="px-6 py-10 text-center text-gray-500">
+                                        <td colSpan={10} className="px-6 py-10 text-center text-gray-500">
                                             No {viewMode} approvals found.
                                         </td>
                                     </tr>
@@ -692,9 +695,17 @@ export default function AdminApprovalPage() {
                                                         Extended To: {formatDate(task.next_extend_date)}
                                                     </div>
                                                 )}
-                                                {task.status && task.status !== 'extend' && (
-                                                    <div className="text-[10px] font-bold text-blue-600 mt-2 uppercase bg-blue-50 px-2 py-0.5 rounded-sm inline-block tracking-widest">
-                                                        Status: {task.status === 'MANAGER_APPROVED' ? 'MANAGER APPROVED' : task.status}
+                                                {/* Manager Approved badge — shown to admin when reviewing MANAGER_APPROVED work tasks */}
+                                                {activeTab === 'work' && task.status === 'MANAGER_APPROVED' && task.manager_approved_by && !isManager && (
+                                                    <div className="flex items-center gap-1.5 mt-2 bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-1.5 inline-flex">
+                                                        <CheckCircle2 size={12} className="text-indigo-600 shrink-0" />
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">Manager Approved</span>
+                                                            <span className="text-[11px] font-black text-indigo-800">{task.manager_approved_by}</span>
+                                                            {task.manager_approval_date && (
+                                                                <span className="text-[9px] text-indigo-400 font-medium">{formatDate(task.manager_approval_date)}</span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 )}
                                                 {activeTab === 'work' && isManager && viewMode === 'pending' && (
@@ -706,15 +717,34 @@ export default function AdminApprovalPage() {
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">{task.shop || task.shop_name || '-'}</span>
                                             </td>
+                                            {activeTab === 'work' && (
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full uppercase tracking-wider">{task.department || '-'}</span>
+                                                </td>
+                                            )}
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {viewMode === 'pending' ? (
-                                                    <span className="text-xs text-gray-500 font-medium">
-                                                        {formatDate(task.submission_date || task.submission_timestamp || task.created_at)}
-                                                    </span>
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-xs text-gray-500 font-medium">
+                                                            {formatDate(task.submission_date || task.submission_timestamp || task.created_at)}
+                                                        </span>
+                                                        {/* Show manager approval timestamp to admin */}
+                                                        {activeTab === 'work' && !isManager && task.manager_approval_date && (
+                                                            <span className="text-[10px] text-indigo-500 font-bold">
+                                                                Mgr. Approved: {formatDate(task.manager_approval_date)}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 ) : (
                                                     <div className="flex flex-col gap-1">
                                                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Approved By</span>
                                                         <span className="text-sm font-bold text-gray-800">{task.admin_approved_by || "Admin"}</span>
+                                                        {activeTab === 'work' && task.manager_approved_by && (
+                                                            <>
+                                                                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mt-0.5">Mgr. Approved By</span>
+                                                                <span className="text-xs font-bold text-indigo-700">{task.manager_approved_by}</span>
+                                                            </>
+                                                        )}
                                                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">At Time</span>
                                                         <span className="text-xs text-blue-600 font-medium">{formatDate(task.admin_approval_date || task.updated_at || task.submission_date)}</span>
                                                     </div>
@@ -914,6 +944,11 @@ export default function AdminApprovalPage() {
                                             <span className="text-[10px] font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full uppercase tracking-tighter whitespace-nowrap">
                                                 {task.shop || task.shop_name || 'No Shop'}
                                             </span>
+                                            {activeTab === 'work' && task.department && (
+                                                <span className="text-[10px] font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full uppercase tracking-tighter whitespace-nowrap">
+                                                    {task.department}
+                                                </span>
+                                            )}
                                             {task.task_level && (activeTab === 'checklist' || activeTab === 'delegation') && (
                                                 <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-tighter whitespace-nowrap">
                                                     {task.task_level}
@@ -943,11 +978,24 @@ export default function AdminApprovalPage() {
                                                 )}
                                             </div>
                                         )}
-                                        {task.status && task.status !== 'extend' && (
+                                        {task.status && task.status !== 'extend' && !( activeTab === 'work' && task.status === 'MANAGER_APPROVED' ) && (
                                             <div className="flex flex-wrap gap-1 mt-1">
                                                 <span className="text-[9px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                                                    Status: {task.status === 'MANAGER_APPROVED' ? 'MANAGER APPROVED' : task.status}
+                                                    Status: {task.status}
                                                 </span>
+                                            </div>
+                                        )}
+                                        {/* Manager Approved badge for admin view on mobile */}
+                                        {activeTab === 'work' && task.status === 'MANAGER_APPROVED' && task.manager_approved_by && !isManager && (
+                                            <div className="flex items-center gap-1.5 mt-2 bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1.5">
+                                                <CheckCircle2 size={11} className="text-indigo-600 shrink-0" />
+                                                <div className="flex flex-col">
+                                                    <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Manager Approved By</span>
+                                                    <span className="text-[10px] font-black text-indigo-800">{task.manager_approved_by}</span>
+                                                    {task.manager_approval_date && (
+                                                        <span className="text-[8px] text-indigo-400 font-medium">{formatDate(task.manager_approval_date)}</span>
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
                                         {activeTab === 'work' && isManager && viewMode === 'pending' && (

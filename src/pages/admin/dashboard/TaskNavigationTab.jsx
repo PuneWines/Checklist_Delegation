@@ -615,9 +615,8 @@ export default function TaskNavigationTabs({
                       )}
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Description</th>
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Staff</th>
-                      {dashboardType === "checklist" && (
-                        <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Shop</th>
-                      )}
+                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Shop</th>
+                      <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Department</th>
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Date</th>
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100 italic">Status</th>
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Freq</th>
@@ -768,24 +767,25 @@ export default function TaskNavigationTabs({
                             task.assignedTo
                           )}
                         </td>
-                        {dashboardType === "checklist" && (
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 font-medium">
-                            {editingTaskId === task.id ? (
-                              <select
-                                value={editFormData.shop}
-                                onChange={(e) => handleInputChange('shop', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                              >
-                                <option value="">Select Shop</option>
-                                {shops.map(shop => (
-                                  <option key={shop} value={shop}>{shop}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              (task.shop || task.shop_name)
-                            )}
-                          </td>
-                        )}
+                        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 font-medium">
+                          {editingTaskId === task.id ? (
+                            <select
+                              value={editFormData.shop}
+                              onChange={(e) => handleInputChange('shop', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                            >
+                              <option value="">Select Shop</option>
+                              {shops.map(shop => (
+                                <option key={shop} value={shop}>{shop}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            (task.shop || task.shop_name || '-')
+                          )}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 font-medium">
+                          {task.department || '-'}
+                        </td>
                         <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 font-medium">
                           {editingTaskId === task.id ? (
                             <input
@@ -891,12 +891,14 @@ export default function TaskNavigationTabs({
                         </span>
                       </div>
                     )}
-                    {dashboardType === "checklist" && (
-                      <div className="flex flex-col col-span-2 mt-1">
-                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Shop</span>
-                        <span className="text-xs font-semibold text-gray-700">{(task.shop || task.shop)}</span>
-                      </div>
-                    )}
+                    <div className="flex flex-col">
+                      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Shop</span>
+                      <span className="text-xs font-semibold text-gray-700">{task.shop || task.shop_name || '-'}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Department</span>
+                      <span className="text-xs font-semibold text-gray-700">{task.department || '-'}</span>
+                    </div>
                   </div>
                   <div className="absolute right-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </div>
