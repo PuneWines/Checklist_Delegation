@@ -341,12 +341,13 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
   const getAccessibleRoutes = () => {
     const userRole = localStorage.getItem("role") || "user";
     const username = localStorage.getItem("user-name");
+    const userRoleNormalized = (userRole || "user").toLowerCase();
+    const usernameNormalized = (username || "").toLowerCase();
+    // Admin role users bypass page_access filter (same as superAdmin)
+    const isAdminOrSuperAdmin = isSuperAdmin || userRoleNormalized === "admin";
     
     return routes
       .filter((route) => {
-        const userRoleNormalized = (userRole || "user").toLowerCase();
-        const usernameNormalized = (username || "").toLowerCase();
-        
         // If it's the Setting page, show if user is super admin, has admin role, or has explicit "Settings" page access permission
         if (route.label === "Settings") {
           return usernameNormalized === "admin" || 
@@ -357,16 +358,20 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
         // Holiday submenu logic handled by showFor in routes
         if (route.label === "Holiday") {
             // Show Holiday submenu if user has access to any of its subItems
-            if (isSuperAdmin || userRoleNormalized === "admin") return true;
+            if (isAdminOrSuperAdmin) return true;
             return route.subItems.some(sub => pageAccess.includes(sub.label));
         }
 
         // Hardcoded role check first
         const hasRoleAccess = route.showFor.some(role => role.toLowerCase() === userRoleNormalized);
         
-        // If dynamic page access is set, it can override or act as a secondary filter
-        // But for "user" and "hod", let's follow the pageAccess if it's not empty
-        if (pageAccess.length > 0 && !isSuperAdmin) {
+        // Admin role users always follow showFor — never filtered by pageAccess
+        if (isAdminOrSuperAdmin) {
+          return hasRoleAccess;
+        }
+
+        // For non-admin users: if dynamic page access is set, use it as the filter
+        if (pageAccess.length > 0) {
           return pageAccess.includes(route.label);
         }
 
@@ -374,11 +379,10 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       })
       .map(route => {
         if (route.subItems) {
-          const userRoleNormalized = (userRole || "user").toLowerCase();
           return {
             ...route,
             subItems: route.subItems.filter(sub => {
-              if (pageAccess.length > 0 && !isSuperAdmin) {
+              if (!isAdminOrSuperAdmin && pageAccess.length > 0) {
                 return pageAccess.includes(sub.label);
               }
               return sub.showFor.some(role => role.toLowerCase() === userRoleNormalized);
