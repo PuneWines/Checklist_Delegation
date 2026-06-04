@@ -704,16 +704,23 @@ const AllTasks = () => {
           return mapped;
         });
         
+        let filteredWorkTasks = mappedData;
+        if (currentUserRole === "manager") {
+          filteredWorkTasks = mappedData.filter(item =>
+            item.name === currentUsername || item.manager_name === currentUsername
+          );
+        }
+        
         if (showHistory) {
           // Keep tasks that are NOT_DONE or have submission_date not null
-          const historyTasks = mappedData.filter(item => {
+          const historyTasks = filteredWorkTasks.filter(item => {
             const ds = getWorkTaskDynamicStatus(item, currentTime);
             return ds === "NOT_DONE" || item.submission_date;
           });
           setHistoryData(historyTasks);
         } else {
           // Keep tasks that are NOT NOT_DONE
-          const liveTasks = mappedData.filter(item => {
+          const liveTasks = filteredWorkTasks.filter(item => {
             const ds = getWorkTaskDynamicStatus(item, currentTime);
             return ds !== "NOT_DONE";
           });
@@ -919,6 +926,11 @@ const AllTasks = () => {
     (e) => {
       if (e.target.checked) {
         const submittableTasks = filteredPendingTasks.filter(t => {
+          if (activeTab === "work") {
+            const ds = getWorkTaskDynamicStatus(t, currentTime);
+            const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username;
+            return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
+          }
           // Use statusDateColumn instead of hardcoded ternary for robust support across all tabs (including work)
           const timeStatus = getTimeStatus(t[statusDateColumn], t.status);
           return timeStatus !== "Upcoming";
@@ -930,7 +942,7 @@ const AllTasks = () => {
         setUploadedImages({});
         setStatusData({});
       }
-    }, [filteredPendingTasks, dateFilter, activeTab, getTimeStatus]);
+    }, [filteredPendingTasks, dateFilter, activeTab, getTimeStatus, userRole, username, currentTime]);
 
   const paginatedTasks = useMemo(() => {
     return (showHistory ? filteredHistoryTasks : filteredPendingTasks).slice(0, visibleCount);
@@ -1565,8 +1577,15 @@ const AllTasks = () => {
                             <input
                               type="checkbox"
                               checked={(() => {
-                                const col = activeTab === "repair" ? "created_at" : "planned_date";
-                                const submittableTasks = filteredPendingTasks.filter(t => getTimeStatus(t[col], t.status) !== "Upcoming");
+                                const submittableTasks = filteredPendingTasks.filter(t => {
+                                  if (activeTab === "work") {
+                                    const ds = getWorkTaskDynamicStatus(t, currentTime);
+                                    const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username;
+                                    return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
+                                  }
+                                  const col = activeTab === "repair" ? "created_at" : "planned_date";
+                                  return getTimeStatus(t[col], t.status) !== "Upcoming";
+                                });
                                 return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
                               })()}
                               onChange={handleSelectAll}
@@ -1628,7 +1647,8 @@ const AllTasks = () => {
                                         activeTab === "work"
                                           ? (() => {
                                             const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                            return ds === "UPCOMING" || ds === "NOT_DONE";
+                                            const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && task.manager_name === username;
+                                            return ds === "UPCOMING" || ds === "NOT_DONE" || isAssignedByMe;
                                           })()
                                           : getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"
                                       }
@@ -1973,8 +1993,15 @@ const AllTasks = () => {
                           <input
                             type="checkbox"
                             checked={(() => {
-                              const col = activeTab === "repair" ? "created_at" : "planned_date";
-                              const submittableTasks = filteredPendingTasks.filter(t => getTimeStatus(t[col], t.status) !== "Upcoming");
+                              const submittableTasks = filteredPendingTasks.filter(t => {
+                                if (activeTab === "work") {
+                                  const ds = getWorkTaskDynamicStatus(t, currentTime);
+                                  const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username;
+                                  return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
+                                }
+                                const col = activeTab === "repair" ? "created_at" : "planned_date";
+                                return getTimeStatus(t[col], t.status) !== "Upcoming";
+                              });
                               return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
                             })()}
                             onChange={handleSelectAll}
@@ -2023,7 +2050,15 @@ const AllTasks = () => {
                                     type="checkbox"
                                     checked={selectedItems.has(task.id)}
                                     onChange={(e) => handleSelectItem(task.id, e.target.checked)}
-                                    disabled={getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"}
+                                    disabled={
+                                      activeTab === "work"
+                                        ? (() => {
+                                          const ds = getWorkTaskDynamicStatus(task, currentTime);
+                                          const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && task.manager_name === username;
+                                          return ds === "UPCOMING" || ds === "NOT_DONE" || isAssignedByMe;
+                                        })()
+                                        : getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"
+                                    }
                                     className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
                                   />
                                 )}
