@@ -6,6 +6,10 @@ import AdminLayout from '../components/layout/AdminLayout';
 
 function StaffTasksPage() {
     const [dashboardStaffFilter, setDashboardStaffFilter] = useState("all")
+    const [selectedMonth, setSelectedMonth] = useState(() => {
+        const now = new Date()
+        return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`
+    })
     const [currentPage, setCurrentPage] = useState(1)
     const [staffMembers, setStaffMembers] = useState([])
     const [filteredStaffMembers, setFilteredStaffMembers] = useState([])
@@ -27,7 +31,7 @@ function StaffTasksPage() {
         setFilteredStaffMembers([])
         setHasMoreData(true)
         setTotalStaffCount(0)
-    }, [dashboardStaffFilter])
+    }, [dashboardStaffFilter, selectedMonth])
 
     // Optimized filter function with debouncing
     useEffect(() => {
@@ -43,7 +47,6 @@ function StaffTasksPage() {
         }
     }, [staffMembers, searchQuery])
 
-    // Combine checklist and delegation data
     // Combine checklist, delegation, and work data
     const combineStaffData = (checklistData, delegationData, workData) => {
         const combinedMap = new Map()
@@ -55,12 +58,14 @@ function StaffTasksPage() {
                 const completed = staff.completedTasks || staff.total_completed_tasks || 0
                 const pending = staff.pendingTasks || (total - completed) || 0
                 const progress = staff.progress || staff.completion_score || 0
+                const doneOnTime = staff.total_done_on_time || 0
                 combinedMap.set(staff.name, {
                     ...staff,
                     checklistTotal: total,
                     checklistCompleted: completed,
                     checklistPending: pending,
-                    checklistProgress: progress
+                    checklistProgress: progress,
+                    checklistDoneOnTime: doneOnTime
                 })
             })
         }
@@ -72,6 +77,7 @@ function StaffTasksPage() {
                 const completed = staff.completedTasks || staff.total_completed_tasks || 0
                 const pending = staff.pendingTasks || (total - completed) || 0
                 const progress = staff.progress || staff.completion_score || 0
+                const doneOnTime = staff.total_done_on_time || 0
 
                 const existing = combinedMap.get(staff.name)
                 if (existing) {
@@ -80,7 +86,8 @@ function StaffTasksPage() {
                         delegationTotal: total,
                         delegationCompleted: completed,
                         delegationPending: pending,
-                        delegationProgress: progress
+                        delegationProgress: progress,
+                        delegationDoneOnTime: doneOnTime
                     })
                 } else {
                     combinedMap.set(staff.name, {
@@ -91,10 +98,12 @@ function StaffTasksPage() {
                         checklistCompleted: 0,
                         checklistPending: 0,
                         checklistProgress: 0,
+                        checklistDoneOnTime: 0,
                         delegationTotal: total,
                         delegationCompleted: completed,
                         delegationPending: pending,
-                        delegationProgress: progress
+                        delegationProgress: progress,
+                        delegationDoneOnTime: doneOnTime
                     })
                 }
             })
@@ -107,6 +116,7 @@ function StaffTasksPage() {
                 const completed = staff.completedTasks || staff.total_completed_tasks || 0
                 const pending = staff.pendingTasks || (total - completed) || 0
                 const progress = staff.progress || staff.completion_score || 0
+                const doneOnTime = staff.total_done_on_time || 0
 
                 const existing = combinedMap.get(staff.name)
                 if (existing) {
@@ -115,7 +125,8 @@ function StaffTasksPage() {
                         workTotal: total,
                         workCompleted: completed,
                         workPending: pending,
-                        workProgress: progress
+                        workProgress: progress,
+                        workDoneOnTime: doneOnTime
                     })
                 } else {
                     combinedMap.set(staff.name, {
@@ -126,14 +137,17 @@ function StaffTasksPage() {
                         checklistCompleted: 0,
                         checklistPending: 0,
                         checklistProgress: 0,
+                        checklistDoneOnTime: 0,
                         delegationTotal: 0,
                         delegationCompleted: 0,
                         delegationPending: 0,
                         delegationProgress: 0,
+                        delegationDoneOnTime: 0,
                         workTotal: total,
                         workCompleted: completed,
                         workPending: pending,
-                        workProgress: progress
+                        workProgress: progress,
+                        workDoneOnTime: doneOnTime
                     })
                 }
             })
@@ -144,35 +158,45 @@ function StaffTasksPage() {
             const checklistTotal = staff.checklistTotal || 0
             const checklistCompleted = staff.checklistCompleted || 0
             const checklistPending = staff.checklistPending || 0
+            const checklistDoneOnTime = staff.checklistDoneOnTime || 0
 
             const delegationTotal = staff.delegationTotal || 0
             const delegationCompleted = staff.delegationCompleted || 0
             const delegationPending = staff.delegationPending || 0
+            const delegationDoneOnTime = staff.delegationDoneOnTime || 0
 
             const workTotal = staff.workTotal || 0
             const workCompleted = staff.workCompleted || 0
             const workPending = staff.workPending || 0
+            const workDoneOnTime = staff.workDoneOnTime || 0
 
             const totalTasks = checklistTotal + delegationTotal + workTotal
             const completed = checklistCompleted + delegationCompleted + workCompleted
             const pending = checklistPending + delegationPending + workPending
+            const doneOnTime = checklistDoneOnTime + delegationDoneOnTime + workDoneOnTime
             const progress = totalTasks > 0 ? Math.round((completed / totalTasks) * 100) : 0
+            const ontimeScore = totalTasks > 0 ? Math.round((doneOnTime / totalTasks) * 100) : 0
 
             return {
                 ...staff,
                 checklistTotal,
                 checklistCompleted,
                 checklistPending,
+                checklistDoneOnTime,
                 delegationTotal,
                 delegationCompleted,
                 delegationPending,
+                delegationDoneOnTime,
                 workTotal,
                 workCompleted,
                 workPending,
+                workDoneOnTime,
                 totalTasks,
                 completedTasks: completed,
                 pendingTasks: pending,
-                progress
+                doneOnTime,
+                progress,
+                ontimeScore
             }
         })
     }
@@ -187,10 +211,10 @@ function StaffTasksPage() {
             // Load checklist, delegation, and work data in parallel
             if (page === 1) {
                 const [checklistData, delegationData, workData, staffCount, usersCount] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage),
-                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage),
-                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage),
-                    getStaffTasksCountApi("checklist", dashboardStaffFilter),
+                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth),
+                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth),
+                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth),
+                    getStaffTasksCountApi("checklist", dashboardStaffFilter, null, selectedMonth),
                     getTotalUsersCountApi()
                 ]);
 
@@ -212,9 +236,9 @@ function StaffTasksPage() {
             } else {
                 // For subsequent pages, load all data types
                 const [checklistData, delegationData, workData] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage),
-                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage),
-                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage)
+                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth),
+                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth),
+                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth)
                 ])
 
                 const combinedData = combineStaffData(checklistData, delegationData, workData)
@@ -237,11 +261,11 @@ function StaffTasksPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [dashboardStaffFilter, isLoading])
+    }, [dashboardStaffFilter, isLoading, selectedMonth])
 
     useEffect(() => {
         loadStaffData(1, false)
-    }, [dashboardStaffFilter, loadStaffData])
+    }, [dashboardStaffFilter, selectedMonth, loadStaffData])
 
     // Function to load more data
     const loadMoreData = () => {
@@ -257,9 +281,9 @@ function StaffTasksPage() {
         const fetchAvailableStaff = async () => {
             try {
                 const [checklistData, delegationData, workData] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", "all", null, 1, 100),
-                    fetchStaffTasksDataApi("delegation", "all", null, 1, 100),
-                    fetchStaffTasksDataApi("work", "all", null, 1, 100)
+                    fetchStaffTasksDataApi("checklist", "all", null, 1, 100, selectedMonth),
+                    fetchStaffTasksDataApi("delegation", "all", null, 1, 100, selectedMonth),
+                    fetchStaffTasksDataApi("work", "all", null, 1, 100, selectedMonth)
                 ])
 
                 const combinedData = combineStaffData(checklistData, delegationData, workData)
@@ -278,8 +302,141 @@ function StaffTasksPage() {
         }
 
         fetchAvailableStaff()
-    }, [userRole, username])
+    }, [userRole, username, selectedMonth])
 
+    // Helper to format dates for DATE START and DATE END columns
+    const getMonthDates = () => {
+        let year, month;
+        if (selectedMonth) {
+            [year, month] = selectedMonth.split('-').map(Number);
+        } else {
+            const now = new Date();
+            year = now.getFullYear();
+            month = now.getMonth() + 1;
+        }
+        const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+        const lastDayOfMonth = new Date(year, month, 0).getDate();
+        const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
+        
+        const formatToShow = (dateStr) => {
+            const [y, m, d] = dateStr.split("-");
+            return `${d}/${m}/${y}`;
+        };
+
+        return {
+            start: formatToShow(startDate),
+            end: formatToShow(endDate)
+        };
+    };
+
+    const { start: dateStart, end: dateEnd } = getMonthDates();
+
+    const getStatusBadge = (ontimeScore, totalTasks) => {
+        if (totalTasks === 0) {
+            return (
+                <span className="inline-flex items-center justify-center px-3 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                    N/A
+                </span>
+            );
+        }
+        if (ontimeScore >= 95) {
+            return (
+                <span className="inline-flex items-center justify-center px-3 py-1 text-xs font-bold rounded-full bg-green-50 text-green-700 border border-green-200 uppercase whitespace-nowrap">
+                    &gt;95% PERF
+                </span>
+            );
+        }
+        if (ontimeScore >= 90) {
+            return (
+                <span className="inline-flex items-center justify-center px-3 py-1 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase whitespace-nowrap">
+                    90-95% PERF
+                </span>
+            );
+        }
+        if (ontimeScore >= 80) {
+            return (
+                <span className="inline-flex items-center justify-center px-3 py-1 text-xs font-bold rounded-full bg-blue-50 text-blue-700 border border-blue-200 uppercase whitespace-nowrap">
+                    80-90% PERF
+                </span>
+            );
+        }
+        if (ontimeScore >= 60) {
+            return (
+                <span className="inline-flex items-center justify-center px-3 py-1 text-xs font-bold rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200 uppercase whitespace-nowrap">
+                    60-80% PERF
+                </span>
+            );
+        }
+        return (
+            <span className="inline-flex items-center justify-center px-3 py-1 text-xs font-bold rounded-full bg-red-50 text-red-700 border border-red-200 uppercase whitespace-nowrap">
+                &lt;60% PERF
+            </span>
+        );
+    };
+
+    const handleExportCSV = () => {
+        if (filteredStaffMembers.length === 0) return;
+
+        const headers = [
+            "Name",
+            "Email",
+            "Date Start",
+            "Date End",
+            "Target",
+            "Actual Work Done %",
+            "Work Not Done %",
+            "Work Not Done On Time %",
+            "Total Done",
+            "Pending",
+            "Performance Status"
+        ];
+
+        const { start: dateStart, end: dateEnd } = getMonthDates();
+
+        const csvRows = [
+            headers.join(",")
+        ];
+
+        filteredStaffMembers.forEach(staff => {
+            const workNotDone = 100 - staff.progress;
+            const workNotDoneOnTime = staff.totalTasks > 0 ? Math.round(((staff.totalTasks - staff.doneOnTime) / staff.totalTasks) * 100) : 0;
+            
+            let statusText = "N/A";
+            if (staff.totalTasks > 0) {
+                if (staff.ontimeScore >= 95) statusText = ">95% PERF";
+                else if (staff.ontimeScore >= 90) statusText = "90-95% PERF";
+                else if (staff.ontimeScore >= 80) statusText = "80-90% PERF";
+                else if (staff.ontimeScore >= 60) statusText = "60-80% PERF";
+                else statusText = "<60% PERF";
+            }
+
+            const rowValues = [
+                `"${(staff.name || "").replace(/"/g, '""')}"`,
+                `"${(staff.email || "").replace(/"/g, '""')}"`,
+                `"${dateStart}"`,
+                `"${dateEnd}"`,
+                staff.totalTasks,
+                `"${staff.progress}%"`,
+                `"${workNotDone}%"`,
+                `"${workNotDoneOnTime}%"`,
+                staff.completedTasks,
+                staff.pendingTasks,
+                `"${statusText}"`
+            ];
+
+            csvRows.push(rowValues.join(","));
+        });
+
+        const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;\uFEFF" });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Staff_MIS_Report_${selectedMonth || "all"}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     return (
         <AdminLayout>
@@ -295,7 +452,7 @@ function StaffTasksPage() {
                             </div>
 
                             {/* Filters Section */}
-                            <div className="flex flex-col sm:flex-row gap-3">
+                            <div className="flex flex-col sm:flex-row gap-3 items-center">
                                 {/* Search Bar */}
                                 <div className="w-full sm:w-64">
                                     <input
@@ -303,6 +460,16 @@ function StaffTasksPage() {
                                         placeholder="Search staff..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm"
+                                    />
+                                </div>
+
+                                {/* Month Picker */}
+                                <div className="w-full sm:w-40">
+                                    <input
+                                        type="month"
+                                        value={selectedMonth}
+                                        onChange={(e) => setSelectedMonth(e.target.value)}
                                         className="w-full rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm"
                                     />
                                 </div>
@@ -322,6 +489,18 @@ function StaffTasksPage() {
                                         ))}
                                     </select>
                                 </div>
+
+                                {/* Export CSV Button */}
+                                <button
+                                    onClick={handleExportCSV}
+                                    disabled={filteredStaffMembers.length === 0}
+                                    className="w-full sm:w-auto px-4 py-2 bg-purple-600 text-white font-medium rounded-md hover:bg-purple-700 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                    </svg>
+                                    Export CSV
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -338,6 +517,11 @@ function StaffTasksPage() {
 
                             {/* Active Filters Display */}
                             <div className="flex gap-2">
+                                {selectedMonth && (
+                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
+                                        Month: {selectedMonth}
+                                    </span>
+                                )}
                                 {dashboardStaffFilter !== "all" && (
                                     <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
                                         Staff: {dashboardStaffFilter}
@@ -392,115 +576,124 @@ function StaffTasksPage() {
                                         <table className="min-w-full divide-y divide-gray-200">
                                             <thead className="bg-gray-50 sticky top-0 z-10">
                                                 <tr>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                        Seq No.
-                                                    </th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                                         Name
                                                     </th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                        Total Tasks
-                                                        <div className="text-xs font-normal text-gray-400 mt-1">
-                                                            (C + D + W)
-                                                        </div>
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                        Date Start
                                                     </th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                        Total Completed
-                                                        <div className="text-xs font-normal text-gray-400 mt-1">
-                                                            (C + D + W)
-                                                        </div>
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                        Date End
                                                     </th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                        Checklist Pending
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">
+                                                        Target
                                                     </th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                        Delegation Pending
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                        Actual Work Done
                                                     </th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                        Work Pending
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                        % Work Not Done
                                                     </th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                        Progress
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                        % Work Not Done On Time
                                                     </th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">
+                                                        Total Done
+                                                    </th>
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">
+                                                        Pending
+                                                    </th>
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                                         Status
                                                     </th>
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white divide-y divide-gray-200">
-                                                {filteredStaffMembers.map((staff, index) => (
-                                                    <tr key={`${staff.name}-${index}`} className="hover:bg-gray-50">
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
-                                                        <td className="px-6 py-4 whitespace-nowrap">
-                                                            <div>
-                                                                <div className="text-sm font-medium text-gray-900">{staff.name}</div>
-                                                                <div className="text-xs text-gray-500">{staff.email}</div>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                            <div className="font-medium">{staff.totalTasks}</div>
-                                                            <div className="text-xs text-gray-400">
-                                                                ({staff.checklistTotal || 0} + {staff.delegationTotal || 0} + {staff.workTotal || 0})
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                            <div className="font-medium">{staff.completedTasks}</div>
-                                                            <div className="text-xs text-gray-400">
-                                                                ({staff.checklistCompleted || 0} + {staff.delegationCompleted || 0} + {staff.workCompleted || 0})
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-500">
-                                                            <div className="font-medium">{staff.checklistPending || 0}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-500 font-medium">
-                                                            {staff.delegationPending || 0}
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-500 font-medium">
-                                                            {staff.workPending || 0}
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-[100px] bg-gray-200 rounded-full h-2">
-                                                                    <div
-                                                                        className="bg-blue-600 h-2 rounded-full"
-                                                                        style={{ width: `${staff.progress}%` }}
-                                                                    ></div>
+                                                {filteredStaffMembers.map((staff, index) => {
+                                                    const workNotDone = 100 - staff.progress;
+                                                    const workNotDoneOnTime = staff.totalTasks > 0 ? Math.round(((staff.totalTasks - staff.doneOnTime) / staff.totalTasks) * 100) : 0;
+
+                                                    return (
+                                                        <tr key={`${staff.name}-${index}`} className="hover:bg-gray-50">
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <div>
+                                                                    <div className="text-sm font-semibold text-gray-900">{staff.name}</div>
+                                                                    <div className="text-xs text-gray-500">{staff.email}</div>
                                                                 </div>
-                                                                <span className="text-xs text-gray-500">{staff.progress}%</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap">
-                                                            {staff.progress >= 80 ? (
-                                                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                                                    Excellent
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                                                                {dateStart}
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                                                                {dateEnd}
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold text-center">
+                                                                {staff.totalTasks}
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-[100px] bg-gray-100 rounded-full h-2">
+                                                                        <div
+                                                                            className="bg-blue-600 h-2 rounded-full"
+                                                                            style={{ width: `${staff.progress}%` }}
+                                                                        ></div>
+                                                                    </div>
+                                                                    <span className="text-sm font-semibold text-gray-700 min-w-[36px] text-right">{staff.progress}%</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-[100px] bg-gray-100 rounded-full h-2">
+                                                                        <div
+                                                                            className="bg-gray-300 h-2 rounded-full"
+                                                                            style={{ width: `${workNotDone}%` }}
+                                                                        ></div>
+                                                                    </div>
+                                                                    <span className="text-sm font-semibold text-gray-700 min-w-[36px] text-right">{workNotDone}%</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-[100px] bg-gray-100 rounded-full h-2">
+                                                                        <div
+                                                                            className="bg-gray-300 h-2 rounded-full"
+                                                                            style={{ width: `${workNotDoneOnTime}%` }}
+                                                                        ></div>
+                                                                    </div>
+                                                                    <span className="text-sm font-semibold text-gray-700 min-w-[36px] text-right">{workNotDoneOnTime}%</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                                <span className="inline-flex items-center justify-center px-4 py-1.5 bg-blue-50 text-blue-600 font-bold rounded-md border border-blue-200 text-sm min-w-[64px]">
+                                                                    {staff.completedTasks}
                                                                 </span>
-                                                            ) : staff.progress >= 60 ? (
-                                                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                                                                    Good
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                                <span className="inline-flex items-center justify-center px-4 py-1.5 bg-gray-50 text-gray-600 font-bold rounded-md border border-gray-200 text-sm min-w-[64px]">
+                                                                    {staff.pendingTasks}
                                                                 </span>
-                                                            ) : (
-                                                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                                                                    Needs Improvement
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                ))}
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                {getStatusBadge(staff.ontimeScore, staff.totalTasks)}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>
 
                                     {/* Load More Button */}
                                     {hasMoreData && !searchQuery && (
-                                        <div className="flex justify-center">
+                                        <div className="flex justify-center mt-4">
                                             <button
                                                 onClick={loadMoreData}
                                                 disabled={isLoading}
-                                                className="px-6 py-2 text-black rounded-md transition-colors flex items-center gap-2"
+                                                className="px-6 py-2 text-black rounded-md transition-colors flex items-center gap-2 border border-purple-200 bg-white hover:bg-purple-50"
                                             >
                                                 {isLoading ? (
                                                     <>
-                                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black"></div>
+                                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
                                                         Loading...
                                                     </>
                                                 ) : (
