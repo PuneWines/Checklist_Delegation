@@ -6,10 +6,27 @@ import AdminLayout from '../components/layout/AdminLayout';
 
 function StaffTasksPage() {
     const [dashboardStaffFilter, setDashboardStaffFilter] = useState("all")
-    const [selectedMonth, setSelectedMonth] = useState(() => {
-        const now = new Date()
-        return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`
+    
+    // Set default date range to the previous week (Monday to Sunday)
+    const [startDate, setStartDate] = useState(() => {
+        const today = new Date()
+        const dayOfWeek = today.getDay()
+        const daysToSubtract = (dayOfWeek === 0 ? 6 : dayOfWeek - 1) + 7
+        const prevMonday = new Date(today)
+        prevMonday.setDate(today.getDate() - daysToSubtract)
+        return prevMonday.toISOString().split('T')[0]
     })
+    const [endDate, setEndDate] = useState(() => {
+        const today = new Date()
+        const dayOfWeek = today.getDay()
+        const daysToSubtract = (dayOfWeek === 0 ? 6 : dayOfWeek - 1) + 7
+        const prevMonday = new Date(today)
+        prevMonday.setDate(today.getDate() - daysToSubtract)
+        const prevSunday = new Date(prevMonday)
+        prevSunday.setDate(prevMonday.getDate() + 6)
+        return prevSunday.toISOString().split('T')[0]
+    })
+    
     const [currentPage, setCurrentPage] = useState(1)
     const [staffMembers, setStaffMembers] = useState([])
     const [filteredStaffMembers, setFilteredStaffMembers] = useState([])
@@ -31,7 +48,7 @@ function StaffTasksPage() {
         setFilteredStaffMembers([])
         setHasMoreData(true)
         setTotalStaffCount(0)
-    }, [dashboardStaffFilter, selectedMonth])
+    }, [dashboardStaffFilter, startDate, endDate])
 
     // Optimized filter function with debouncing
     useEffect(() => {
@@ -201,20 +218,20 @@ function StaffTasksPage() {
         })
     }
 
-    // Optimized data loading with parallel requests
+    // Optimized data loading with parallel requests using Date Range parameters
     const loadStaffData = useCallback(async (page = 1, append = false) => {
         if (isLoading) return;
 
         try {
             setIsLoading(true)
 
-            // Load checklist, delegation, and work data in parallel
+            // Load checklist, delegation, and work data in parallel using custom Date Range
             if (page === 1) {
                 const [checklistData, delegationData, workData, staffCount, usersCount] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth),
-                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth),
-                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth),
-                    getStaffTasksCountApi("checklist", dashboardStaffFilter, null, selectedMonth),
+                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate),
+                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate),
+                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate),
+                    getStaffTasksCountApi("checklist", dashboardStaffFilter, null, null, startDate, endDate),
                     getTotalUsersCountApi()
                 ]);
 
@@ -236,9 +253,9 @@ function StaffTasksPage() {
             } else {
                 // For subsequent pages, load all data types
                 const [checklistData, delegationData, workData] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth),
-                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth),
-                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage, selectedMonth)
+                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate),
+                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate),
+                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate)
                 ])
 
                 const combinedData = combineStaffData(checklistData, delegationData, workData)
@@ -261,11 +278,11 @@ function StaffTasksPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [dashboardStaffFilter, isLoading, selectedMonth])
+    }, [dashboardStaffFilter, isLoading, startDate, endDate])
 
     useEffect(() => {
         loadStaffData(1, false)
-    }, [dashboardStaffFilter, selectedMonth, loadStaffData])
+    }, [dashboardStaffFilter, startDate, endDate, loadStaffData])
 
     // Function to load more data
     const loadMoreData = () => {
@@ -276,14 +293,14 @@ function StaffTasksPage() {
         }
     }
 
-    // Optimized available staff fetching
+    // Optimized available staff fetching based on custom Date Range
     useEffect(() => {
         const fetchAvailableStaff = async () => {
             try {
                 const [checklistData, delegationData, workData] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", "all", null, 1, 100, selectedMonth),
-                    fetchStaffTasksDataApi("delegation", "all", null, 1, 100, selectedMonth),
-                    fetchStaffTasksDataApi("work", "all", null, 1, 100, selectedMonth)
+                    fetchStaffTasksDataApi("checklist", "all", null, 1, 100, null, startDate, endDate),
+                    fetchStaffTasksDataApi("delegation", "all", null, 1, 100, null, startDate, endDate),
+                    fetchStaffTasksDataApi("work", "all", null, 1, 100, null, startDate, endDate)
                 ])
 
                 const combinedData = combineStaffData(checklistData, delegationData, workData)
@@ -302,34 +319,17 @@ function StaffTasksPage() {
         }
 
         fetchAvailableStaff()
-    }, [userRole, username, selectedMonth])
+    }, [userRole, username, startDate, endDate])
 
     // Helper to format dates for DATE START and DATE END columns
-    const getMonthDates = () => {
-        let year, month;
-        if (selectedMonth) {
-            [year, month] = selectedMonth.split('-').map(Number);
-        } else {
-            const now = new Date();
-            year = now.getFullYear();
-            month = now.getMonth() + 1;
-        }
-        const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
-        const lastDayOfMonth = new Date(year, month, 0).getDate();
-        const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDayOfMonth.toString().padStart(2, '0')}`;
-        
-        const formatToShow = (dateStr) => {
-            const [y, m, d] = dateStr.split("-");
-            return `${d}/${m}/${y}`;
-        };
-
-        return {
-            start: formatToShow(startDate),
-            end: formatToShow(endDate)
-        };
+    const formatToShow = (dateStr) => {
+        if (!dateStr) return "";
+        const [y, m, d] = dateStr.split("-");
+        return `${d}/${m}/${y}`;
     };
 
-    const { start: dateStart, end: dateEnd } = getMonthDates();
+    const dateStartFormatted = formatToShow(startDate);
+    const dateEndFormatted = formatToShow(endDate);
 
     const getStatusBadge = (ontimeScore, totalTasks) => {
         if (totalTasks === 0) {
@@ -391,8 +391,6 @@ function StaffTasksPage() {
             "Performance Status"
         ];
 
-        const { start: dateStart, end: dateEnd } = getMonthDates();
-
         const csvRows = [
             headers.join(",")
         ];
@@ -413,8 +411,8 @@ function StaffTasksPage() {
             const rowValues = [
                 `"${(staff.name || "").replace(/"/g, '""')}"`,
                 `"${(staff.email || "").replace(/"/g, '""')}"`,
-                `"${dateStart}"`,
-                `"${dateEnd}"`,
+                `"${dateStartFormatted}"`,
+                `"${dateEndFormatted}"`,
                 staff.totalTasks,
                 `"${staff.progress}%"`,
                 `"${workNotDone}%"`,
@@ -432,7 +430,7 @@ function StaffTasksPage() {
         
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", `Staff_MIS_Report_${selectedMonth || "all"}.csv`);
+        link.setAttribute("download", `Staff_MIS_Report_${startDate}_to_${endDate}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -452,9 +450,9 @@ function StaffTasksPage() {
                             </div>
 
                             {/* Filters Section */}
-                            <div className="flex flex-col sm:flex-row gap-3 items-center">
+                            <div className="flex flex-col xl:flex-row gap-3 items-center w-full xl:w-auto">
                                 {/* Search Bar */}
-                                <div className="w-full sm:w-64">
+                                <div className="w-full sm:w-60">
                                     <input
                                         type="text"
                                         placeholder="Search staff..."
@@ -464,18 +462,30 @@ function StaffTasksPage() {
                                     />
                                 </div>
 
-                                {/* Month Picker */}
-                                <div className="w-full sm:w-40">
-                                    <input
-                                        type="month"
-                                        value={selectedMonth}
-                                        onChange={(e) => setSelectedMonth(e.target.value)}
-                                        className="w-full rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm"
-                                    />
+                                {/* Date Range Pickers */}
+                                <div className="flex flex-col sm:flex-row gap-2 items-center w-full sm:w-auto">
+                                    <div className="flex items-center gap-1 w-full sm:w-auto">
+                                        <span className="text-xs text-gray-500 font-medium whitespace-nowrap">From:</span>
+                                        <input
+                                            type="date"
+                                            value={startDate}
+                                            onChange={(e) => setStartDate(e.target.value)}
+                                            className="rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm w-full sm:w-36"
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-1 w-full sm:w-auto">
+                                        <span className="text-xs text-gray-500 font-medium whitespace-nowrap">To:</span>
+                                        <input
+                                            type="date"
+                                            value={endDate}
+                                            onChange={(e) => setEndDate(e.target.value)}
+                                            className="rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm w-full sm:w-36"
+                                        />
+                                    </div>
                                 </div>
 
                                 {/* Staff Filter */}
-                                <div className="w-full sm:w-48">
+                                <div className="w-full sm:w-44">
                                     <select
                                         value={dashboardStaffFilter}
                                         onChange={(e) => setDashboardStaffFilter(e.target.value)}
@@ -491,16 +501,18 @@ function StaffTasksPage() {
                                 </div>
 
                                 {/* Export CSV Button */}
-                                <button
-                                    onClick={handleExportCSV}
-                                    disabled={filteredStaffMembers.length === 0}
-                                    className="w-full sm:w-auto px-4 py-2 bg-purple-600 text-white font-medium rounded-md hover:bg-purple-700 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                                    </svg>
-                                    Export CSV
-                                </button>
+                                <div className="w-full sm:w-auto">
+                                    <button
+                                        onClick={handleExportCSV}
+                                        disabled={filteredStaffMembers.length === 0}
+                                        className="w-full px-4 py-2 bg-purple-600 text-white font-medium rounded-md hover:bg-purple-700 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                        </svg>
+                                        Export CSV
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -517,9 +529,9 @@ function StaffTasksPage() {
 
                             {/* Active Filters Display */}
                             <div className="flex gap-2">
-                                {selectedMonth && (
+                                {startDate && endDate && (
                                     <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
-                                        Month: {selectedMonth}
+                                        Period: {dateStartFormatted} - {dateEndFormatted}
                                     </span>
                                 )}
                                 {dashboardStaffFilter !== "all" && (
@@ -622,10 +634,10 @@ function StaffTasksPage() {
                                                                 </div>
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
-                                                                {dateStart}
+                                                                {dateStartFormatted}
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
-                                                                {dateEnd}
+                                                                {dateEndFormatted}
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold text-center">
                                                                 {staff.totalTasks}
