@@ -1,5 +1,3 @@
-
-
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom"
 import "./index.css"
 
@@ -18,6 +16,7 @@ import Setting from "./pages/Setting"
 import MisReport from "./pages/MisReport"
 import BulkImport from "./pages/BulkImport"
 import WorkDetails from "./pages/WorkDetails"
+import ScheduledWorkTasks from "./pages/ScheduledWorkTasks"
 import MasterWorkBulkImport from "./pages/MasterWorkBulkImport"
 
 // --- Data & Delegation Imports ---
@@ -126,7 +125,6 @@ function App() {
                     />
 
                     {/* --- Operational Tasks (All Authenticated Users) --- */}
-                    {/* Based on snippet 2, these are open to all users. Add allowedRoles={['admin']} if they should be restricted. */}
                     <Route
                         path="/dashboard/quick-task"
                         element={
@@ -285,6 +283,14 @@ function App() {
                         }
                     />
                     <Route
+                        path="/dashboard/work-details/scheduled"
+                        element={
+                            <ProtectedRoute allowedRoles={["admin", "HOD", "manager"]}>
+                                <ScheduledWorkTasks />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
                         path="/dashboard/work-records/bulk-import"
                         element={
                             <ProtectedRoute allowedRoles={["admin"]}>
@@ -304,8 +310,7 @@ function App() {
                         }
                     />
 
-                    {/* --- Backward Compatibility Redirects (From Snippet 1) --- */}
-                    {/* These catch old URLs and forward them to the new structure */}
+                    {/* --- Backward Compatibility Redirects --- */}
                     <Route path="/admin/*" element={<Navigate to="/dashboard/admin" replace />} />
                     <Route path="/admin/dashboard" element={<Navigate to="/dashboard/admin" replace />} />
                     <Route path="/admin/quick" element={<Navigate to="/dashboard/quick-task" replace />} />

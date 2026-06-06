@@ -1,4 +1,5 @@
 import supabase from "../../SupabaseClient";
+import { sendTaskAssignmentNotification, sendMultipleWorkTasksNotification } from "../../services/whatsappService";
 
 /**
  * Fetches all active tasks from master_work_tasks.
@@ -396,6 +397,221 @@ export const rejectWorkTaskApi = async (taskId, reason) => {
     return data;
   } catch (error) {
     console.error("❌ Error rejecting work task:", error);
+    throw error;
+  }
+};
+
+/**
+ * Automatically checks for expired assignments and promotes next scheduled assignments to active.
+ */
+export const checkAndPromoteAssignmentsApi = async () => {
+  try {
+    const now = new Date();
+    // 1. Fetch all assignments that have a scheduled next assignment
+    const { data: assignments, error } = await supabase
+      .from('task_assignments')
+      .select('*')
+      .not('next_start_datetime', 'is', null);
+
+    if (error) throw error;
+    if (!assignments || assignments.length === 0) return { promotedCount: 0 };
+
+    const promoted = [];
+    for (const asgn of assignments) {
+      // Check if current assignment is expired (end_datetime passed) OR is null
+      const isExpired = !asgn.end_datetime || new Date(asgn.end_datetime) < now;
+      
+      if (isExpired && asgn.next_start_datetime && asgn.next_end_datetime) {
+        promoted.push(asgn);
+      }
+    }
+
+    if (promoted.length === 0) return { promotedCount: 0 };
+
+    // Promote in database
+    for (const asgn of promoted) {
+      // 1. Update task_assignments row to promote next_* fields to active fields, status to 'LOCKED', and clear next_*
+      const { error: updateErr } = await supabase
+        .from('task_assignments')
+        .update({
+          start_datetime: asgn.next_start_datetime,
+          end_datetime: asgn.next_end_datetime,
+          manager_name: asgn.next_manager_name,
+          employee_name: asgn.next_employee_name,
+          status: 'LOCKED', // Promote to LOCKED so it can be generated
+          next_start_datetime: null,
+          next_end_datetime: null,
+          next_manager_name: null,
+          next_employee_name: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', asgn.id);
+
+      if (updateErr) throw updateErr;
+
+      // 2. Fetch the updated assignment details (with shop name, etc. if needed for generation)
+      const { data: masterTask, error: masterErr } = await supabase
+        .from('master_work_tasks')
+        .select('*, shop(shop_name)')
+        .eq('id', asgn.task_id)
+        .single();
+
+      if (masterErr) throw masterErr;
+
+      // Prepare the assignment object for generateWorkTasksApi
+      const promotedAssignment = {
+        id: asgn.id,
+        assignmentId: asgn.id,
+        task_id: asgn.task_id,
+        task_name: masterTask.task_name,
+        shopName: masterTask.shop?.shop_name || "N/A",
+        department: masterTask.department || "N/A",
+        estimated_minutes: masterTask.estimated_minutes || 0,
+        start_datetime: asgn.next_start_datetime,
+        end_datetime: asgn.next_end_datetime,
+        employee_name: asgn.next_employee_name,
+        manager_name: asgn.next_manager_name,
+        status: 'LOCKED'
+      };
+
+      // 3. Generate the work tasks checklist for this promoted assignment
+      await generateWorkTasksApi([promotedAssignment]);
+
+      // 4. Send WhatsApp notification grouped by employee name
+      const nowTime = new Date();
+      const startTime = new Date(promotedAssignment.start_datetime);
+      if (startTime <= nowTime) {
+        const employeeNames = promotedAssignment.employee_name
+          ? promotedAssignment.employee_name.split(',').map(e => e.trim()).filter(Boolean)
+          : [];
+
+        const empTasks = [];
+        employeeNames.forEach(empName => {
+          empTasks.push({
+            taskType: 'work',
+            doerName: empName,
+            taskId: promotedAssignment.task_id,
+            description: promotedAssignment.task_name,
+            start_datetime: promotedAssignment.start_datetime,
+            end_datetime: promotedAssignment.end_datetime,
+            givenBy: promotedAssignment.manager_name || 'Admin',
+            shop_name: promotedAssignment.shopName,
+            department: promotedAssignment.department,
+            duration: promotedAssignment.estimated_minutes
+          });
+        });
+
+        empTasks.forEach(task => {
+          sendTaskAssignmentNotification(task).catch(err => {
+            console.error(`❌ Error sending auto-scheduled WhatsApp alert for ${task.doerName}:`, err);
+          });
+        });
+      }
+    }
+
+    return { promotedCount: promoted.length };
+  } catch (error) {
+    console.error("❌ Error checking and promoting assignments:", error);
+    throw error;
+  }
+};
+
+/**
+ * Fetches paginated work records with search and filter applied directly in the database.
+ */
+export const fetchPaginatedWorkRecordsApi = async ({ page, limit, searchTerm, selectedShop, role, managerShops }) => {
+  try {
+    const from = page * limit;
+    const to = from + limit - 1;
+
+    let query = supabase
+      .from('master_work_tasks')
+      .select('*, shop!inner(id, shop_name), task_assignments(*)', { count: 'exact' })
+      .eq('is_active', true);
+
+    if (role === 'manager' && managerShops && managerShops.length > 0) {
+      query = query.in('shop.shop_name', managerShops);
+    }
+
+    if (selectedShop && selectedShop !== 'All') {
+      query = query.eq('shop.shop_name', selectedShop);
+    }
+
+    if (searchTerm) {
+      const term = `%${searchTerm.trim()}%`;
+      query = query.or(`task_name.ilike.${term},task_assignments.manager_name.ilike.${term},task_assignments.employee_name.ilike.${term}`);
+    }
+
+    const { data, count, error } = await query
+      .order('id', { ascending: true })
+      .range(from, to);
+
+    if (error) throw error;
+
+    const formattedData = (data || []).map(task => {
+      const assignment = task.task_assignments?.[0] || null;
+      return {
+        ...task,
+        ...(assignment || {}),
+        taskId: task.id,
+        shopName: task.shop?.shop_name || "N/A",
+        assignmentId: assignment?.id || null
+      };
+    });
+
+    return { data: formattedData, totalCount: count || 0 };
+  } catch (error) {
+    console.error("❌ Error fetching paginated work records:", error);
+    throw error;
+  }
+};
+
+/**
+ * Fetches paginated scheduled work tasks with search and filter applied directly in the database.
+ */
+export const fetchPaginatedScheduledWorkTasksApi = async ({ page, limit, searchTerm, selectedShop, role, managerShops }) => {
+  try {
+    const from = page * limit;
+    const to = from + limit - 1;
+
+    let query = supabase
+      .from('master_work_tasks')
+      .select('*, shop!inner(id, shop_name), task_assignments(*)', { count: 'exact' })
+      .eq('is_active', true);
+
+    if (role === 'manager' && managerShops && managerShops.length > 0) {
+      query = query.in('shop.shop_name', managerShops);
+    }
+
+    if (selectedShop && selectedShop !== 'All') {
+      query = query.eq('shop.shop_name', selectedShop);
+    }
+
+    if (searchTerm) {
+      const term = `%${searchTerm.trim()}%`;
+      query = query.or(`task_name.ilike.${term},task_assignments.next_manager_name.ilike.${term},task_assignments.next_employee_name.ilike.${term}`);
+    }
+
+    const { data, count, error } = await query
+      .order('id', { ascending: true })
+      .range(from, to);
+
+    if (error) throw error;
+
+    const formattedData = (data || []).map(task => {
+      const assignment = task.task_assignments?.[0] || null;
+      return {
+        ...task,
+        ...(assignment || {}),
+        taskId: task.id,
+        shopName: task.shop?.shop_name || "N/A",
+        assignmentId: assignment?.id || null
+      };
+    });
+
+    return { data: formattedData, totalCount: count || 0 };
+  } catch (error) {
+    console.error("❌ Error fetching paginated scheduled work tasks:", error);
     throw error;
   }
 };

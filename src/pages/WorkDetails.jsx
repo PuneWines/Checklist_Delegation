@@ -1,5 +1,6 @@
 "use client";
-import { useState, useMemo, useEffect, useCallback, Fragment } from "react";
+import { useState, useMemo, useEffect, useCallback, Fragment, useRef } from "react";
+import { motion } from "framer-motion";
 import {
   Search,
   Calendar,
@@ -20,7 +21,7 @@ import AdminLayout from "../components/layout/AdminLayout";
 import { fetchWorkRecords, saveAssignments } from "../redux/slice/workRecordsSlice";
 import { userDetails } from "../redux/slice/settingSlice";
 import { useMagicToast } from "../context/MagicToastContext";
-import { generateWorkTasksApi, resetWorkTasksApi } from "../redux/api/workRecordsApi";
+import { generateWorkTasksApi, resetWorkTasksApi, checkAndPromoteAssignmentsApi, fetchPaginatedWorkRecordsApi } from "../redux/api/workRecordsApi";
 import { sendTaskAssignmentNotification, sendMultipleWorkTasksNotification } from "../services/whatsappService";
 
 const getTaskStatusInfo = (item, isModified) => {
@@ -127,6 +128,15 @@ export default function WorkDetails() {
   const [bulkEndDate, setBulkEndDate] = useState("");
   const [selectedRows, setSelectedRows] = useState(new Set());
   const [searchDropdown, setSearchDropdown] = useState({ type: null, id: null, term: "" });
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // Helper: apply shop-access filter shared by both lists
   const shopFilteredUsers = useMemo(() => {
@@ -174,6 +184,42 @@ export default function WorkDetails() {
     }, 60000); // 1 minute
     return () => clearInterval(timer);
   }, []);
+
+  // Background Promotion Trigger
+  const runPromotionCheck = useCallback(async () => {
+    try {
+      const { promotedCount } = await checkAndPromoteAssignmentsApi();
+      if (promotedCount > 0) {
+        showToast(`Auto-promoted ${promotedCount} expired work assignment(s)!`, "info");
+        dispatch(fetchWorkRecords());
+      }
+    } catch (err) {
+      console.error("Auto promotion check failed:", err);
+    }
+  }, [dispatch, showToast]);
+
+  useEffect(() => {
+    runPromotionCheck();
+    const timer = setInterval(() => {
+      runPromotionCheck();
+    }, 60000); // 1 minute
+    return () => clearInterval(timer);
+  }, [runPromotionCheck]);
+
+  // Handle click outside to collapse dropdowns
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!searchDropdown.type) return;
+      if (!e.target.closest(".dropdown-container")) {
+        setSearchDropdown({ type: null, id: null, term: "" });
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [searchDropdown.type]);
 
   // Initial Data Fetch
   useEffect(() => {
@@ -332,35 +378,7 @@ export default function WorkDetails() {
     return null;
   };
 
-  const validateScheduledAssignment = (data) => {
-    const nextStart = data.next_start_datetime;
-    const nextEnd = data.next_end_datetime;
 
-    const startDateExists = Boolean(getDatePart(nextStart));
-    const endDateExists = Boolean(getDatePart(nextEnd));
-
-    if (data.next_manager_name || data.next_employee_name || startDateExists || endDateExists) {
-      if (!startDateExists || !endDateExists) {
-        return "Scheduled Start and End dates are required";
-      }
-      if (isAdmin && (!hasCompleteDateTime(nextStart) || !hasCompleteDateTime(nextEnd))) {
-        return "Scheduled Start and End dates with time are required for admin updates";
-      }
-      if (new Date(nextStart) >= new Date(nextEnd)) {
-        return "Scheduled Start date must be before End date";
-      }
-      if (data.start_datetime && new Date(nextStart) <= new Date(data.start_datetime)) {
-        return "Scheduled Start date must be after current assignment start date";
-      }
-      if (data.end_datetime && new Date(nextStart) <= new Date(data.end_datetime)) {
-        return "Scheduled Start date must be after current assignment end date";
-      }
-      if (!data.next_manager_name || !data.next_employee_name) {
-        return "Scheduled Manager and Employee names are required";
-      }
-    }
-    return null;
-  };
 
   const handleSaveChanges = async () => {
     // Collect IDs from both modified rows AND selected rows
@@ -448,21 +466,6 @@ export default function WorkDetails() {
         }
       }
 
-      // Validate scheduled assignment (if any scheduled fields are set/modified)
-      const hasScheduledFieldModified = modifiedRowsWithBulk[id] && (
-        modifiedRowsWithBulk[id].next_start_datetime !== undefined ||
-        modifiedRowsWithBulk[id].next_end_datetime !== undefined ||
-        modifiedRowsWithBulk[id].next_manager_name !== undefined ||
-        modifiedRowsWithBulk[id].next_employee_name !== undefined
-      );
-
-      if (hasScheduledFieldModified) {
-        const schedError = validateScheduledAssignment(effectiveTask);
-        if (schedError) {
-          errors.push(`Task "${effectiveTask.task_name}" Scheduled Assignment: ${schedError}`);
-        }
-      }
-
       if (errors.length === 0) {
         assignmentsToUpsert.push({
           task_id: effectiveTask.taskId,
@@ -471,10 +474,10 @@ export default function WorkDetails() {
           manager_name: effectiveTask.manager_name,
           employee_name: effectiveTask.employee_name,
           status: effectiveTask.status || 'LOCKED', // Keep existing status if set, otherwise default to LOCKED
-          next_manager_name: effectiveTask.next_manager_name !== undefined ? effectiveTask.next_manager_name : (task.next_manager_name || null),
-          next_employee_name: effectiveTask.next_employee_name !== undefined ? effectiveTask.next_employee_name : (task.next_employee_name || null),
-          next_start_datetime: effectiveTask.next_start_datetime !== undefined ? effectiveTask.next_start_datetime : (task.next_start_datetime || null),
-          next_end_datetime: effectiveTask.next_end_datetime !== undefined ? effectiveTask.next_end_datetime : (task.next_end_datetime || null),
+          next_manager_name: task.next_manager_name || null,
+          next_employee_name: task.next_employee_name || null,
+          next_start_datetime: task.next_start_datetime || null,
+          next_end_datetime: task.next_end_datetime || null,
           updated_at: new Date().toISOString()
         });
       }
@@ -639,108 +642,7 @@ export default function WorkDetails() {
     setSearchDropdown(prev => ({ ...prev, term: "" }));
   };
 
-  const [expandedScheduleRows, setExpandedScheduleRows] = useState(new Set());
 
-  const toggleSchedulePanel = (taskId, item) => {
-    setExpandedScheduleRows(prev => {
-      const next = new Set(prev);
-      if (next.has(taskId)) {
-        next.delete(taskId);
-      } else {
-        next.add(taskId);
-        // Auto-fill next_manager_name with current manager if not already set
-        if (item && !item.next_manager_name && item.manager_name) {
-          handleFieldChange(taskId, "next_manager_name", item.manager_name);
-        }
-      }
-      return next;
-    });
-  };
-
-  const clearScheduledAssignment = (taskId) => {
-    handleFieldChange(taskId, "next_manager_name", null);
-    handleFieldChange(taskId, "next_employee_name", null);
-    handleFieldChange(taskId, "next_start_datetime", null);
-    handleFieldChange(taskId, "next_end_datetime", null);
-  };
-
-  const handleScheduledFieldChange = (taskId, field, value) => {
-    handleFieldChange(taskId, field, value);
-  };
-
-  const handleScheduledTimeChange = (item, field, time) => {
-    const existingDateTime = field === "next_start_datetime" ? item.next_start_datetime : item.next_end_datetime;
-    const date = getDatePart(existingDateTime) || "";
-    if (time && !date) {
-      showToast("Please select a date first", "error");
-      return;
-    }
-    handleFieldChange(item.taskId, field, combineDateAndTime(date, time));
-  };
-
-  const toggleNextEmployee = (taskId, empName, currentEmployeeNameStr) => {
-    const currentEmps = currentEmployeeNameStr ? currentEmployeeNameStr.split(',').map(e => e.trim()).filter(Boolean) : [];
-    let nextEmps;
-    if (currentEmps.includes(empName)) {
-      nextEmps = currentEmps.filter(e => e !== empName);
-    } else {
-      nextEmps = [...currentEmps, empName];
-    }
-    handleFieldChange(taskId, "next_employee_name", nextEmps.join(', ') || null);
-    setSearchDropdown(prev => ({ ...prev, term: "" }));
-  };
-
-  const handleSaveSchedule = async (item) => {
-    const modifiedData = modifiedRows[item.taskId] || {};
-    const effectiveTask = { ...item, ...modifiedData };
-
-    // Validate scheduled fields
-    const schedError = validateScheduledAssignment(effectiveTask);
-    if (schedError) {
-      showToast(schedError, "error");
-      return;
-    }
-
-    // Must have an existing assignment to update
-    if (!effectiveTask.assignmentId) {
-      showToast("No assignment found for this task", "error");
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('task_assignments')
-        .update({
-          next_manager_name: effectiveTask.next_manager_name || null,
-          next_employee_name: effectiveTask.next_employee_name || null,
-          next_start_datetime: effectiveTask.next_start_datetime || null,
-          next_end_datetime: effectiveTask.next_end_datetime || null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', effectiveTask.assignmentId);
-
-      if (error) throw error;
-
-      // Clear only the scheduled fields from modifiedRows so the row doesn't stay dirty
-      setModifiedRows(prev => {
-        const updated = { ...prev };
-        if (updated[item.taskId]) {
-          const { next_manager_name, next_employee_name, next_start_datetime, next_end_datetime, ...rest } = updated[item.taskId];
-          if (Object.keys(rest).length === 0) {
-            delete updated[item.taskId];
-          } else {
-            updated[item.taskId] = rest;
-          }
-        }
-        return updated;
-      });
-
-      showToast("Schedule saved successfully", "success");
-      dispatch(fetchWorkRecords());
-    } catch (err) {
-      showToast(err?.message || "Failed to save schedule", "error");
-    }
-  };
 
   if (loading && masterTasks.length === 0) {
     return (
@@ -774,6 +676,14 @@ export default function WorkDetails() {
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+            {/* Scheduled Tasks Navigation Button */}
+            <button
+              onClick={() => navigate('/dashboard/work-details/scheduled')}
+              className="flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 shrink-0"
+            >
+              <Calendar size={14} /> Scheduled Tasks 📅
+            </button>
+
             <div className="relative group w-full md:w-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" size={16} />
               <input
@@ -793,8 +703,39 @@ export default function WorkDetails() {
           </div>
         </div>
 
+        {/* Toggle Filters Button for Mobile View */}
+        <div className="block md:hidden px-4 py-2.5 bg-white border-x border-gray-100">
+          <button
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+            className="w-full flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all border border-blue-100 shadow-sm active:scale-95"
+          >
+            <LayoutGrid size={14} />
+            {showMobileFilters ? "Hide Filters & Actions ✖" : "Show Filters & Actions ⚙️"}
+          </button>
+        </div>
+
         {/* Filters & Bulk Actions Bar */}
-        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-3 bg-white p-4 shadow-sm items-end border-x border-gray-100">
+        <motion.div
+          initial={false}
+          animate={
+            !isMobile
+              ? { height: "auto", opacity: 1, overflow: "visible" }
+              : showMobileFilters
+                ? {
+                    height: "auto",
+                    opacity: 1,
+                    transitionEnd: { overflow: "visible" }
+                  }
+                : {
+                    height: 0,
+                    opacity: 0,
+                    overflow: "hidden"
+                  }
+          }
+          transition={{ duration: 0.3, ease: "easeInOut" }}
+          className="overflow-hidden w-full"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 bg-white p-4 shadow-sm items-end border-x border-gray-100">
           <div className="space-y-1">
             <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] flex items-center gap-1.5">
               <LayoutGrid size={10} className="text-blue-500" /> Filter Shop
@@ -884,6 +825,7 @@ export default function WorkDetails() {
             </button>
           )}
         </div>
+      </motion.div>
 
         {/* Error State */}
         {error && (
@@ -927,7 +869,6 @@ export default function WorkDetails() {
               {filteredTasks.map((item, index) => {
                 const isModified = !!modifiedRows[item.taskId];
                 const isActive = item.status === 'ACTIVE' && !isModified;
-                const isExpanded = expandedScheduleRows.has(item.taskId);
 
                 return (
                   <Fragment key={item.taskId}>
@@ -962,20 +903,6 @@ export default function WorkDetails() {
                               </span>
                             );
                           })()}
-                          {(item.status === 'LOCKED' || item.status === 'GENERATED') && (
-                            <button
-                              type="button"
-                              onClick={() => toggleSchedulePanel(item.taskId, item)}
-                              className={`mt-1.5 text-[9.5px] font-black flex items-center gap-1 hover:underline w-fit transition-all uppercase tracking-wider ${
-                                item.next_start_datetime 
-                                  ? 'text-indigo-600 hover:text-indigo-800' 
-                                  : 'text-blue-600 hover:text-blue-800'
-                              }`}
-                            >
-                              <Calendar size={10} />
-                              {item.next_start_datetime ? "Edit Scheduled 📅" : "Schedule Next 📅"}
-                            </button>
-                          )}
                           {item.next_start_datetime && (
                             <span className="text-[8px] font-black text-indigo-700 bg-indigo-50 border border-indigo-100 rounded px-1.5 py-0.5 mt-1 w-fit uppercase tracking-wider">
                               Next: {item.next_employee_name || "Unassigned"}
@@ -1062,7 +989,7 @@ export default function WorkDetails() {
                         </>
                       )}
                       <td className="px-2 py-3 relative">
-                        <div className="relative">
+                        <div className="relative dropdown-container">
                           <input
                             type="text"
                             placeholder="Manager.."
@@ -1104,7 +1031,7 @@ export default function WorkDetails() {
                         </div>
                       </td>
                       <td className="px-2 py-3">
-                        <div className="relative">
+                        <div className="relative dropdown-container">
                           {(item.status === 'LOCKED' || item.status === 'GENERATED') ? (
                             <div className="flex flex-wrap gap-1 max-w-[180px]">
                               {item.employee_name ? (
@@ -1186,180 +1113,7 @@ export default function WorkDetails() {
                         </div>
                       </td>
                     </tr>
-                    {isExpanded && (
-                      <tr className="bg-slate-50/30 border-b border-gray-100 transition-all duration-300">
-                        <td colSpan={isAdmin ? 11 : 9} className="px-8 py-4">
-                          <div className="bg-white border border-indigo-100 rounded-xl p-5 flex flex-col gap-4 shadow-sm max-w-4xl animate-in fade-in duration-300 relative">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
-                            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                              <div className="flex items-center gap-2">
-                                <Calendar size={14} className="text-indigo-600" />
-                                <span className="text-xs font-black text-indigo-900 uppercase tracking-wider">
-                                  Schedule Next Assignment
-                                </span>
-                              </div>
-                              {item.next_start_datetime && (
-                                <button
-                                  type="button"
-                                  onClick={() => clearScheduledAssignment(item.taskId)}
-                                  className="text-[9px] font-black text-red-600 hover:text-red-700 uppercase tracking-widest bg-red-50 hover:bg-red-100/60 px-2 py-1 rounded-md border border-red-200 transition-colors"
-                                >
-                                  Clear Scheduled
-                                </button>
-                              )}
-                            </div>
 
-                            <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-3 items-end`}>
-                              {/* Next Start Date & Time */}
-                              <div className="space-y-1">
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Next Start Date</label>
-                                <input
-                                  type="date"
-                                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
-                                  value={getDatePart(item.next_start_datetime)}
-                                  onChange={(e) => handleScheduledFieldChange(item.taskId, "next_start_datetime", combineDateAndTime(e.target.value, getTimePart(item.next_start_datetime) || getTimePart(item.start_datetime)))}
-                                />
-                              </div>
-                              {isAdmin && (
-                                <div className="space-y-1">
-                                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Next Start Time</label>
-                                  <input
-                                    type="time"
-                                    className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
-                                    value={getTimePart(item.next_start_datetime)}
-                                    onChange={(e) => handleScheduledTimeChange(item, "next_start_datetime", e.target.value)}
-                                  />
-                                </div>
-                              )}
-
-                              {/* Next End Date & Time */}
-                              <div className="space-y-1">
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Next End Date</label>
-                                <input
-                                  type="date"
-                                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
-                                  value={getDatePart(item.next_end_datetime)}
-                                  onChange={(e) => handleScheduledFieldChange(item.taskId, "next_end_datetime", combineDateAndTime(e.target.value, getTimePart(item.next_end_datetime) || getTimePart(item.end_datetime)))}
-                                />
-                              </div>
-                              {isAdmin && (
-                                <div className="space-y-1">
-                                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Next End Time</label>
-                                  <input
-                                    type="time"
-                                    className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
-                                    value={getTimePart(item.next_end_datetime)}
-                                    onChange={(e) => handleScheduledTimeChange(item, "next_end_datetime", e.target.value)}
-                                  />
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
-                              {/* Next Manager */}
-                              <div className="space-y-1 relative">
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Next Manager</label>
-                                <input
-                                  type="text"
-                                  placeholder="Select Manager..."
-                                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
-                                  value={item.next_manager_name || ""}
-                                  onChange={(e) => {
-                                    handleScheduledFieldChange(item.taskId, "next_manager_name", e.target.value);
-                                    setSearchDropdown({ type: "next_manager", id: item.taskId, term: e.target.value });
-                                  }}
-                                  onFocus={() => setSearchDropdown({ type: "next_manager", id: item.taskId, term: item.next_manager_name || "" })}
-                                />
-                                {searchDropdown.type === "next_manager" && searchDropdown.id === item.taskId && (
-                                  <div className="absolute z-50 left-0 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto mt-1 top-full">
-                                    {managerUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
-                                      <div className="px-4 py-3 text-[11px] text-gray-400 font-semibold text-center">No managers found</div>
-                                    ) : managerUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
-                                      <button
-                                        key={user.id}
-                                        type="button"
-                                        className="w-full text-left px-3 py-2.5 text-[11px] font-semibold text-gray-700 hover:bg-blue-50 flex items-center justify-between gap-3 transition-colors border-b border-gray-50 last:border-0"
-                                        onClick={() => {
-                                          handleScheduledFieldChange(item.taskId, "next_manager_name", user.user_name);
-                                          setSearchDropdown({ type: null, id: null, term: "" });
-                                        }}
-                                      >
-                                        <span>{user.user_name}</span>
-                                        {item.next_manager_name === user.user_name && <Check size={12} className="text-blue-600" />}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Next Employee */}
-                              <div className="space-y-1 relative">
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Next Employee(s)</label>
-                                {item.next_employee_name && (
-                                  <div className="flex flex-wrap gap-1 mb-1.5">
-                                    {item.next_employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
-                                      <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[9px] font-black border border-emerald-100 shadow-sm">
-                                        {emp}
-                                        <button
-                                          type="button"
-                                          className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 transition-colors font-black text-[9px] leading-none"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            toggleNextEmployee(item.taskId, emp, item.next_employee_name);
-                                          }}
-                                        >
-                                          ×
-                                        </button>
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                                <input
-                                  type="text"
-                                  placeholder="Add employee..."
-                                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
-                                  value={(searchDropdown.type === "next_employee" && searchDropdown.id === item.taskId) ? searchDropdown.term : ""}
-                                  onChange={(e) => setSearchDropdown({ type: "next_employee", id: item.taskId, term: e.target.value })}
-                                  onFocus={() => setSearchDropdown({ type: "next_employee", id: item.taskId, term: "" })}
-                                />
-                                {searchDropdown.type === "next_employee" && searchDropdown.id === item.taskId && (
-                                  <div className="absolute z-50 left-0 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto mt-1 top-full">
-                                    {employeeUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
-                                      <div className="px-4 py-3 text-[11px] text-gray-400 font-semibold text-center">No employees found</div>
-                                    ) : employeeUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
-                                      const isSelected = item.next_employee_name?.split(',').map(e => e.trim()).filter(Boolean).includes(user.user_name);
-                                      return (
-                                        <button
-                                          key={user.id}
-                                          type="button"
-                                          className={`w-full text-left px-3 py-2.5 text-[11px] font-semibold hover:bg-emerald-50 flex items-center justify-between gap-3 transition-colors border-b border-gray-50 last:border-0 ${isSelected ? 'bg-emerald-50/60 text-emerald-700' : 'text-gray-700'}`}
-                                          onClick={() => toggleNextEmployee(item.taskId, user.user_name, item.next_employee_name)}
-                                        >
-                                          <span>{user.user_name}</span>
-                                          {isSelected && <Check size={12} className="text-emerald-600" />}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Save Schedule button */}
-                            <div className="flex justify-end pt-2 border-t border-gray-100">
-                              <button
-                                type="button"
-                                onClick={() => handleSaveSchedule(item)}
-                                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black py-2 px-5 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-md hover:shadow-indigo-200"
-                              >
-                                <Save size={13} />
-                                Save Schedule
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
                   </Fragment>
                 );
               })}
@@ -1445,25 +1199,11 @@ export default function WorkDetails() {
                   <h4 className="text-xs font-bold text-gray-800 leading-snug">
                     {item.task_name}
                   </h4>
-                  {(item.status === 'LOCKED' || item.status === 'GENERATED') && (
+                  {item.next_start_datetime && (
                     <div className="flex flex-col gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => toggleSchedulePanel(item.taskId, item)}
-                        className={`text-[9.5px] font-black flex items-center gap-1 hover:underline w-fit transition-all uppercase tracking-wider ${
-                          item.next_start_datetime 
-                            ? 'text-indigo-600 hover:text-indigo-800' 
-                            : 'text-blue-600 hover:text-blue-800'
-                        }`}
-                      >
-                        <Calendar size={10} />
-                        {item.next_start_datetime ? "Edit Scheduled 📅" : "Schedule Next 📅"}
-                      </button>
-                      {item.next_start_datetime && (
-                        <span className="text-[8px] font-black text-indigo-700 bg-indigo-50 border border-indigo-100 rounded px-1.5 py-0.5 w-fit uppercase tracking-wider">
-                          Next: {item.next_employee_name || "Unassigned"}
-                        </span>
-                      )}
+                      <span className="text-[8px] font-black text-indigo-700 bg-indigo-50 border border-indigo-100 rounded px-1.5 py-0.5 w-fit uppercase tracking-wider">
+                        Next: {item.next_employee_name || "Unassigned"}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -1649,170 +1389,7 @@ export default function WorkDetails() {
                   </div>
                 </div>
 
-                {/* Mobile Scheduled Assignment Form */}
-                {expandedScheduleRows.has(item.taskId) && (
-                  <div className="bg-slate-50 border border-indigo-100 rounded-xl p-4 flex flex-col gap-3 shadow-sm relative animate-in slide-in-from-top-2 duration-200">
-                    <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
-                    <div className="flex items-center justify-between border-b border-gray-200 pb-2">
-                      <div className="flex items-center gap-1.5">
-                        <Calendar size={12} className="text-indigo-600" />
-                        <span className="text-[10px] font-black text-indigo-900 uppercase tracking-wider">
-                          Schedule Next
-                        </span>
-                      </div>
-                      {item.next_start_datetime && (
-                        <button
-                          type="button"
-                          onClick={() => clearScheduledAssignment(item.taskId)}
-                          className="text-[8px] font-black text-red-600 hover:text-red-700 uppercase tracking-widest bg-red-50 hover:bg-red-100/60 px-1.5 py-0.5 rounded border border-red-200"
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
 
-                    <div className={`grid ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
-                      <div className="space-y-1">
-                        <label className="text-[8px] font-black text-gray-400 uppercase tracking-wider block">Next Start Date</label>
-                        <input
-                          type="date"
-                          className="w-full px-2 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-1 focus:ring-indigo-600 outline-none"
-                          value={getDatePart(item.next_start_datetime)}
-                          onChange={(e) => handleScheduledFieldChange(item.taskId, "next_start_datetime", combineDateAndTime(e.target.value, getTimePart(item.next_start_datetime) || getTimePart(item.start_datetime)))}
-                        />
-                      </div>
-                      {isAdmin && (
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-wider block">Next Start Time</label>
-                          <input
-                            type="time"
-                            className="w-full px-2 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-1 focus:ring-indigo-600 outline-none"
-                            value={getTimePart(item.next_start_datetime)}
-                            onChange={(e) => handleScheduledTimeChange(item, "next_start_datetime", e.target.value)}
-                          />
-                        </div>
-                      )}
-                      <div className="space-y-1">
-                        <label className="text-[8px] font-black text-gray-400 uppercase tracking-wider block">Next End Date</label>
-                        <input
-                          type="date"
-                          className="w-full px-2 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-1 focus:ring-indigo-600 outline-none"
-                          value={getDatePart(item.next_end_datetime)}
-                          onChange={(e) => handleScheduledFieldChange(item.taskId, "next_end_datetime", combineDateAndTime(e.target.value, getTimePart(item.next_end_datetime) || getTimePart(item.end_datetime)))}
-                        />
-                      </div>
-                      {isAdmin && (
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-black text-gray-400 uppercase tracking-wider block">Next End Time</label>
-                          <input
-                            type="time"
-                            className="w-full px-2 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-1 focus:ring-indigo-600 outline-none"
-                            value={getTimePart(item.next_end_datetime)}
-                            onChange={(e) => handleScheduledTimeChange(item, "next_end_datetime", e.target.value)}
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-1 relative">
-                      <label className="text-[8px] font-black text-gray-400 uppercase tracking-wider block">Next Manager</label>
-                      <input
-                        type="text"
-                        placeholder="Select Manager..."
-                        className="w-full px-2 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-1 focus:ring-indigo-600 outline-none"
-                        value={item.next_manager_name || ""}
-                        onChange={(e) => {
-                          handleScheduledFieldChange(item.taskId, "next_manager_name", e.target.value);
-                          setSearchDropdown({ type: "next_manager", id: item.taskId, term: e.target.value });
-                        }}
-                        onFocus={() => setSearchDropdown({ type: "next_manager", id: item.taskId, term: item.next_manager_name || "" })}
-                      />
-                      {searchDropdown.type === "next_manager" && searchDropdown.id === item.taskId && (
-                        <div className="absolute z-50 left-0 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-40 overflow-y-auto mt-1 top-full">
-                          {managerUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
-                            <div className="px-3 py-2 text-[10px] text-gray-400 font-semibold text-center">No managers found</div>
-                          ) : managerUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
-                            <button
-                              key={user.id}
-                              type="button"
-                              className="w-full text-left px-2.5 py-2 text-[10px] font-semibold text-gray-700 hover:bg-blue-50 flex items-center justify-between border-b border-gray-50 last:border-0"
-                              onClick={() => {
-                                handleScheduledFieldChange(item.taskId, "next_manager_name", user.user_name);
-                                setSearchDropdown({ type: null, id: null, term: "" });
-                              }}
-                            >
-                              <span>{user.user_name}</span>
-                              {item.next_manager_name === user.user_name && <Check size={10} className="text-blue-600" />}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-1 relative">
-                      <label className="text-[8px] font-black text-gray-400 uppercase tracking-wider block">Next Employee(s)</label>
-                      {item.next_employee_name && (
-                        <div className="flex flex-wrap gap-1 mb-1">
-                          {item.next_employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
-                            <span key={i} className="inline-flex items-center gap-1 px-1 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[8px] font-black border border-emerald-100 shadow-sm">
-                              {emp}
-                              <button
-                                type="button"
-                                className="hover:bg-emerald-200/50 rounded-full w-2.5 h-2.5 flex items-center justify-center text-emerald-800 transition-colors font-black text-[8px] leading-none"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleNextEmployee(item.taskId, emp, item.next_employee_name);
-                                }}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <input
-                        type="text"
-                        placeholder="Add employee..."
-                        className="w-full px-2 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-gray-700 focus:ring-1 focus:ring-indigo-600 outline-none"
-                        value={(searchDropdown.type === "next_employee" && searchDropdown.id === item.taskId) ? searchDropdown.term : ""}
-                        onChange={(e) => setSearchDropdown({ type: "next_employee", id: item.taskId, term: e.target.value })}
-                        onFocus={() => setSearchDropdown({ type: "next_employee", id: item.taskId, term: "" })}
-                      />
-                      {searchDropdown.type === "next_employee" && searchDropdown.id === item.taskId && (
-                        <div className="absolute z-50 left-0 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-40 overflow-y-auto mt-1 top-full">
-                          {employeeUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
-                            <div className="px-3 py-2 text-[10px] text-gray-400 font-semibold text-center">No employees found</div>
-                          ) : employeeUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
-                            const isSelected = item.next_employee_name?.split(',').map(e => e.trim()).filter(Boolean).includes(user.user_name);
-                            return (
-                              <button
-                                key={user.id}
-                                type="button"
-                                className={`w-full text-left px-2.5 py-2 text-[10px] font-semibold hover:bg-emerald-50 flex items-center justify-between border-b border-gray-50 last:border-0 ${isSelected ? 'bg-emerald-50/60 text-emerald-700' : 'text-gray-700'}`}
-                                onClick={() => toggleNextEmployee(item.taskId, user.user_name, item.next_employee_name)}
-                              >
-                                <span>{user.user_name}</span>
-                                {isSelected && <Check size={10} className="text-emerald-600" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Save Schedule button */}
-                    <div className="flex justify-end pt-2 border-t border-gray-200">
-                      <button
-                        type="button"
-                        onClick={() => handleSaveSchedule(item)}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black py-1.5 px-4 rounded-lg text-[10px] uppercase tracking-widest transition-all shadow-md hover:shadow-indigo-200"
-                      >
-                        <Save size={12} />
-                        Save Schedule
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}

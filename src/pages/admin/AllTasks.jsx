@@ -928,7 +928,7 @@ const AllTasks = () => {
         const submittableTasks = filteredPendingTasks.filter(t => {
           if (activeTab === "work") {
             const ds = getWorkTaskDynamicStatus(t, currentTime);
-            const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username;
+            const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username && t.name !== username;
             return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
           }
           // Use statusDateColumn instead of hardcoded ternary for robust support across all tabs (including work)
@@ -1580,7 +1580,7 @@ const AllTasks = () => {
                                 const submittableTasks = filteredPendingTasks.filter(t => {
                                   if (activeTab === "work") {
                                     const ds = getWorkTaskDynamicStatus(t, currentTime);
-                                    const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username;
+                                    const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username && t.name !== username;
                                     return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
                                   }
                                   const col = activeTab === "repair" ? "created_at" : "planned_date";
@@ -1647,7 +1647,7 @@ const AllTasks = () => {
                                         activeTab === "work"
                                           ? (() => {
                                             const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                            const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && task.manager_name === username;
+                                            const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && task.manager_name === username && task.name !== username;
                                             return ds === "UPCOMING" || ds === "NOT_DONE" || isAssignedByMe;
                                           })()
                                           : getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"
@@ -1996,7 +1996,7 @@ const AllTasks = () => {
                               const submittableTasks = filteredPendingTasks.filter(t => {
                                 if (activeTab === "work") {
                                   const ds = getWorkTaskDynamicStatus(t, currentTime);
-                                  const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username;
+                                  const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username && t.name !== username;
                                   return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
                                 }
                                 const col = activeTab === "repair" ? "created_at" : "planned_date";
@@ -2054,7 +2054,7 @@ const AllTasks = () => {
                                       activeTab === "work"
                                         ? (() => {
                                           const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                          const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && task.manager_name === username;
+                                          const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && task.manager_name === username && task.name !== username;
                                           return ds === "UPCOMING" || ds === "NOT_DONE" || isAssignedByMe;
                                         })()
                                         : getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"
