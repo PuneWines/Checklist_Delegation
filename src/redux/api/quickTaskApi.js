@@ -384,3 +384,167 @@ export const fetchChecklistHistory = async () => {
     return [];
   }
 };
+
+// Fetch unique work task assignments
+export const fetchWorkTaskData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all') => {
+  try {
+    const FETCH_LIMIT = 100000;
+    const role = (localStorage.getItem("role") || "").toLowerCase();
+    const username = localStorage.getItem("user-name");
+
+    let query = supabase
+      .from('task_assignments')
+      .select('*, master_work_tasks(*, shop(shop_name))')
+      .limit(FETCH_LIMIT);
+
+    if (role === 'user' && username) {
+      query = query.ilike('employee_name', `%${username}%`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error when fetching work task assignments:", error);
+      return { data: [], total: 0 };
+    }
+
+    // Map to a common format expected by the frontend
+    let mapped = (data || []).map(row => {
+      const master = row.master_work_tasks || {};
+      const shopName = master.shop?.shop_name || "N/A";
+      return {
+        ...row,
+        id: row.id,
+        assignment_id: row.id,
+        task_id: row.task_id,
+        task_description: master.task_name || "N/A",
+        shop_name: shopName,
+        shop: shopName,
+        name: row.employee_name,
+        given_by: row.manager_name,
+        duration: master.estimated_minutes ? `${Math.floor(master.estimated_minutes / 60).toString().padStart(2, '0')}:${(master.estimated_minutes % 60).toString().padStart(2, '0')}` : "00:00",
+        task_start_date: row.start_datetime,
+        end_datetime: row.end_datetime,
+        status: row.status
+      };
+    });
+
+    if (nameFilter) {
+      const term = nameFilter.toLowerCase();
+      mapped = mapped.filter(item => 
+        (item.task_description || '').toLowerCase().includes(term) ||
+        (item.name || '').toLowerCase().includes(term) ||
+        (item.given_by || '').toLowerCase().includes(term)
+      );
+    }
+
+    const start = page * pageSize;
+    const paginated = mapped.slice(start, start + pageSize);
+
+    return {
+      data: paginated,
+      total: mapped.length
+    };
+  } catch (error) {
+    console.error("Error fetching work task assignments:", error);
+    return { data: [], total: 0 };
+  }
+};
+
+// Update work task assignment and sync with work_task table
+export const updateWorkTaskAssignmentApi = async (updatedTask, originalTask) => {
+  try {
+    const durationMinutes = updatedTask.duration ? (
+      (() => {
+        const parts = updatedTask.duration.split(':');
+        if (parts.length === 2) {
+          return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+        }
+        return parseInt(updatedTask.duration, 10) || 0;
+      })()
+    ) : null;
+
+    const datesChanged = originalTask && (
+      originalTask.start_datetime !== updatedTask.start_datetime ||
+      originalTask.end_datetime !== updatedTask.end_datetime
+    );
+
+    const employeesChanged = originalTask && originalTask.name !== updatedTask.name;
+
+    const { data: updatedAsgn, error: asgnError } = await supabase
+      .from('task_assignments')
+      .update({
+        employee_name: updatedTask.name,
+        manager_name: updatedTask.given_by,
+        start_datetime: updatedTask.start_datetime,
+        end_datetime: updatedTask.end_datetime,
+        status: (datesChanged || employeesChanged) ? 'LOCKED' : updatedTask.status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', updatedTask.id)
+      .select()
+      .single();
+
+    if (asgnError) throw asgnError;
+
+    if (originalTask && originalTask.task_description !== updatedTask.task_description) {
+      const { error: masterError } = await supabase
+        .from('master_work_tasks')
+        .update({
+          task_name: updatedTask.task_description,
+          estimated_minutes: durationMinutes
+        })
+        .eq('id', updatedTask.task_id);
+      if (masterError) throw masterError;
+    } else if (durationMinutes !== null) {
+      const { error: masterError } = await supabase
+        .from('master_work_tasks')
+        .update({
+          estimated_minutes: durationMinutes
+        })
+        .eq('id', updatedTask.task_id);
+      if (masterError) throw masterError;
+    }
+
+    if (datesChanged || employeesChanged) {
+      const { error: deleteError } = await supabase
+        .from('work_task')
+        .delete()
+        .eq('assignment_id', updatedTask.id)
+        .is('submission_date', null);
+      if (deleteError) throw deleteError;
+    } else {
+      const { error: syncError } = await supabase
+        .from('work_task')
+        .update({
+          task_description: updatedTask.task_description
+        })
+        .eq('assignment_id', updatedTask.id)
+        .is('submission_date', null);
+      if (syncError) throw syncError;
+    }
+
+    return [updatedAsgn];
+  } catch (error) {
+    console.error("API Error updating work task assignment:", error);
+    throw error;
+  }
+};
+
+// Delete work task assignment and generated work tasks
+export const deleteWorkTaskAssignmentApi = async (tasks) => {
+  for (const task of tasks) {
+    const { error: taskError } = await supabase
+      .from('work_task')
+      .delete()
+      .eq('assignment_id', task.id);
+    if (taskError) throw taskError;
+
+    const { error: assignError } = await supabase
+      .from('task_assignments')
+      .delete()
+      .eq('id', task.id);
+    if (assignError) throw assignError;
+  }
+  return tasks;
+};

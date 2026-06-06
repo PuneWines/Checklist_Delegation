@@ -6,7 +6,10 @@ import {
   fetchDelegationData,
   fetchUsersData,
   updateChecklistTaskApi,
-  updateDelegationTaskApi
+  updateDelegationTaskApi,
+  fetchWorkTaskData,
+  updateWorkTaskAssignmentApi,
+  deleteWorkTaskAssignmentApi
 } from "../api/quickTaskApi";
 
 
@@ -83,11 +86,43 @@ export const updateDelegationTask = createAsyncThunk(
   }
 );
 
+export const uniqueWorkTaskData = createAsyncThunk(
+  'fetch/workTask',
+  async ({ page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all', append = false }) => {
+    const result = await fetchWorkTaskData(page, pageSize, nameFilter, dateFilter);
+    return { ...result, append };
+  }
+);
+
+export const updateWorkTaskAssignment = createAsyncThunk(
+  'update/workTask',
+  async ({ updatedTask, originalTask }, { rejectWithValue }) => {
+    try {
+      const result = await updateWorkTaskAssignmentApi(updatedTask, originalTask);
+      return result;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const deleteWorkTaskAssignment = createAsyncThunk(
+  'delete/workTask',
+  async (taskIds, { rejectWithValue }) => {
+    try {
+      return await deleteWorkTaskAssignmentApi(taskIds);
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 const quickTaskSlice = createSlice({
   name: 'quickTask',
   initialState: {
     quickTask: [],
     delegationTasks: [],
+    workTasks: [],
     users: [],
     error: null,
     loading: false,
@@ -97,6 +132,9 @@ const quickTaskSlice = createSlice({
     delegationPage: 0,
     delegationTotal: 0,
     delegationHasMore: true,
+    workPage: 0,
+    workTotal: 0,
+    workHasMore: true,
   },
   reducers: {
     resetChecklistPagination: (state) => {
@@ -108,6 +146,11 @@ const quickTaskSlice = createSlice({
       state.delegationTasks = [];
       state.delegationPage = 0;
       state.delegationHasMore = true;
+    },
+    resetWorkPagination: (state) => {
+      state.workTasks = [];
+      state.workPage = 0;
+      state.workHasMore = true;
     },
   },
   extraReducers: (builder) => {
@@ -247,10 +290,74 @@ const quickTaskSlice = createSlice({
       .addCase(updateDelegationTask.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      .addCase(uniqueWorkTaskData.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(uniqueWorkTaskData.fulfilled, (state, action) => {
+        state.loading = false;
+        const { data, total, append } = action.payload;
+        if (append) {
+          state.workTasks = [...state.workTasks, ...data];
+          state.workPage += 1;
+        } else {
+          state.workTasks = data;
+          state.workPage = 1;
+        }
+        state.workTotal = total;
+        state.workHasMore = state.workTasks.length < total;
+      })
+      .addCase(uniqueWorkTaskData.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(updateWorkTaskAssignment.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(updateWorkTaskAssignment.fulfilled, (state, action) => {
+        state.loading = false;
+        const updatedAsgns = action.payload;
+        if (Array.isArray(updatedAsgns)) {
+          updatedAsgns.forEach(updatedAsgn => {
+            const index = state.workTasks.findIndex(task => task.id === updatedAsgn.id);
+            if (index !== -1) {
+              state.workTasks[index] = {
+                ...state.workTasks[index],
+                employee_name: updatedAsgn.employee_name,
+                name: updatedAsgn.employee_name,
+                manager_name: updatedAsgn.manager_name,
+                given_by: updatedAsgn.manager_name,
+                start_datetime: updatedAsgn.start_datetime,
+                task_start_date: updatedAsgn.start_datetime,
+                end_datetime: updatedAsgn.end_datetime,
+                status: updatedAsgn.status
+              };
+            }
+          });
+        }
+      })
+      .addCase(updateWorkTaskAssignment.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(deleteWorkTaskAssignment.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(deleteWorkTaskAssignment.fulfilled, (state, action) => {
+        state.loading = false;
+        const deletedIds = action.payload.map(t => t.id);
+        state.workTasks = state.workTasks.filter(
+          task => !deletedIds.includes(task.id)
+        );
+      })
+      .addCase(deleteWorkTaskAssignment.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
   },
 });
 
-export const { resetChecklistPagination, resetDelegationPagination } = quickTaskSlice.actions;
+export const { resetChecklistPagination, resetDelegationPagination, resetWorkPagination } = quickTaskSlice.actions;
 export default quickTaskSlice.reducer;
 

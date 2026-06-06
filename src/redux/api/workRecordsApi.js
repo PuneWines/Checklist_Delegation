@@ -420,7 +420,7 @@ export const checkAndPromoteAssignmentsApi = async () => {
     for (const asgn of assignments) {
       // Check if current assignment is expired (end_datetime passed) OR is null
       const isExpired = !asgn.end_datetime || new Date(asgn.end_datetime) < now;
-      
+
       if (isExpired && asgn.next_start_datetime && asgn.next_end_datetime) {
         promoted.push(asgn);
       }

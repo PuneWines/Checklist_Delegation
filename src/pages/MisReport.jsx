@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { fetchStaffTasksDataApi, getStaffTasksCountApi, getTotalUsersCountApi } from "../redux/api/dashboardApi"
 import AdminLayout from '../components/layout/AdminLayout';
+import supabase from '../SupabaseClient';
 
 function StaffTasksPage() {
     const [dashboardStaffFilter, setDashboardStaffFilter] = useState("all")
@@ -37,6 +38,15 @@ function StaffTasksPage() {
     const [availableStaff, setAvailableStaff] = useState([])
     const [searchQuery, setSearchQuery] = useState("")
     const itemsPerPage = 50
+
+    const [selectedStaff, setSelectedStaff] = useState(null)
+    const [modalData, setModalData] = useState([])
+    const [isModalLoading, setIsModalLoading] = useState(false)
+
+    const [selectedModule, setSelectedModule] = useState(null)
+    const [rawTasks, setRawTasks] = useState([])
+    const [subModalFilter, setSubModalFilter] = useState("all")
+    const [isSubModalLoading, setIsSubModalLoading] = useState(false)
 
     const userRole = localStorage.getItem("role")
     const username = localStorage.getItem("user-name")
@@ -374,6 +384,214 @@ function StaffTasksPage() {
         );
     };
 
+    const getInitials = (name) => {
+        if (!name) return "";
+        const parts = name.trim().split(/\s+/);
+        if (parts.length >= 2) {
+            return (parts[0][0] + parts[1][0]).toUpperCase();
+        }
+        return name.slice(0, 2).toUpperCase();
+    };
+
+    // Format a raw ISO date string as DD/MM/YYYY HH:mm:ss
+    const formatDateTime = (dateStr) => {
+        if (!dateStr) return "—";
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return "—";
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+
+    // Calculate delay as HH:mm:ss between planned and actual (actual - planned)
+    const calcDelay = (plannedStr, actualStr) => {
+        if (!plannedStr || !actualStr) return null;
+        const planned = new Date(plannedStr);
+        const actual = new Date(actualStr);
+        if (isNaN(planned.getTime()) || isNaN(actual.getTime())) return null;
+        const diffMs = actual.getTime() - planned.getTime();
+        if (diffMs <= 0) return null; // on time or early
+        const totalSecs = Math.floor(diffMs / 1000);
+        const h = Math.floor(totalSecs / 3600);
+        const m = Math.floor((totalSecs % 3600) / 60);
+        const s = totalSecs % 60;
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    };
+
+    // Format a date string (YYYY-MM-DD or ISO timestamp) as DD/MM/YYYY
+    const formatDateOnly = (dateStr) => {
+        if (!dateStr) return "—";
+        if (typeof dateStr === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+            const [y, m, d] = dateStr.split("-");
+            return `${d}/${m}/${y}`;
+        }
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return "—";
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    };
+
+    // Calculate delay in days between planned and actual (date-only comparison)
+    const calcDayDelay = (plannedStr, actualStr) => {
+        if (!plannedStr || !actualStr) return null;
+        const planned = new Date(plannedStr);
+        const actual = new Date(actualStr);
+        if (isNaN(planned.getTime()) || isNaN(actual.getTime())) return null;
+
+        // Reset times to midnight to calculate pure day difference
+        const plannedDay = new Date(planned.getFullYear(), planned.getMonth(), planned.getDate());
+        const actualDay = new Date(actual.getFullYear(), actual.getMonth(), actual.getDate());
+
+        const diffMs = actualDay.getTime() - plannedDay.getTime();
+        if (diffMs <= 0) return null; // on time or early
+
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        return `${diffDays} Day${diffDays > 1 ? 's' : ''}`;
+    };
+
+    // Determine per-task status: 'ontime', 'delay', 'pending'
+    const getTaskStatus = (task, moduleId) => {
+        const planned = task.planned_date || task.task_start_date || task.current_date;
+        const actual = task.submission_date;
+        if (!actual) return "pending";
+        const plannedDate = new Date(planned);
+        const actualDate = new Date(actual);
+        // Compare date only (ignore time) for on-time check
+        const plannedDay = new Date(plannedDate.getFullYear(), plannedDate.getMonth(), plannedDate.getDate());
+        const actualDay = new Date(actualDate.getFullYear(), actualDate.getMonth(), actualDate.getDate());
+        return actualDay <= plannedDay ? "ontime" : "delay";
+    };
+
+    const MODULE_TABLE_MAP = {
+        checklist: "checklist",
+        delegation: "delegation",
+        work: "work_task",
+        maintenance: "maintenance_tasks",
+        repair: "repair_tasks",
+        ea: "ea_tasks",
+    };
+
+    const MODULE_NAME_FIELD = {
+        checklist: "name",
+        delegation: "name",
+        work: "name",
+        maintenance: "name",
+        repair: "assigned_person",
+        ea: "doer_name",
+    };
+
+    const MODULE_DATE_COL = {
+        checklist: "planned_date",
+        delegation: "planned_date",
+        work: "current_date",
+        maintenance: "planned_date",
+        repair: "created_at",
+        ea: "planned_date",
+    };
+
+    // Modules whose date column stores bare dates (YYYY-MM-DD) vs ISO timestamps
+    const MODULE_DATE_IS_DATEONLY = new Set(["checklist", "work"]);
+
+    const MODULE_TASK_LABEL_FIELD = {
+        checklist: "task_description",
+        delegation: "task_description",
+        work: "task_description",
+        maintenance: "task_description",
+        repair: "issue_description",
+        ea: "task_description",
+    };
+
+    const handleModuleRowClick = async (row) => {
+        setSelectedModule(row);
+        setSubModalFilter("all");
+        setRawTasks([]);
+        setIsSubModalLoading(true);
+
+        try {
+            const table = MODULE_TABLE_MAP[row.id];
+            const nameField = MODULE_NAME_FIELD[row.id];
+            const dateCol = MODULE_DATE_COL[row.id];
+            const staffName = selectedStaff?.name;
+
+            if (!table || !staffName) return;
+
+            const { data, error } = await supabase
+                .from(table)
+                .select("*")
+                .eq(nameField, staffName)
+                .gte(dateCol, MODULE_DATE_IS_DATEONLY.has(row.id) ? startDate : `${startDate}T00:00:00`)
+                .lte(dateCol, MODULE_DATE_IS_DATEONLY.has(row.id) ? endDate : `${endDate}T23:59:59`)
+                .order(dateCol, { ascending: true });
+
+            if (error) throw error;
+            setRawTasks(data || []);
+        } catch (err) {
+            console.error("Error fetching raw tasks:", err);
+            setRawTasks([]);
+        } finally {
+            setIsSubModalLoading(false);
+        }
+    };
+
+    const handleRowClick = async (staff) => {
+        setSelectedStaff(staff);
+        setIsModalLoading(true);
+        setModalData([]);
+
+        try {
+            const modules = [
+                { id: "checklist", label: "Checklist", fmsName: "All Checklist & Delegation", dept: "Checklist & Delegation" },
+                { id: "delegation", label: "Delegation", fmsName: "All Checklist & Delegation", dept: "Checklist & Delegation" },
+                { id: "work", label: "Work Task", fmsName: "All Work Task", dept: "Work Task" },
+                { id: "maintenance", label: "Maintenance", fmsName: "All Maintenance", dept: "Maintenance" },
+                { id: "repair", label: "Repair", fmsName: "All Repair", dept: "Repair" },
+                { id: "ea", label: "EA", fmsName: "All EA", dept: "EA" }
+            ];
+
+            const results = await Promise.all(
+                modules.map(mod => 
+                    fetchStaffTasksDataApi(mod.id, staff.name, null, 1, 100, null, startDate, endDate)
+                )
+            );
+
+            const yearSuffix = startDate ? ` ${new Date(startDate).getFullYear()}` : "";
+            const rows = [];
+
+            modules.forEach((mod, index) => {
+                const data = results[index] || [];
+                const staffSum = data.find(item => item.name?.toLowerCase() === staff.name?.toLowerCase());
+
+                if (staffSum && staffSum.total_tasks > 0) {
+                    const target = staffSum.total_tasks;
+                    const achievement = staffSum.total_completed_tasks;
+                    const doneOnTime = staffSum.total_done_on_time;
+                    
+                    const workNotDone = target > 0 ? ((achievement - target) / target) * 100 : 0;
+                    const workNotDoneOnTime = target > 0 ? ((doneOnTime - target) / target) * 100 : 0;
+                    const pending = target - achievement;
+
+                    rows.push({
+                        id: mod.id,
+                        fmsName: `${mod.fmsName}${yearSuffix}`,
+                        taskName: `${mod.label} Task - ${staff.name}`,
+                        department: mod.dept,
+                        target,
+                        achievement,
+                        workNotDone,
+                        workNotDoneOnTime,
+                        pending
+                    });
+                }
+            });
+
+            setModalData(rows);
+        } catch (error) {
+            console.error("Error loading staff task details:", error);
+        } finally {
+            setIsModalLoading(false);
+        }
+    };
+
     const handleExportCSV = () => {
         if (filteredStaffMembers.length === 0) return;
 
@@ -626,7 +844,11 @@ function StaffTasksPage() {
                                                     const workNotDoneOnTime = staff.totalTasks > 0 ? Math.round(((staff.totalTasks - staff.doneOnTime) / staff.totalTasks) * 100) : 0;
 
                                                     return (
-                                                        <tr key={`${staff.name}-${index}`} className="hover:bg-gray-50">
+                                                        <tr 
+                                                            key={`${staff.name}-${index}`} 
+                                                            className="hover:bg-gray-50 cursor-pointer"
+                                                            onClick={() => handleRowClick(staff)}
+                                                        >
                                                             <td className="px-6 py-4 whitespace-nowrap">
                                                                 <div>
                                                                     <div className="text-sm font-semibold text-gray-900">{staff.name}</div>
@@ -726,6 +948,303 @@ function StaffTasksPage() {
                     </div>
                 </div>
             </div>
+
+            {selectedStaff && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div id="printable-modal-area" className="bg-white rounded-lg shadow-2xl border border-gray-200 max-w-5xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+                        {/* Modal Header */}
+                        <div className="p-6 flex items-center justify-between border-b border-gray-100 no-print">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-lg shadow-sm">
+                                    {getInitials(selectedStaff.name)}
+                                </div>
+                                <h2 className="text-xl font-bold text-gray-900">{selectedStaff.name}</h2>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {/* PRINT BUTTON — commented out
+                                <button
+                                    onClick={() => window.print()}
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-3a2 2 0 00-2-2H9a2 2 0 00-2 2v3a2 2 0 002 2zm5-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h6z"></path>
+                                    </svg>
+                                    Print Tasks
+                                </button>
+                                */}
+                                <button
+                                    onClick={() => setSelectedStaff(null)}
+                                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Print-only Header (hidden on screen, shown in print) */}
+                        <div className="hidden print:flex items-center gap-4 p-6 border-b border-gray-300">
+                            <div className="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xl border border-gray-400">
+                                {getInitials(selectedStaff.name)}
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-950">{selectedStaff.name}</h2>
+                                <p className="text-xs text-gray-500">Staff Task Performance Details (Period: {dateStartFormatted} - {dateEndFormatted})</p>
+                            </div>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Task Details</h3>
+                            {isModalLoading ? (
+                                <div className="py-20 flex flex-col items-center justify-center gap-3">
+                                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"></div>
+                                    <p className="text-sm text-gray-500 font-medium">Loading task details...</p>
+                                </div>
+                            ) : modalData.length === 0 ? (
+                                <div className="py-12 text-center text-gray-500">
+                                    No detailed task data found for {selectedStaff.name} in this period.
+                                </div>
+                            ) : (
+                                <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                {["FMS Name", "Task Name", "Department", "Target", "Total Achievement", "% Work Not Done", "% Work Not Done On Time", "All Pending Till Date"].map((hdr, idx) => (
+                                                    <th 
+                                                        key={hdr} 
+                                                        scope="col" 
+                                                        className={`px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider ${
+                                                            idx < 3 ? "text-left" : "text-center"
+                                                        }`}
+                                                    >
+                                                        {hdr}
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {modalData.map((row) => (
+                                                <tr
+                                                    key={row.id}
+                                                    className="hover:bg-blue-50/40 transition-colors cursor-pointer"
+                                                    onClick={() => handleModuleRowClick(row)}
+                                                    title="Click to view individual tasks"
+                                                >
+                                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 font-medium text-left">{row.fmsName}</td>
+                                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-700 font-semibold text-left underline-offset-2 hover:underline">{row.taskName}</td>
+                                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-medium text-left">{row.department}</td>
+                                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-bold text-center">{row.target}</td>
+                                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-center">
+                                                        <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                                                            row.achievement < row.target
+                                                                ? "bg-red-50 text-red-700 border border-red-200"
+                                                                : "bg-green-50 text-green-700 border border-green-200"
+                                                        }`}>
+                                                            {row.achievement}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700 font-bold text-center">
+                                                        {row.workNotDone === 0 ? "0" : `${row.workNotDone > 0 ? "+" : ""}${Number(row.workNotDone.toFixed(2))}`}
+                                                    </td>
+                                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700 font-bold text-center">
+                                                        {row.workNotDoneOnTime === 0 ? "0" : `${row.workNotDoneOnTime > 0 ? "+" : ""}${Number(row.workNotDoneOnTime.toFixed(2))}`}
+                                                    </td>
+                                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-950 font-bold text-center">{row.pending}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end no-print">
+                            <button
+                                onClick={() => setSelectedStaff(null)}
+                                className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-700 text-sm font-semibold rounded-md border border-gray-300 hover:border-gray-400 transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Sub-Modal: Individual Task List ── */}
+            {selectedModule && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-3xl w-full flex flex-col overflow-hidden max-h-[88vh]">
+                        {/* Sub-Modal Header */}
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
+                            <div>
+                                <h2 className="text-base font-bold text-gray-900">Total Achievement Details</h2>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                    {selectedModule.taskName}
+                                    {" • "}
+                                    <span className="font-semibold text-blue-600">
+                                        Total Tasks: {rawTasks.length}
+                                    </span>
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                {/* Filter Pills */}
+                                {["all", "ontime", "pending", "delay"].map((f) => (
+                                    <button
+                                        key={f}
+                                        onClick={() => setSubModalFilter(f)}
+                                        className={`px-3 py-1 rounded text-xs font-bold transition-colors border ${
+                                            subModalFilter === f
+                                                ? f === "all"
+                                                    ? "bg-gray-800 text-white border-gray-800"
+                                                    : f === "ontime"
+                                                    ? "bg-green-600 text-white border-green-600"
+                                                    : f === "pending"
+                                                    ? "bg-amber-500 text-white border-amber-500"
+                                                    : "bg-orange-500 text-white border-orange-500"
+                                                : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
+                                        }`}
+                                    >
+                                        {f === "all" ? "All" : f === "ontime" ? "On Time" : f === "pending" ? "Pending" : "Delay"}
+                                    </button>
+                                ))}
+                                <button
+                                    onClick={() => setSelectedModule(null)}
+                                    className="ml-1 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Sub-Modal Body */}
+                        <div className="overflow-y-auto flex-1">
+                            {isSubModalLoading ? (
+                                <div className="py-16 flex flex-col items-center justify-center gap-3">
+                                    <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-blue-600"></div>
+                                    <p className="text-sm text-gray-500">Loading tasks...</p>
+                                </div>
+                            ) : rawTasks.length === 0 ? (
+                                <div className="py-12 text-center text-gray-500 text-sm">
+                                    No tasks found for {selectedStaff?.name} in this period.
+                                </div>
+                            ) : (() => {
+                                const filtered = rawTasks.filter(task => {
+                                    if (subModalFilter === "all") return true;
+                                    const status = getTaskStatus(task, selectedModule.id);
+                                    return status === subModalFilter;
+                                });
+                                const labelField = MODULE_TASK_LABEL_FIELD[selectedModule.id] || "task_description";
+                                const plannedField = MODULE_DATE_COL[selectedModule.id] || "planned_date";
+                                return (
+                                    <table className="min-w-full">
+                                        <thead className="bg-gray-50 sticky top-0 z-10">
+                                            <tr>
+                                                <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Task Name</th>
+                                                <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Planned</th>
+                                                <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Actual</th>
+                                                <th className="px-5 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Delay</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-orange-50">
+                                            {filtered.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-400">
+                                                        No tasks match the selected filter.
+                                                    </td>
+                                                </tr>
+                                            ) : filtered.map((task, idx) => {
+                                                const isWorkModule = selectedModule.id === "work";
+                                                const planned = task[plannedField] || task.planned_date || task.task_start_date;
+                                                const actual = task.submission_date;
+                                                const delay = isWorkModule
+                                                    ? calcDayDelay(planned, actual)
+                                                    : calcDelay(planned, actual);
+                                                const status = getTaskStatus(task, selectedModule.id);
+                                                const taskLabel = task[labelField] || task.task_description || task.issue_description || "(no description)";
+                                                return (
+                                                    <tr
+                                                        key={task.task_id || task.id || idx}
+                                                        className="bg-orange-50/40 hover:bg-orange-50/80 transition-colors"
+                                                    >
+                                                        <td className="px-5 py-3.5">
+                                                            <span className="text-[11px] font-semibold text-gray-800 uppercase tracking-wide">
+                                                                • {taskLabel}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-5 py-3.5 whitespace-nowrap">
+                                                            <span className="text-xs text-gray-700 font-mono">
+                                                                {isWorkModule ? formatDateOnly(planned) : formatDateTime(planned)}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-5 py-3.5 whitespace-nowrap">
+                                                            {actual ? (
+                                                                <span className="text-xs text-gray-700 font-mono">{formatDateTime(actual)}</span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">Pending</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-5 py-3.5 whitespace-nowrap">
+                                                            {delay ? (
+                                                                <span className={`text-xs font-bold font-mono ${
+                                                                    isWorkModule ? "text-red-600" : "text-orange-600"
+                                                                }`}>{delay}</span>
+                                                            ) : status === "pending" ? (
+                                                                <span className="text-xs text-gray-400">—</span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 border border-green-200">On Time</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Sub-Modal Footer */}
+                        <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+                            <button
+                                onClick={() => setSelectedModule(null)}
+                                className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-700 text-sm font-semibold rounded-md border border-gray-300 hover:border-gray-400 transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Dynamic CSS Print Styles */}
+            <style dangerouslySetInnerHTML={{__html: `
+                @media print {
+                    body > * {
+                        display: none !important;
+                    }
+                    #printable-modal-area {
+                        display: block !important;
+                        position: absolute;
+                        left: 0;
+                        top: 0;
+                        width: 100%;
+                        border: none !important;
+                        box-shadow: none !important;
+                        max-height: none !important;
+                        background: white;
+                        color: black;
+                        z-index: 9999;
+                    }
+                    .no-print {
+                        display: none !important;
+                    }
+                }
+            `}} />
         </AdminLayout>
     );
 }

@@ -6,7 +6,21 @@ import { Search, ChevronDown, Filter, Trash2, Edit, Save, X, Play, Pause, Mic, S
 import AdminLayout from "../components/layout/AdminLayout";
 import DelegationPage from "./delegation-data";
 import { useDispatch, useSelector } from "react-redux";
-import { deleteChecklistTask, deleteDelegationTask, uniqueChecklistTaskData, uniqueDelegationTaskData, updateChecklistTask, updateDelegationTask, fetchUsers, resetChecklistPagination, resetDelegationPagination } from "../redux/slice/quickTaskSlice";
+import {
+  deleteChecklistTask,
+  deleteDelegationTask,
+  uniqueChecklistTaskData,
+  uniqueDelegationTaskData,
+  updateChecklistTask,
+  updateDelegationTask,
+  fetchUsers,
+  resetChecklistPagination,
+  resetDelegationPagination,
+  uniqueWorkTaskData,
+  updateWorkTaskAssignment,
+  deleteWorkTaskAssignment,
+  resetWorkPagination
+} from "../redux/slice/quickTaskSlice";
 import { maintenanceData, deleteMaintenanceTask, updateMaintenanceTask } from "../redux/slice/maintenanceSlice";
 import { fetchUniqueShopDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../redux/api/assignTaskApi";
 import { fetchCustomDropdownsApi } from "../redux/api/settingApi";
@@ -64,6 +78,7 @@ export default function QuickTask() {
   const [editFormData, setEditFormData] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isEmployeeDropdownOpen, setIsEmployeeDropdownOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [recordedAudio, setRecordedAudio] = useState(null);
 
@@ -91,11 +106,14 @@ export default function QuickTask() {
     quickTask,
     loading,
     delegationTasks,
-    users,                    // Add this
-    checklistPage,            // Add this
-    checklistHasMore,         // Add this
-    delegationPage,           // Add this
-    delegationHasMore         // Add this
+    workTasks,
+    users,
+    checklistPage,
+    checklistHasMore,
+    delegationPage,
+    delegationHasMore,
+    workPage,
+    workHasMore
   } = useSelector((state) => state.quickTask);
 
   const {
@@ -147,6 +165,9 @@ export default function QuickTask() {
         dispatch(uniqueDelegationTaskData({ page: 0, pageSize: 50, dateFilter, nameFilter: searchTerm }));
       } else if (activeTab === 'maintenance') {
         dispatch(maintenanceData({ page: 1, frequency: freqFilter, searchTerm: searchTerm }));
+      } else if (activeTab === 'work') {
+        dispatch(resetWorkPagination());
+        dispatch(uniqueWorkTaskData({ page: 0, pageSize: 50, dateFilter, nameFilter: searchTerm }));
       }
     }, 500);
 
@@ -178,9 +199,16 @@ export default function QuickTask() {
         dispatch(maintenanceData({
           page: maintenancePage + 1
         }));
+      } else if (activeTab === 'work' && workHasMore) {
+        dispatch(uniqueWorkTaskData({
+          page: workPage,
+          pageSize: 50,
+          append: true,
+          nameFilter: searchTerm
+        }));
       }
     }
-  }, [loading, maintenanceLoading, activeTab, checklistHasMore, delegationHasMore, maintenanceHasMore, checklistPage, delegationPage, maintenancePage, dispatch]);
+  }, [loading, maintenanceLoading, activeTab, checklistHasMore, delegationHasMore, maintenanceHasMore, workHasMore, checklistPage, delegationPage, workPage, maintenancePage, dispatch, searchTerm]);
 
   // Options for Maintenance dropdowns
   const machineOptions = useMemo(() =>
@@ -247,6 +275,24 @@ export default function QuickTask() {
         instruction_attachment_type: instructionTypes,
         originalAudioUrl: task.audio_url || (isAudioUrl(task.task_description) ? task.task_description : null),
       });
+    } else if (activeTab === 'work') {
+      setEditFormData({
+        id: task.id,
+        assignment_id: task.id,
+        task_id: task.task_id,
+        shop: task.shop || task.shop_name || '',
+        given_by: task.given_by || '',
+        name: task.name || '',
+        task_description: task.task_description || '',
+        audio_url: task.audio_url || null,
+        task_start_date: task.task_start_date || '',
+        end_datetime: task.end_datetime || '',
+        duration: task.duration || '',
+        status: task.status || '',
+        instruction_attachment_url: instructionUrls,
+        instruction_attachment_type: instructionTypes,
+        originalAudioUrl: task.audio_url || (isAudioUrl(task.task_description) ? task.task_description : null),
+      });
     } else {
       setEditFormData({
         id: task.id,
@@ -274,6 +320,7 @@ export default function QuickTask() {
     setEditFormData({});
     setRecordedAudio(null);
     setIsEditModalOpen(false);
+    setIsEmployeeDropdownOpen(false);
   };
 
   const handleSaveEdit = async () => {
@@ -372,6 +419,18 @@ export default function QuickTask() {
             task_description: originalTask.task_description
           } : null
         })).unwrap();
+      } else if (activeTab === 'work') {
+        const originalTask = workTasks.find(task => task.id === editFormData.id);
+        await dispatch(updateWorkTaskAssignment({
+          updatedTask: finalEditData,
+          originalTask: originalTask ? {
+            name: originalTask.name,
+            given_by: originalTask.given_by,
+            task_description: originalTask.task_description,
+            start_datetime: originalTask.task_start_date || originalTask.start_datetime,
+            end_datetime: originalTask.end_datetime
+          } : null
+        })).unwrap();
       } else {
         // Find the original task data for matching (only for checklist currently)
         const originalTask = quickTask.find(task => task.id === editFormData.id);
@@ -402,6 +461,7 @@ export default function QuickTask() {
       setEditingTaskId(null);
       setEditFormData({});
       setRecordedAudio(null);
+      setIsEmployeeDropdownOpen(false);
 
       showToast("Task updated successfully!", "success");
 
@@ -412,6 +472,8 @@ export default function QuickTask() {
         dispatch(maintenanceData({ page: 1, frequency: freqFilter, searchTerm: searchTerm }));
       } else if (activeTab === 'delegation') {
         dispatch(uniqueDelegationTaskData({ page: 0, pageSize: 50, dateFilter, nameFilter: searchTerm }));
+      } else if (activeTab === 'work') {
+        dispatch(uniqueWorkTaskData({ page: 0, pageSize: 50, dateFilter, nameFilter: searchTerm }));
       }
 
     } catch (error) {
@@ -489,7 +551,8 @@ export default function QuickTask() {
     const currentTasks =
       activeTab === 'checklist' ? filteredChecklistTasks :
         activeTab === 'maintenance' ? filteredMaintenance :
-          activeTab === 'delegation' ? filteredDelegationTasks : [];
+          activeTab === 'delegation' ? filteredDelegationTasks :
+            activeTab === 'work' ? filteredWorkTasks : [];
 
     if (selectedTasks.length === currentTasks.length && currentTasks.length > 0) {
       setSelectedTasks([]);
@@ -512,6 +575,9 @@ export default function QuickTask() {
       } else if (activeTab === 'delegation') {
         await dispatch(deleteDelegationTask(selectedTasks)).unwrap();
         dispatch(uniqueDelegationTaskData({}));
+      } else if (activeTab === 'work') {
+        await dispatch(deleteWorkTaskAssignment(selectedTasks)).unwrap();
+        dispatch(uniqueWorkTaskData({}));
       }
       showToast(`${selectedTasks.length} task(s) deleted successfully!`, "success");
       setSelectedTasks([]);
@@ -579,6 +645,39 @@ export default function QuickTask() {
     return Array.from(freqs).sort();
   }, [quickTask, delegationTasks, maintenance]);
 
+
+  const filteredWorkTasks = useMemo(() => {
+    const searched = workTasks.filter(task => {
+      if (!searchTerm) return true;
+      const term = searchTerm.toLowerCase();
+      return (
+        (task.task_description || '').toLowerCase().includes(term) ||
+        (task.name || '').toLowerCase().includes(term) ||
+        (task.given_by || '').toLowerCase().includes(term)
+      );
+    });
+
+    const seen = new Set();
+    const unique = searched.filter(task => {
+      const key = `${task.id}::${(task.task_description || '').trim()}::${(task.name || '').trim()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return [...unique].sort((a, b) => {
+      if (sortConfig.key) {
+        const valA = a[sortConfig.key];
+        const valB = b[sortConfig.key];
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      }
+      const dateA = new Date(a.task_start_date || 0);
+      const dateB = new Date(b.task_start_date || 0);
+      return dateA - dateB;
+    });
+  }, [workTasks, sortConfig, searchTerm]);
 
   const filteredChecklistTasks = useMemo(() => {
     const seen = new Set();
@@ -674,7 +773,9 @@ export default function QuickTask() {
                     ? `Showing ${quickTask.length} checklist tasks`
                     : activeTab === 'maintenance'
                       ? `Showing ${filteredMaintenance.length} maintenance tasks`
-                      : `Showing delegation tasks`}
+                      : activeTab === 'work'
+                        ? `Showing ${filteredWorkTasks.length} work tasks`
+                        : `Showing delegation tasks`}
                 </p>
               </div>
 
@@ -694,7 +795,8 @@ export default function QuickTask() {
               {[
                 { id: 'checklist', label: 'Checklist' },
                 { id: 'delegation', label: 'Delegation' },
-                { id: 'maintenance', label: 'Maintenance' }
+                { id: 'maintenance', label: 'Maintenance' },
+                { id: 'work', label: 'Work' }
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -713,6 +815,9 @@ export default function QuickTask() {
                     } else if (tab.id === 'delegation') {
                       dispatch(resetDelegationPagination());
                       dispatch(uniqueDelegationTaskData({ page: 0, pageSize: 50, dateFilter }));
+                    } else if (tab.id === 'work') {
+                      dispatch(resetWorkPagination());
+                      dispatch(uniqueWorkTaskData({ page: 0, pageSize: 50, dateFilter }));
                     } else {
                       dispatch(maintenanceData({ page: 1, frequency: freqFilter, searchTerm: searchTerm }));
                     }
@@ -1200,6 +1305,192 @@ export default function QuickTask() {
                 </div>
               </div>
             </div>
+          ) : activeTab === 'work' ? (
+            <div className="mt-4 rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden animate-in fade-in duration-200">
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-4">
+                <h2 className="text-purple-700 font-medium">Work Tasks</h2>
+                <div className="flex items-center gap-2">
+                  {loading && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-purple-600"></div>}
+                  <p className="text-purple-600 text-sm">Showing unique active work task assignments</p>
+                </div>
+              </div>
+              <div className="overflow-x-auto" ref={tableContainerRef}>
+                {/* Desktop View */}
+                <table className="hidden md:table min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50 sticky top-0 z-20">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                        <input
+                          type="checkbox"
+                          checked={filteredWorkTasks.length > 0 && filteredWorkTasks.every(t => selectedTasks.find(s => s.id === t.id))}
+                          onChange={handleSelectAll}
+                          className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                        />
+                      </th>
+                      {[
+                        { label: 'Actions' },
+                        { label: 'Task ID' },
+                        { label: 'Task Description', minWidth: 'min-w-[200px]' },
+                        { label: 'Shop Name' },
+                        { label: 'Assign From' },
+                        { label: 'Assignee (Doer)' },
+                        { label: 'Start Time', bg: 'bg-yellow-50' },
+                        { label: 'End Time' },
+                        { label: 'Duration' },
+                        { label: 'Status' }
+                      ].map((column) => (
+                        <th
+                          key={column.label}
+                          className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${column.bg || ''} ${column.minWidth || ''}`}
+                        >
+                          {column.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredWorkTasks.length > 0 ? (
+                      filteredWorkTasks.map((task, index) => (
+                        <tr key={index} className={`hover:bg-gray-50 ${selectedTasks.find(t => t.id === task.id) ? "bg-purple-50" : ""}`}>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={!!selectedTasks.find(t => t.id === task.id)}
+                              onChange={() => handleCheckboxChange(task)}
+                              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            />
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <button
+                              onClick={() => handleEditClick(task)}
+                              className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                            >
+                              <Edit size={14} />
+                              Edit
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {task.task_id}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500 min-w-[200px] max-w-[400px]">
+                            <RenderDescription
+                              text={task.task_description}
+                              audioUrl={task.audio_url}
+                              instructionUrl={task.instruction_attachment_url}
+                              instructionType={task.instruction_attachment_type}
+                            />
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {task.shop_name || task.shop || '—'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {task.given_by || '—'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {task.name || '—'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-yellow-50">
+                            {formatDate(task.task_start_date)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatDate(task.end_datetime)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {task.duration ? (
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                ⏱ {task.duration}
+                              </span>
+                            ) : "—"}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span className={`px-2 py-1 rounded-full text-xs ${task.status === 'GENERATED' ? 'bg-indigo-100 text-indigo-800' :
+                              task.status === 'LOCKED' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                              {task.status || 'Active'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={11} className="px-6 py-4 text-center text-gray-500">
+                          No work tasks found
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Mobile View - Work Cards */}
+                <div className="md:hidden divide-y divide-gray-100">
+                  {filteredWorkTasks.length > 0 ? (
+                    filteredWorkTasks.map((task, index) => (
+                      <div key={index} className={`p-5 bg-white space-y-4 ${selectedTasks.find(t => t.id === task.id) ? "bg-purple-50/50" : ""}`}>
+                        <div className="flex justify-between items-start gap-4">
+                          <input
+                            type="checkbox"
+                            checked={!!selectedTasks.find(t => t.id === task.id)}
+                            onChange={() => handleCheckboxChange(task)}
+                            className="mt-1 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          />
+                          <div className="flex-grow min-w-0">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[10px] font-black text-purple-500 uppercase tracking-wider">#{task.id}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tight ${task.status === 'GENERATED' ? 'bg-indigo-100 text-indigo-800' :
+                                task.status === 'LOCKED' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                                {task.status || 'Active'}
+                              </span>
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-gray-800 leading-tight mb-3">
+                                <RenderDescription
+                                  text={task.task_description}
+                                  audioUrl={task.audio_url}
+                                  instructionUrl={task.instruction_attachment_url}
+                                  instructionType={task.instruction_attachment_type}
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Shop</span>
+                                  <div className="text-xs font-bold text-gray-700">{task.shop_name || task.shop || '—'}</div>
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Assign From</span>
+                                  <div className="text-xs font-bold text-gray-700">{task.given_by || '—'}</div>
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Assignee</span>
+                                  <div className="text-xs font-bold text-gray-700">{task.name || '—'}</div>
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Start Time</span>
+                                  <div className="text-xs font-bold text-gray-700">{formatDate(task.task_start_date)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleEditClick(task)}
+                            className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95"
+                          >
+                            <Edit size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-gray-400 text-sm font-bold">No work tasks found</div>
+                  )}
+                </div>
+
+                {loading && workHasMore && (
+                  <div className="text-center py-4">
+                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-purple-500"></div>
+                    <p className="text-purple-600 text-sm mt-2">Loading more tasks...</p>
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             <DelegationPage
               searchTerm={searchTerm}
@@ -1385,6 +1676,146 @@ export default function QuickTask() {
                           <option value="Weekly">Weekly</option>
                           <option value="Monthly">Monthly</option>
                           <option value="Manual">Manual</option>
+                        </select>
+                      </div>
+                    </>
+                  ) : activeTab === 'work' ? (
+                    <>
+                      <div className="space-y-1.5 text-gray-400">
+                        <label className="text-[10px] font-bold uppercase tracking-wider">Shop Name (Read-only)</label>
+                        <input
+                          type="text"
+                          value={editFormData.shop || ''}
+                          className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+                          disabled
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Assign From (Given By)</label>
+                        <select
+                          value={editFormData.given_by || ''}
+                          onChange={(e) => handleInputChange('given_by', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                        >
+                          <option value="">Select Manager</option>
+                          {givenByList.map(u => <option key={u.user_name || u} value={u.user_name || u}>{u.user_name || u}</option>)}
+                        </select>
+                      </div>
+                      
+                      {/* Multi-employee selection dropdown */}
+                      <div className="space-y-1.5 relative">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Assignee (Doers)</label>
+                        <button
+                          type="button"
+                          onClick={() => setIsEmployeeDropdownOpen(!isEmployeeDropdownOpen)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium text-left focus:border-purple-400 outline-none flex justify-between items-center"
+                        >
+                          <span className="truncate">{editFormData.name || "Select Doers"}</span>
+                          <ChevronDown size={16} />
+                        </button>
+                        {isEmployeeDropdownOpen && (
+                          <div className="absolute z-[99999] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto p-2 space-y-1">
+                            {users.map(u => {
+                              const empName = u.user_name;
+                              const currentEmps = editFormData.name ? editFormData.name.split(',').map(e => e.trim()).filter(Boolean) : [];
+                              const isChecked = currentEmps.includes(empName);
+                              return (
+                                <label key={empName} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer text-sm font-medium">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      let nextEmps;
+                                      if (isChecked) {
+                                        nextEmps = currentEmps.filter(e => e !== empName);
+                                      } else {
+                                        nextEmps = [...currentEmps, empName];
+                                      }
+                                      handleInputChange('name', nextEmps.join(', '));
+                                    }}
+                                    className="rounded text-purple-600 focus:ring-purple-500"
+                                  />
+                                  {empName}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Start Date & Time */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5 text-gray-400">
+                          <label className="text-[10px] font-bold uppercase tracking-wider">Start Date (Read-only)</label>
+                          <input
+                            type="date"
+                            value={editFormData.task_start_date ? editFormData.task_start_date.split('T')[0] : ''}
+                            className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+                            disabled
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Start Time</label>
+                          <input
+                            type="time"
+                            value={editFormData.task_start_date && editFormData.task_start_date.includes('T') ? editFormData.task_start_date.split('T')[1].substring(0, 5) : '00:00'}
+                            onChange={(e) => {
+                              const newTime = e.target.value;
+                              const date = editFormData.task_start_date ? editFormData.task_start_date.split('T')[0] : new Date().toISOString().split('T')[0];
+                              handleInputChange('task_start_date', `${date}T${newTime}`);
+                            }}
+                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      {/* End Date & Time */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5 text-gray-400">
+                          <label className="text-[10px] font-bold uppercase tracking-wider">End Date (Read-only)</label>
+                          <input
+                            type="date"
+                            value={editFormData.end_datetime ? editFormData.end_datetime.split('T')[0] : ''}
+                            className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+                            disabled
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">End Time</label>
+                          <input
+                            type="time"
+                            value={editFormData.end_datetime && editFormData.end_datetime.includes('T') ? editFormData.end_datetime.split('T')[1].substring(0, 5) : '23:59'}
+                            onChange={(e) => {
+                              const newTime = e.target.value;
+                              const date = editFormData.end_datetime ? editFormData.end_datetime.split('T')[0] : new Date().toISOString().split('T')[0];
+                              handleInputChange('end_datetime', `${date}T${newTime}`);
+                            }}
+                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Duration (HH:MM)</label>
+                        <input
+                          type="text"
+                          value={editFormData.duration || ''}
+                          onChange={(e) => handleInputChange('duration', e.target.value)}
+                          placeholder="e.g., 01:30"
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status</label>
+                        <select
+                          value={editFormData.status || ''}
+                          onChange={(e) => handleInputChange('status', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                        >
+                          <option value="LOCKED">LOCKED</option>
+                          <option value="GENERATED">GENERATED</option>
+                          <option value="ACTIVE">ACTIVE (Editable)</option>
                         </select>
                       </div>
                     </>
