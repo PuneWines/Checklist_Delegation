@@ -282,7 +282,7 @@ export const fetchUsersData = async () => {
 
     let query = supabase
       .from('users')
-      .select('user_name, reported_by')
+      .select('user_name, reported_by, role, shop_name, user_access')
       .not('user_name', 'is', null);
 
     if (role === 'hod' && username) {

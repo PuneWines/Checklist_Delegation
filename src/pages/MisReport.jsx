@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { fetchStaffTasksDataApi, getStaffTasksCountApi, getTotalUsersCountApi } from "../redux/api/dashboardApi"
 import AdminLayout from '../components/layout/AdminLayout';
 import supabase from '../SupabaseClient';
@@ -32,6 +32,7 @@ function StaffTasksPage() {
     const [staffMembers, setStaffMembers] = useState([])
     const [filteredStaffMembers, setFilteredStaffMembers] = useState([])
     const [isLoading, setIsLoading] = useState(false)
+    const isLoadingRef = useRef(false)
     const [hasMoreData, setHasMoreData] = useState(true)
     const [totalStaffCount, setTotalStaffCount] = useState(0)
     const [totalUsersCount, setTotalUsersCount] = useState(0)
@@ -230,9 +231,10 @@ function StaffTasksPage() {
 
     // Optimized data loading with parallel requests using Date Range parameters
     const loadStaffData = useCallback(async (page = 1, append = false) => {
-        if (isLoading) return;
+        if (isLoadingRef.current) return;
 
         try {
+            isLoadingRef.current = true
             setIsLoading(true)
 
             // Load checklist, delegation, and work data in parallel using custom Date Range
@@ -286,9 +288,10 @@ function StaffTasksPage() {
         } catch (error) {
             console.error('Error loading staff data:', error)
         } finally {
+            isLoadingRef.current = false
             setIsLoading(false)
         }
-    }, [dashboardStaffFilter, isLoading, startDate, endDate])
+    }, [dashboardStaffFilter, startDate, endDate])
 
     useEffect(() => {
         loadStaffData(1, false)
@@ -1168,7 +1171,7 @@ function StaffTasksPage() {
                                                 const taskLabel = task[labelField] || task.task_description || task.issue_description || "(no description)";
                                                 return (
                                                     <tr
-                                                        key={task.task_id || task.id || idx}
+                                                        key={task.id || task.task_id || idx}
                                                         className="bg-orange-50/40 hover:bg-orange-50/80 transition-colors"
                                                     >
                                                         <td className="px-5 py-3.5">

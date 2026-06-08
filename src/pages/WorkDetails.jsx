@@ -527,12 +527,26 @@ export default function WorkDetails() {
   };
 
   const handleBulkGenerate = async () => {
-    const selectedAssignments = mergedData.filter(item =>
-      selectedRows.has(item.taskId) && item.status === 'LOCKED' && item.assignmentId
-    );
+    const selectedAssignments = mergedData.filter(item => {
+      if (!selectedRows.has(item.taskId) || !item.assignmentId) return false;
+
+      // Check if all fields have data
+      const hasAllData = item.start_datetime && item.end_datetime && item.manager_name && item.employee_name;
+      if (!hasAllData) return false;
+
+      const isLocked = item.status === 'LOCKED';
+      const isActive = item.status === 'ACTIVE';
+      const isGenerated = item.status === 'GENERATED';
+      const isModified = !!modifiedRows[item.taskId];
+
+      // Skip already generated tasks that haven't been edited
+      if (isGenerated && !isModified) return false;
+
+      return isLocked || isActive || (isGenerated && isModified);
+    });
 
     if (selectedAssignments.length === 0) {
-      showToast("No locked assignments selected for generation", "error");
+      showToast("No eligible assignments selected for generation", "error");
       return;
     }
 
@@ -541,11 +555,22 @@ export default function WorkDetails() {
     );
 
     if (missingTimeAssignments.length > 0) {
-      showToast("Please select Start and End time for all selected locked tasks before generating", "error");
+      showToast("Please select Start and End time for all selected tasks before generating", "error");
       return;
     }
 
     try {
+      // Delete existing uncompleted work tasks for selected assignments to prevent duplicates and handle replacements
+      const assignmentIdsToClear = selectedAssignments.map(a => a.assignmentId).filter(Boolean);
+      if (assignmentIdsToClear.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('work_task')
+          .delete()
+          .in('assignment_id', assignmentIdsToClear)
+          .is('submission_date', null);
+        if (deleteError) throw deleteError;
+      }
+
       await generateWorkTasksApi(selectedAssignments);
       showToast(`Generated tasks for ${selectedAssignments.length} assignments`, "success");
 

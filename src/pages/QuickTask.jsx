@@ -93,6 +93,33 @@ export default function QuickTask() {
   const [freqFilter, setFreqFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('all');
 
+  const [workShopsList, setWorkShopsList] = useState([]);
+  const [workStatusesList, setWorkStatusesList] = useState([]);
+  const [workShopFilter, setWorkShopFilter] = useState('All');
+  const [workStatusFilter, setWorkStatusFilter] = useState('All');
+
+  useEffect(() => {
+    if (activeTab === 'work') {
+      const fetchWorkFilters = async () => {
+        try {
+          const { data: assignmentsData, error: err } = await supabase
+            .from('task_assignments')
+            .select('status, master_work_tasks(shop(shop_name))');
+
+          if (!err && assignmentsData) {
+            const uniqueShops = [...new Set(assignmentsData.map(item => item.master_work_tasks?.shop?.shop_name).filter(Boolean))].sort();
+            const uniqueStatuses = [...new Set(assignmentsData.map(item => item.status).filter(Boolean))].sort();
+            setWorkShopsList(uniqueShops);
+            setWorkStatusesList(uniqueStatuses);
+          }
+        } catch (e) {
+          console.error("Failed to fetch work filters:", e);
+        }
+      };
+      fetchWorkFilters();
+    }
+  }, [activeTab]);
+
   const requestSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -228,6 +255,23 @@ export default function QuickTask() {
     }
     return [...new Set(filtered.map(o => o.value))].sort();
   }, [customOptions, editFormData.machine_name]);
+
+  const managersForShop = useMemo(() => {
+    const shopName = (editFormData.shop || editFormData.shop_name || "").toLowerCase().trim();
+    if (!shopName) return [];
+    return users.filter(u => {
+      const isManager = (u.role || "").toLowerCase() === "manager";
+      if (!isManager) return false;
+
+      const userShopsList = (u.shop_name || u.user_access || "")
+        .toLowerCase()
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      return userShopsList.includes(shopName);
+    });
+  }, [users, editFormData.shop, editFormData.shop_name]);
 
   // Add scroll listener
   useEffect(() => {
@@ -648,6 +692,16 @@ export default function QuickTask() {
 
   const filteredWorkTasks = useMemo(() => {
     const searched = workTasks.filter(task => {
+      if (workShopFilter && workShopFilter !== 'All') {
+        const tShop = (task.shop_name || task.shop || '').trim().toLowerCase();
+        if (tShop !== workShopFilter.trim().toLowerCase()) return false;
+      }
+
+      if (workStatusFilter && workStatusFilter !== 'All') {
+        const tStatus = (task.status || '').trim().toLowerCase();
+        if (tStatus !== workStatusFilter.trim().toLowerCase()) return false;
+      }
+
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase();
       return (
@@ -677,7 +731,7 @@ export default function QuickTask() {
       const dateB = new Date(b.task_start_date || 0);
       return dateA - dateB;
     });
-  }, [workTasks, sortConfig, searchTerm]);
+  }, [workTasks, sortConfig, searchTerm, workShopFilter, workStatusFilter]);
 
   const filteredChecklistTasks = useMemo(() => {
     const seen = new Set();
@@ -829,7 +883,7 @@ export default function QuickTask() {
             </div>
           </div>
 
-          <div className="flex items-center mt-2">
+          <div className="flex flex-col md:flex-row md:items-center gap-4 mt-2">
             <div className="relative w-full md:w-96">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
@@ -840,6 +894,38 @@ export default function QuickTask() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+
+            {activeTab === 'work' && (
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Shop Name</span>
+                  <select
+                    value={workShopFilter}
+                    onChange={(e) => setWorkShopFilter(e.target.value)}
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-purple-500 outline-none transition-all cursor-pointer"
+                  >
+                    <option value="All">All Shops</option>
+                    {workShopsList.map(shop => (
+                      <option key={shop} value={shop}>{shop}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Status</span>
+                  <select
+                    value={workStatusFilter}
+                    onChange={(e) => setWorkStatusFilter(e.target.value)}
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-purple-500 outline-none transition-all cursor-pointer"
+                  >
+                    <option value="All">All Statuses</option>
+                    {workStatusesList.map(status => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1332,7 +1418,7 @@ export default function QuickTask() {
                         { label: 'Task ID' },
                         { label: 'Task Description', minWidth: 'min-w-[200px]' },
                         { label: 'Shop Name' },
-                        { label: 'Assign From' },
+                        { label: 'Manager' },
                         { label: 'Assignee (Doer)' },
                         { label: 'Start Time', bg: 'bg-yellow-50' },
                         { label: 'End Time' },
@@ -1455,7 +1541,7 @@ export default function QuickTask() {
                                   <div className="text-xs font-bold text-gray-700">{task.shop_name || task.shop || '—'}</div>
                                 </div>
                                 <div className="space-y-1">
-                                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Assign From</span>
+                                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Manager</span>
                                   <div className="text-xs font-bold text-gray-700">{task.given_by || '—'}</div>
                                 </div>
                                 <div className="space-y-1">
@@ -1691,14 +1777,14 @@ export default function QuickTask() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Assign From (Given By)</label>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Manager</label>
                         <select
                           value={editFormData.given_by || ''}
                           onChange={(e) => handleInputChange('given_by', e.target.value)}
                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
                         >
                           <option value="">Select Manager</option>
-                          {givenByList.map(u => <option key={u.user_name || u} value={u.user_name || u}>{u.user_name || u}</option>)}
+                          {managersForShop.map(m => <option key={m.user_name} value={m.user_name}>{m.user_name}</option>)}
                         </select>
                       </div>
                       
@@ -1806,12 +1892,13 @@ export default function QuickTask() {
                         />
                       </div>
 
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status</label>
+                      <div className="space-y-1.5 text-gray-400">
+                        <label className="text-[10px] font-bold uppercase tracking-wider">Status (Read-only)</label>
                         <select
                           value={editFormData.status || ''}
                           onChange={(e) => handleInputChange('status', e.target.value)}
-                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                          className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+                          disabled
                         >
                           <option value="LOCKED">LOCKED</option>
                           <option value="GENERATED">GENERATED</option>
