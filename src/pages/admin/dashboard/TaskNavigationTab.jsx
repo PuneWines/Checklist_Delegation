@@ -269,7 +269,7 @@ export default function TaskNavigationTabs({
 
           if (taskDateOnly < now) {
             status = "overdue"
-            timeStatus = "Overdue"
+            timeStatus = dashboardType === "work" ? "Not Done" : "Overdue"
           } else if (taskDateOnly.getTime() === now.getTime()) {
             status = "pending"
             timeStatus = "Today"
@@ -292,6 +292,7 @@ export default function TaskNavigationTabs({
           frequency: task.frequency || "one-time",
           rating: task.color_code_for || 0,
           shop: (task.shop || task.shop_name) || "N/A",
+          managerName: task.task_assignments?.manager_name || "—",
         }
       })
 
@@ -308,7 +309,7 @@ export default function TaskNavigationTabs({
         } else if (taskView === 'upcoming') {
           if (task.timeStatus !== 'Upcoming') return false;
         } else if (taskView === 'overdue') {
-          if (task.timeStatus !== 'Overdue') return false;
+          if (task.timeStatus !== (dashboardType === 'work' ? 'Not Done' : 'Overdue')) return false;
         }
 
         // 1. Search filter
@@ -500,7 +501,7 @@ export default function TaskNavigationTabs({
                 />
               )}
               <span className="relative">
-                {view === "overdue" ? "Overdue" :
+                {view === "overdue" ? (dashboardType === "work" ? "Not Done" : "Overdue") :
                   (dashboardType === "delegation"
                     ? (view === "recent" ? "Today Task" : "Future Task")
                     : (view === "recent" ? "Recent" : "Upcoming")
@@ -614,6 +615,9 @@ export default function TaskNavigationTabs({
                         <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Time Status</th>
                       )}
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Description</th>
+                      {dashboardType === "work" && (
+                        <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Manager Name</th>
+                      )}
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Staff</th>
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Shop</th>
                       <th scope="col" className="px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-tight bg-gray-50/90 backdrop-blur-sm shadow-sm border-b border-gray-100">Department</th>
@@ -751,6 +755,11 @@ export default function TaskNavigationTabs({
                             />
                           )}
                         </td>
+                        {dashboardType === "work" && (
+                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 font-medium">
+                            {task.managerName}
+                          </td>
+                        )}
                         <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600 font-medium">
                           {editingTaskId === task.id ? (
                             <select
@@ -806,7 +815,7 @@ export default function TaskNavigationTabs({
                             }`}>
                             {(task.status === "completed" || task.status === "done" || task.status === "yes")
                               ? (task.admin_done ? "Approved" : "Pending Approval")
-                              : (task.status === 'overdue' ? 'Overdue' : 'Pending')}
+                              : (task.status === 'overdue' ? (dashboardType === 'work' ? 'Not Done' : 'Overdue') : 'Pending')}
                           </span>
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">
@@ -882,7 +891,7 @@ export default function TaskNavigationTabs({
                     {dashboardType === "delegation" && (
                       <div className="flex flex-col">
                         <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Time Status</span>
-                        <span className={`text-[10px] font-bold w-fit px-2 py-0.5 rounded-full ${task.timeStatus === "Overdue" ? "bg-red-100 text-red-700" :
+                        <span className={`text-[10px] font-bold w-fit px-2 py-0.5 rounded-full ${["Overdue", "Not Done"].includes(task.timeStatus) ? "bg-red-100 text-red-700" :
                           task.timeStatus === "Today" ? "bg-amber-100 text-amber-700" :
                             task.timeStatus === "Submitted" ? "bg-green-100 text-green-700" :
                               "bg-blue-100 text-blue-700"

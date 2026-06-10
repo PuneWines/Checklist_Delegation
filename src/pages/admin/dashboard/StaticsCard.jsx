@@ -86,7 +86,9 @@ export default function StatisticsCards({
           {/* Overdue Tasks */}
           <div className="rounded-xl border border-l-4 border-l-red-500 shadow-md hover:shadow-lg transition-all bg-white overflow-hidden flex flex-col">
             <div className="flex flex-row items-center justify-between space-y-0 bg-gradient-to-r from-red-50 to-red-100 p-3">
-              <h3 className="text-[10px] xs:text-xs font-bold text-red-700 uppercase tracking-wider line-clamp-1">Overdue</h3>
+              <h3 className="text-[10px] xs:text-xs font-bold text-red-700 uppercase tracking-wider line-clamp-1">
+                {dashboardType === "work" ? "Not Done" : "Overdue"}
+              </h3>
               <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
             </div>
             <div className="p-3 flex-1 flex flex-col justify-center">
@@ -193,7 +195,9 @@ export default function StatisticsCards({
                 <div className="flex items-center justify-between gap-4 p-2 rounded-lg hover:bg-gray-50 transition-colors">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-sm bg-[#f43f5e]"></div>
-                    <span className="text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">Overdue</span>
+                    <span className="text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                      {dashboardType === "work" ? "Not Done" : "Overdue"}
+                    </span>
                   </div>
                   <span className="text-sm font-black text-gray-900">{overdueRate.toFixed(1)}%</span>
                 </div>

@@ -303,14 +303,14 @@ const AllTasks = () => {
 
     // Extended tasks should show as "Today" until the planned date passes
     if (isExtended) {
-      if (taskDate < today) return "Overdue";
+      if (taskDate < today) return activeTab === "work" ? "Not Done" : "Overdue";
       return "Today"; // Treat both today and upcoming as "Today" for extended tasks
     }
 
-    if (taskDate < today) return "Overdue";
+    if (taskDate < today) return activeTab === "work" ? "Not Done" : "Overdue";
     if (taskDate.getTime() === today.getTime()) return "Today";
     return "Upcoming";
-  }, []);
+  }, [activeTab]);
 
   const calculateNextDueDate = (currentDateStr, frequency) => {
     if (!currentDateStr || !frequency) return null;
@@ -608,7 +608,7 @@ const AllTasks = () => {
           const todayStr = new Date(new Date().getTime() + (330 * 60000)).toISOString().split('T')[0];
           query = query
             .or('submission_date.is.null,status.eq.REJECTED')
-            .eq('current_date', todayStr)
+            .lte('current_date', todayStr)
             .order('current_date', { ascending: true });
         } else if (activeTab === "ea") {
           query = query.in("status", ["pending", "extend", "extended"]).order("task_start_date", { ascending: true });
@@ -719,12 +719,8 @@ const AllTasks = () => {
           });
           setHistoryData(historyTasks);
         } else {
-          // Keep tasks that are NOT NOT_DONE
-          const liveTasks = filteredWorkTasks.filter(item => {
-            const ds = getWorkTaskDynamicStatus(item, currentTime);
-            return ds !== "NOT_DONE";
-          });
-          setTasks(liveTasks);
+          // For work module, we keep all tasks including NOT_DONE (Not Done tasks) in the live tasks list
+          setTasks(filteredWorkTasks);
         }
         setIsLoading(false);
         return;
@@ -824,8 +820,8 @@ const AllTasks = () => {
           // Show all: overdue + today + upcoming
         } else if (dateFilter === "today") {
           if (status !== "Today") return false;
-        } else if (dateFilter === "overdue") {
-          if (status !== "Overdue") return false;
+        } else if (dateFilter === "overdue" || dateFilter === "not_done") {
+          if (status !== "Overdue" && status !== "Not Done") return false;
         } else if (dateFilter === "upcoming") {
           if (status !== "Upcoming") return false;
         }
@@ -1458,11 +1454,10 @@ const AllTasks = () => {
                           <div className="absolute z-50 mt-2 w-40 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                             {[
                               { id: 'all', label: 'All Tasks' },
-                              { id: 'overdue', label: 'Overdue' },
+                              { id: activeTab === 'work' ? 'not_done' : 'overdue', label: activeTab === 'work' ? 'Not Done' : 'Overdue' },
                               { id: 'today', label: 'Today' },
                               { id: 'upcoming', label: 'Upcoming' }
-                            ].filter(f => activeTab !== 'work' || f.id !== 'overdue')
-                              .map((filter) => (
+                            ].map((filter) => (
                                 <button
                                   key={filter.id}
                                   onClick={() => {
@@ -1628,7 +1623,7 @@ const AllTasks = () => {
                                 <tr className="bg-gray-100/30">
                                   <td colSpan={tableHeaders.length + 6} className="px-4 sm:px-6 py-2">
                                     <div className="flex items-center gap-2">
-                                      <div className={`w-1.5 h-1.5 rounded-full ${currentStatus === 'Overdue' ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                      <div className={`w-1.5 h-1.5 rounded-full ${(currentStatus === 'Overdue' || currentStatus === 'Not Done') ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
                                       <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-gray-500">
                                         {currentStatus} {activeTab === "ea" && currentStatus === "Today" ? " & Extended" : ""}
                                       </span>
@@ -2036,7 +2031,7 @@ const AllTasks = () => {
                           {showGroupHeader && !showHistory && (
                             <div className="pt-2 pb-1 px-1">
                               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
-                                <div className={`w-1 h-1 rounded-full ${currentStatus === 'Overdue' ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                <div className={`w-1 h-1 rounded-full ${(currentStatus === 'Overdue' || currentStatus === 'Not Done') ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
                                 {currentStatus} {activeTab === "ea" && currentStatus === "Today" ? " & Extended" : ""}
                               </span>
                             </div>
@@ -2067,7 +2062,7 @@ const AllTasks = () => {
                                   <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded uppercase tracking-tighter border border-amber-200 animate-pulse">Extended</span>
                                 )}
                               </div>
-                              <span className={`px-2 py-0.5 inline-flex text-[10px] leading-5 font-semibold rounded-full ${getTimeStatus(task[statusDateColumn] || task.created_at, task.status) === 'Overdue' ? 'bg-red-100 text-red-800' :
+                              <span className={`px-2 py-0.5 inline-flex text-[10px] leading-5 font-semibold rounded-full ${['Overdue', 'Not Done'].includes(getTimeStatus(task[statusDateColumn] || task.created_at, task.status)) ? 'bg-red-100 text-red-800' :
                                 getTimeStatus(task[statusDateColumn] || task.created_at, task.status) === 'Today' ? 'bg-green-100 text-green-800' :
                                   'bg-blue-100 text-blue-800'}`}>
                                 {getTimeStatus(task[statusDateColumn] || task.created_at, task.status)}

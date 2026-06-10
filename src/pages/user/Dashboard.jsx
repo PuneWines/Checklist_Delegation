@@ -122,7 +122,7 @@ const UserDashboard = () => {
           { label: "Total Assignments", value: stats.total, icon: ClipboardList, color: "blue", sub: "All time assigned" },
           { label: "Tasks Approved", value: stats.completed, icon: CheckCircle2, color: "green", sub: `${completionRate}% Success Rate` },
           { label: "Pending Action", value: stats.pending, icon: Clock, color: "purple", sub: "Awaiting submission" },
-          { label: "Overdue Alerts", value: stats.overdue, icon: AlertTriangle, color: "red", sub: "Needs urgent attention" },
+          { label: "Not Done", value: stats.overdue, icon: AlertTriangle, color: "red", sub: "Pending Submission" },
         ].map((item, idx) => (
           <div key={idx} className={`group relative bg-white p-8 rounded-[2.5rem] border-2 border-gray-50 shadow-sm hover:shadow-xl hover:border-${item.color}-100 transition-all duration-500 overflow-hidden`}>
             <div className={`absolute top-0 right-0 w-32 h-32 bg-${item.color}-50 rounded-full -mr-16 -mt-16 opacity-40 group-hover:scale-150 transition-transform duration-700`} />
@@ -158,7 +158,7 @@ const UserDashboard = () => {
                     taskView === view ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600"
                   }`}
                 >
-                  {view}
+                  {view === "overdue" ? "Not Done" : view}
                 </button>
               ))}
             </div>

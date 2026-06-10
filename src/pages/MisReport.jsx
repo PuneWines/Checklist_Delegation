@@ -452,11 +452,61 @@ function StaffTasksPage() {
         return `${diffDays} Day${diffDays > 1 ? 's' : ''}`;
     };
 
+    const getWorkTaskDeadline = (task) => {
+        if (!task) return null;
+        const plannedDateStr = task.current_date; // e.g. "2026-06-09"
+        const endDateTimeStr = task.task_assignments?.end_datetime; // e.g. "2026-06-08T18:00:00+05:30"
+        
+        if (!plannedDateStr) return null;
+        if (!endDateTimeStr) {
+            return new Date(`${plannedDateStr}T23:59:59+05:30`);
+        }
+        
+        const parts = endDateTimeStr.split('T');
+        if (parts.length < 2) {
+            return new Date(`${plannedDateStr}T23:59:59+05:30`);
+        }
+        
+        const timeAndOffset = parts[1]; // e.g. "18:00:00+05:30"
+        const reconstructedStr = `${plannedDateStr}T${timeAndOffset}`;
+        const deadlineDate = new Date(reconstructedStr);
+        if (isNaN(deadlineDate.getTime())) {
+            return new Date(`${plannedDateStr}T23:59:59+05:30`);
+        }
+        return deadlineDate;
+    };
+
+    const calcWorkTaskDelay = (task) => {
+        const actual = task.submission_date;
+        if (!actual) return null;
+        const deadline = getWorkTaskDeadline(task);
+        if (!deadline) return null;
+        
+        const actualDate = new Date(actual);
+        const diffMs = actualDate.getTime() - deadline.getTime();
+        if (diffMs <= 0) return null; // on time or early
+        
+        const totalSecs = Math.floor(diffMs / 1000);
+        const h = Math.floor(totalSecs / 3600);
+        const m = Math.floor((totalSecs % 3600) / 60);
+        const s = totalSecs % 60;
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    };
+
     // Determine per-task status: 'ontime', 'delay', 'pending'
     const getTaskStatus = (task, moduleId) => {
-        const planned = task.planned_date || task.task_start_date || task.current_date;
         const actual = task.submission_date;
         if (!actual) return "pending";
+
+        if (moduleId === "work") {
+            const deadline = getWorkTaskDeadline(task);
+            if (!deadline) return "pending";
+            const actualDate = new Date(actual);
+            return actualDate <= deadline ? "ontime" : "delay";
+        }
+
+        const planned = task.planned_date || task.task_start_date || task.current_date;
         const plannedDate = new Date(planned);
         const actualDate = new Date(actual);
         // Compare date only (ignore time) for on-time check
@@ -518,9 +568,10 @@ function StaffTasksPage() {
 
             if (!table || !staffName) return;
 
+            const selectQuery = row.id === "work" ? "*, task_assignments:assignment_id(end_datetime)" : "*";
             const { data, error } = await supabase
                 .from(table)
-                .select("*")
+                .select(selectQuery)
                 .eq(nameField, staffName)
                 .gte(dateCol, MODULE_DATE_IS_DATEONLY.has(row.id) ? startDate : `${startDate}T00:00:00`)
                 .lte(dateCol, MODULE_DATE_IS_DATEONLY.has(row.id) ? endDate : `${endDate}T23:59:59`)
@@ -1165,7 +1216,7 @@ function StaffTasksPage() {
                                                 const planned = task[plannedField] || task.planned_date || task.task_start_date;
                                                 const actual = task.submission_date;
                                                 const delay = isWorkModule
-                                                    ? calcDayDelay(planned, actual)
+                                                    ? calcWorkTaskDelay(task)
                                                     : calcDelay(planned, actual);
                                                 const status = getTaskStatus(task, selectedModule.id);
                                                 const taskLabel = task[labelField] || task.task_description || task.issue_description || "(no description)";
@@ -1181,7 +1232,7 @@ function StaffTasksPage() {
                                                         </td>
                                                         <td className="px-5 py-3.5 whitespace-nowrap">
                                                             <span className="text-xs text-gray-700 font-mono">
-                                                                {isWorkModule ? formatDateOnly(planned) : formatDateTime(planned)}
+                                                                {isWorkModule ? formatDateTime(getWorkTaskDeadline(task)) : formatDateTime(planned)}
                                                             </span>
                                                         </td>
                                                         <td className="px-5 py-3.5 whitespace-nowrap">
