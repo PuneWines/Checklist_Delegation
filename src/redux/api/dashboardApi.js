@@ -47,7 +47,7 @@ export const fetchDashboardDataApi = async (
 
     let query = supabase
       .from(tableName)
-      .select('*')
+      .select(dashboardType === 'work' ? '*, task_assignments:assignment_id(end_datetime, manager_name)' : '*')
       .order(dateColumn, { ascending: isAscending })
       .range(from, to);
 
@@ -506,7 +506,7 @@ export const fetchStaffTasksDataApi = async (
         dashboardType === 'repair' ? 'repair_tasks' :
           dashboardType === 'ea' ? 'ea_tasks' : 
           dashboardType === 'work' ? 'work_task' : dashboardType)
-      .select('*')
+      .select(dashboardType === 'work' ? '*, task_assignments:assignment_id(end_datetime)' : '*')
       .gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
       .not(nameField, 'is', null);
@@ -643,19 +643,38 @@ export const fetchStaffTasksDataApi = async (
       if (isCompleted) {
         summary[key].total_completed_tasks++;
 
-        // Check if done on time - use planned_date as the definitive deadline
-        const dueDateStr = task.planned_date || task.current_date || task.task_start_date || task.created_at;
-        if (task.submission_date && dueDateStr) {
-          const submissionDate = new Date(task.submission_date);
-          const dueDate = new Date(dueDateStr);
+        if (dashboardType === 'work') {
+          let deadline = null;
+          const endDateTimeStr = task.task_assignments?.end_datetime;
+          if (task.current_date) {
+            if (endDateTimeStr && endDateTimeStr.includes('T')) {
+              const timeAndOffset = endDateTimeStr.split('T')[1];
+              deadline = new Date(`${task.current_date}T${timeAndOffset}`);
+            } else {
+              deadline = new Date(`${task.current_date}T23:59:59+05:30`);
+            }
+          }
+          if (task.submission_date && deadline && !isNaN(deadline.getTime())) {
+            const submissionDate = new Date(task.submission_date);
+            if (submissionDate <= deadline) {
+              summary[key].total_done_on_time++;
+            }
+          }
+        } else {
+          // Check if done on time - use planned_date as the definitive deadline
+          const dueDateStr = task.planned_date || task.current_date || task.task_start_date || task.created_at;
+          if (task.submission_date && dueDateStr) {
+            const submissionDate = new Date(task.submission_date);
+            const dueDate = new Date(dueDateStr);
 
-          // Compare dates only (ignore time)
-          const submissionDateOnly = new Date(submissionDate.getFullYear(), submissionDate.getMonth(), submissionDate.getDate());
-          const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+            // Compare dates only (ignore time)
+            const submissionDateOnly = new Date(submissionDate.getFullYear(), submissionDate.getMonth(), submissionDate.getDate());
+            const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
 
-          // Count as "on time" only if submission date is same as or before due date
-          if (submissionDateOnly <= dueDateOnly) {
-            summary[key].total_done_on_time++;
+            // Count as "on time" only if submission date is same as or before due date
+            if (submissionDateOnly <= dueDateOnly) {
+              summary[key].total_done_on_time++;
+            }
           }
         }
       }
