@@ -506,7 +506,7 @@ export const fetchStaffTasksDataApi = async (
         dashboardType === 'repair' ? 'repair_tasks' :
           dashboardType === 'ea' ? 'ea_tasks' : 
           dashboardType === 'work' ? 'work_task' : dashboardType)
-      .select(dashboardType === 'work' ? '*, task_assignments:assignment_id(end_datetime)' : '*')
+      .select(dashboardType === 'work' ? '*, task_assignments:assignment_id(end_datetime, manager_name)' : '*')
       .gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
       .not(nameField, 'is', null);
@@ -685,7 +685,32 @@ export const fetchStaffTasksDataApi = async (
         const managersSet = shopManagersMap[shopKey];
         const managers = managersSet ? Array.from(managersSet) : [];
 
-        if (task.submission_date) {
+        // Identify the manager(s) responsible for this task:
+        // Either the specific manager who assigned it, or fallback to the shop's active managers
+        let responsibleManagers = [];
+        if (task.task_assignments?.manager_name) {
+          responsibleManagers = [task.task_assignments.manager_name];
+        } else {
+          responsibleManagers = managers;
+        }
+
+        if (!task.submission_date) {
+          // Employee hasn't completed the task -> down-score responsible managers
+          responsibleManagers.forEach(mgrName => {
+            const mgrKey = `${shopVal}-${mgrName}`;
+            if (!summary[mgrKey]) {
+              summary[mgrKey] = {
+                shop: shopVal,
+                name: mgrName,
+                total_tasks: 0,
+                total_completed_tasks: 0,
+                total_done_on_time: 0
+              };
+            }
+            summary[mgrKey].total_tasks++;
+          });
+        } else {
+          // Employee has completed/submitted the task
           if (task.manager_approved_by) {
             // Manager approved it
             const mgrName = task.manager_approved_by;
@@ -712,8 +737,8 @@ export const fetchStaffTasksDataApi = async (
               summary[mgrKey].total_done_on_time++;
             }
           } else {
-            // Submitted but pending manager approval (counts as pending for all shop managers)
-            managers.forEach(mgrName => {
+            // Completed by employee, but pending manager approval -> down-score responsible managers
+            responsibleManagers.forEach(mgrName => {
               const mgrKey = `${shopVal}-${mgrName}`;
               if (!summary[mgrKey]) {
                 summary[mgrKey] = {
@@ -826,7 +851,8 @@ export const getStaffTasksCountApi = async (
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
                       dashboardType === 'ea' ? 'doer_name' : 'name';
     const selectFields = dashboardType === 'ea' ? 'doer_name' :
-                         dashboardType === 'repair' ? 'shop_name, assigned_person' : 'shop_name, name';
+                         dashboardType === 'repair' ? 'shop_name, assigned_person' :
+                         dashboardType === 'work' ? 'shop_name, name, task_assignments:assignment_id(manager_name)' : 'shop_name, name';
 
     let query = supabase
       .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
@@ -902,12 +928,63 @@ export const getStaffTasksCountApi = async (
       throw error;
     }
 
-    // Count unique staff names
-    const uniqueStaff = new Set(data.map(item => {
+    // Count unique staff names and responsible managers for work tasks
+    const uniqueStaff = new Set();
+    const shopManagersMap = {};
+
+    if (dashboardType === 'work') {
+      try {
+        const { data: dbUsers } = await supabase
+          .from('users')
+          .select('user_name, shop_name, user_access, role')
+          .eq('status', 'active');
+
+        if (dbUsers) {
+          dbUsers.forEach(u => {
+            const roleLower = (u.role || "").toLowerCase();
+            if (roleLower === 'manager') {
+              const accessStr = u.user_access || u.shop_name || "";
+              const shops = accessStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+              shops.forEach(shop => {
+                if (!shopManagersMap[shop]) {
+                  shopManagersMap[shop] = new Set();
+                }
+                shopManagersMap[shop].add(u.user_name);
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Error loading managers for count:", err);
+      }
+    }
+
+    data.forEach(item => {
       const shopVal = item.shop || item.shop_name || (dashboardType === 'ea' ? 'EA' : 'No Shop');
       const nameVal = item.name || item.assigned_person || item.doer_name || 'Unnamed Staff';
-      return `${shopVal}-${nameVal}`;
-    }));
+      uniqueStaff.add(`${shopVal}-${nameVal}`);
+
+      if (dashboardType === 'work') {
+        const shopKey = (item.shop_name || "").trim().toLowerCase();
+        const managersSet = shopManagersMap[shopKey];
+        const managers = managersSet ? Array.from(managersSet) : [];
+
+        let responsibleManagers = [];
+        if (item.task_assignments?.manager_name) {
+          responsibleManagers = [item.task_assignments.manager_name];
+        } else {
+          responsibleManagers = managers;
+        }
+
+        responsibleManagers.forEach(mgrName => {
+          uniqueStaff.add(`${shopVal}-${mgrName}`);
+        });
+
+        if (item.manager_approved_by) {
+          uniqueStaff.add(`${shopVal}-${item.manager_approved_by}`);
+        }
+      }
+    });
     // console.log(`Total unique staff count for ${month}/${year}: ${uniqueStaff.size}`);
     return uniqueStaff.size;
 

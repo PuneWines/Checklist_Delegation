@@ -460,6 +460,9 @@ export default function WorkDetails() {
 
       // Validate active assignment (only if modified/selected or has values)
       if (hasAssignmentFieldModified || selectedRows.has(id)) {
+        if (hasAssignmentFieldModified && effectiveTask.next_start_datetime) {
+          errors.push(`Task "${effectiveTask.task_name}": Cannot manually modify active assignment because a future schedule is already set.`);
+        }
         const error = validateAssignment(effectiveTask);
         if (error) {
           errors.push(`Task "${effectiveTask.task_name}": ${error}`);
@@ -901,10 +904,10 @@ export default function WorkDetails() {
                       <td className="px-4 py-3 text-center">
                         <input
                           type="checkbox"
-                          className={`w-4 h-4 rounded-md border-gray-200 text-[#006699] focus:ring-offset-0 focus:ring-0 transition-all ${((item.status === 'LOCKED' || item.status === 'GENERATED') && !isAdmin) ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
+                          className={`w-4 h-4 rounded-md border-gray-200 text-[#006699] focus:ring-offset-0 focus:ring-0 transition-all ${((item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin) ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
                           checked={selectedRows.has(item.taskId)}
                           onChange={() => handleSelectRow(item.taskId)}
-                          disabled={(item.status === 'LOCKED' || item.status === 'GENERATED') && !isAdmin}
+                          disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
                         />
                       </td>
                       <td className="px-2 py-3">
@@ -988,13 +991,13 @@ export default function WorkDetails() {
                               type="time"
                               className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].start_datetime
                                   ? 'border-amber-300 bg-amber-50/50'
-                                  : item.status === 'GENERATED'
+                                  : (item.status === 'GENERATED' || !!item.next_start_datetime)
                                     ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                                     : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                                 }`}
                               value={getTimePart(item.start_datetime)}
                               onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
-                              disabled={item.status === 'GENERATED'}
+                              disabled={item.status === 'GENERATED' || !!item.next_start_datetime}
                             />
                           </td>
                           <td className="px-2 py-3">
@@ -1002,13 +1005,13 @@ export default function WorkDetails() {
                               type="time"
                               className={`w-full px-1.5 py-1.5 border rounded text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].end_datetime
                                   ? 'border-amber-300 bg-amber-50/50'
-                                  : item.status === 'GENERATED'
+                                  : (item.status === 'GENERATED' || !!item.next_start_datetime)
                                     ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                                     : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                                 }`}
                               value={getTimePart(item.end_datetime)}
                               onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
-                              disabled={item.status === 'GENERATED'}
+                              disabled={item.status === 'GENERATED' || !!item.next_start_datetime}
                             />
                           </td>
                         </>
@@ -1020,7 +1023,7 @@ export default function WorkDetails() {
                             placeholder="Manager.."
                             className={`w-full px-2 py-1.5 border rounded text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId].manager_name
                                 ? 'border-amber-300 bg-amber-50/50'
-                                : item.status === 'LOCKED' || item.status === 'GENERATED'
+                                : item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime
                                   ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                                   : 'border-gray-100 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                               }`}
@@ -1030,7 +1033,7 @@ export default function WorkDetails() {
                               setSearchDropdown({ type: "manager", id: item.taskId, term: e.target.value });
                             }}
                             onFocus={() => setSearchDropdown({ type: "manager", id: item.taskId, term: item.manager_name || "" })}
-                            disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                            disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime}
                           />
                           {searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
                             <div className={`absolute z-50 left-0 min-w-[220px] w-max bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 ${index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"}`}>
@@ -1057,7 +1060,7 @@ export default function WorkDetails() {
                       </td>
                       <td className="px-2 py-3">
                         <div className="relative dropdown-container">
-                          {(item.status === 'LOCKED' || item.status === 'GENERATED') ? (
+                          {(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) ? (
                             <div className="flex flex-wrap gap-1 max-w-[180px]">
                               {item.employee_name ? (
                                 item.employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
@@ -1169,11 +1172,11 @@ export default function WorkDetails() {
                   <div className="flex items-center gap-2.5">
                     <input
                       type="checkbox"
-                      className={`w-5 h-5 rounded-md border-gray-300 text-[#006699] focus:ring-offset-0 focus:ring-0 transition-all ${((item.status === 'LOCKED' || item.status === 'GENERATED') && !isAdmin) ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
+                      className={`w-5 h-5 rounded-md border-gray-300 text-[#006699] focus:ring-offset-0 focus:ring-0 transition-all ${((item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin) ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
                         }`}
                       checked={selectedRows.has(item.taskId)}
                       onChange={() => handleSelectRow(item.taskId)}
-                      disabled={(item.status === 'LOCKED' || item.status === 'GENERATED') && !isAdmin}
+                      disabled={(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && !isAdmin}
                     />
                     <div className="flex flex-col gap-1">
                       <span className="px-2 py-0.5 bg-sky-50 text-sky-600 rounded text-[9px] font-black border border-sky-100 uppercase tracking-tighter w-fit">
@@ -1244,13 +1247,13 @@ export default function WorkDetails() {
                           type="time"
                           className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].start_datetime
                               ? 'border-amber-300 bg-amber-50/50'
-                              : item.status === 'GENERATED'
+                              : (item.status === 'GENERATED' || !!item.next_start_datetime)
                                 ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                                 : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                             }`}
                           value={getTimePart(item.start_datetime)}
                           onChange={(e) => handleTimeChange(item, "start_datetime", e.target.value)}
-                          disabled={item.status === 'GENERATED'}
+                          disabled={item.status === 'GENERATED' || !!item.next_start_datetime}
                         />
                       </div>
 
@@ -1261,13 +1264,13 @@ export default function WorkDetails() {
                           type="time"
                           className={`w-full px-2 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all ${isModified && modifiedRows[item.taskId].end_datetime
                               ? 'border-amber-300 bg-amber-50/50'
-                              : item.status === 'GENERATED'
+                              : (item.status === 'GENERATED' || !!item.next_start_datetime)
                                 ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                                 : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                             }`}
                           value={getTimePart(item.end_datetime)}
                           onChange={(e) => handleTimeChange(item, "end_datetime", e.target.value)}
-                          disabled={item.status === 'GENERATED'}
+                          disabled={item.status === 'GENERATED' || !!item.next_start_datetime}
                         />
                       </div>
                     </>
@@ -1285,7 +1288,7 @@ export default function WorkDetails() {
                         placeholder="Assign Manager.."
                         className={`w-full px-2.5 py-1.5 border rounded-lg text-[10px] font-bold outline-none transition-all placeholder:text-gray-300 ${isModified && modifiedRows[item.taskId].manager_name
                             ? 'border-amber-300 bg-amber-50/50'
-                            : item.status === 'LOCKED' || item.status === 'GENERATED'
+                            : item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime
                               ? 'border-gray-100 bg-gray-100/50 text-gray-400 cursor-not-allowed'
                               : 'border-gray-200 bg-gray-50/30 hover:bg-white hover:border-gray-300'
                           }`}
@@ -1295,7 +1298,7 @@ export default function WorkDetails() {
                           setSearchDropdown({ type: "manager", id: item.taskId, term: e.target.value });
                         }}
                         onFocus={() => setSearchDropdown({ type: "manager", id: item.taskId, term: item.manager_name || "" })}
-                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED'}
+                        disabled={item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime}
                       />
                       {searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
                         <div className="absolute z-50 left-0 min-w-[220px] w-max bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto mt-1">
@@ -1327,28 +1330,30 @@ export default function WorkDetails() {
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Employees</label>
 
                     {/* Selected Employees Tag List - Positioned above wrapper so they are always visible */}
-                    {!(item.status === 'LOCKED' || item.status === 'GENERATED') && item.employee_name && (
+                    {item.employee_name && (
                       <div className="flex flex-wrap gap-1 mb-1.5 pt-0.5">
                         {item.employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (
                           <span key={i} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[9px] font-black border border-emerald-100 shadow-sm animate-in zoom-in-95 duration-150">
                             {emp}
-                            <button
-                              type="button"
-                              className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 transition-colors font-black text-[9px] leading-none"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleEmployee(item.taskId, emp, item.employee_name);
-                              }}
-                            >
-                              ×
-                            </button>
+                            {!(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) && (
+                              <button
+                                type="button"
+                                className="hover:bg-emerald-200/50 rounded-full w-3 h-3 flex items-center justify-center text-emerald-800 transition-colors font-black text-[9px] leading-none"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleEmployee(item.taskId, emp, item.employee_name);
+                                }}
+                              >
+                                ×
+                              </button>
+                            )}
                           </span>
                         ))}
                       </div>
                     )}
 
                     <div className="relative">
-                      {(item.status === 'LOCKED' || item.status === 'GENERATED') ? (
+                      {(item.status === 'LOCKED' || item.status === 'GENERATED' || !!item.next_start_datetime) ? (
                         <div className="flex flex-wrap gap-1">
                           {item.employee_name ? (
                             item.employee_name.split(',').map(emp => emp.trim()).filter(Boolean).map((emp, i) => (

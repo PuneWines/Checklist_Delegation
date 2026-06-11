@@ -455,20 +455,19 @@ function StaffTasksPage() {
     const getWorkTaskDeadline = (task) => {
         if (!task) return null;
         const plannedDateStr = task.current_date; // e.g. "2026-06-09"
-        const endDateTimeStr = task.task_assignments?.end_datetime; // e.g. "2026-06-08T18:00:00+05:30"
+        const endTimeStr = task.end_time; // e.g. "18:00:00"
         
         if (!plannedDateStr) return null;
-        if (!endDateTimeStr) {
+        if (!endTimeStr) {
             return new Date(`${plannedDateStr}T23:59:59+05:30`);
         }
         
-        const parts = endDateTimeStr.split('T');
-        if (parts.length < 2) {
-            return new Date(`${plannedDateStr}T23:59:59+05:30`);
-        }
-        
-        const timeAndOffset = parts[1]; // e.g. "18:00:00+05:30"
-        const reconstructedStr = `${plannedDateStr}T${timeAndOffset}`;
+        // If the endTimeStr already contains timezone or offset information, construct directly,
+        // otherwise append "+05:30" (Indian Standard Time offset)
+        const reconstructedStr = endTimeStr.includes('+') || endTimeStr.includes('Z')
+            ? `${plannedDateStr}T${endTimeStr}`
+            : `${plannedDateStr}T${endTimeStr}+05:30`;
+            
         const deadlineDate = new Date(reconstructedStr);
         if (isNaN(deadlineDate.getTime())) {
             return new Date(`${plannedDateStr}T23:59:59+05:30`);
@@ -568,7 +567,7 @@ function StaffTasksPage() {
 
             if (!table || !staffName) return;
 
-            const selectQuery = row.id === "work" ? "*, task_assignments:assignment_id(end_datetime)" : "*";
+            const selectQuery = row.id === "work" ? "*, task_assignments:assignment_id(manager_name)" : "*";
             const { data, error } = await supabase
                 .from(table)
                 .select(selectQuery)
