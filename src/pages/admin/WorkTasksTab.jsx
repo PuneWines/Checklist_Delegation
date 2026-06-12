@@ -624,8 +624,7 @@ const WorkTasksTab = ({
           remark: remarksData[id] || null,
           image: imageUrl,
           status: 'SUBMITTED',
-          submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
-          submitted_by: username
+          submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
         };
         const { error: updateError } = await supabase.from("work_task").update(updates).eq("id", id);
         if (updateError) throw updateError;
