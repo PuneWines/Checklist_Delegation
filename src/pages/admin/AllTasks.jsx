@@ -127,7 +127,10 @@ const AllTasks = () => {
         ]);
 
         if (holidaysRes.data) setHolidaysList(holidaysRes.data.map(h => h.holiday_date));
-        if (usersRes.data) setAllUsers(usersRes.data.map(u => u.user_name));
+        if (usersRes.data) {
+          const uniqueUsers = [...new Set(usersRes.data.map(u => u.user_name).filter(Boolean))];
+          setAllUsers(uniqueUsers);
+        }
         if (workingDaysRes.data) setWorkingDaysList(workingDaysRes.data.map(w => w.working_date));
       } catch (err) {
         console.error("Error fetching initial data:", err);

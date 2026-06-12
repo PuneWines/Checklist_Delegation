@@ -173,7 +173,7 @@ const CalendarPage = () => {
             const { data, error } = await query;
             if (error) throw error;
             if (data) {
-                setAllUsers(data.map(u => u.user_name));
+                setAllUsers([...new Set(data.map(u => u.user_name).filter(Boolean))]);
                 const profileMap = {};
                 data.forEach(u => {
                     if (u.profile_image) profileMap[u.user_name] = u.profile_image;

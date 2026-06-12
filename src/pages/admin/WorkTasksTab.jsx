@@ -289,26 +289,17 @@ const WorkTasksTab = ({
       } else {
         const todayStr = getLocalStyleDate(new Date());
 
-        const futureDate = new Date();
-        futureDate.setMonth(futureDate.getMonth() + 6);
-        const futureDateStr = getLocalStyleDate(futureDate);
-
         query = query.or('submission_date.is.null,status.eq.REJECTED');
 
-        // Apply date filter at database level for efficiency
-        if (dateFilter === "today") {
+        // Only today tasks in 'live'
+        if (dateFilter === "today" || dateFilter === "all") {
           query = query.eq('current_date', todayStr);
-        } else if (dateFilter === "not_done") {
-          // "Not Done" (past uncompleted) tasks are shown in history, return empty in live list
-          query = query.eq('id', -1);
-        } else if (dateFilter === "upcoming") {
-          query = query.gt('current_date', todayStr).lte('current_date', futureDateStr);
         } else {
-          // "all" - Today and upcoming only
-          query = query.gte('current_date', todayStr).lte('current_date', futureDateStr);
+          // "not_done" or "upcoming" filter should return empty since live is today only
+          query = query.eq('id', -1);
         }
 
-        // Ascending order: today's tasks first, then upcoming!
+        // Ascending order: today's tasks
         query = query.order('current_date', { ascending: true });
       }
 
