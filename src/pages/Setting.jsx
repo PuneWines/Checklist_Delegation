@@ -101,12 +101,6 @@ const Setting = () => {
   const { userData, shops, shopsOnly, givenBy, customDropdowns, masterTasks, levels, loading, error } = useSelector((state) => state.setting);
   const dispatch = useDispatch();
 
-  useEffect(() => {
-    console.log("Setting Component - userData:", userData);
-    console.log("Setting Component - loading:", loading);
-    console.log("Setting Component - error:", error);
-  }, [userData, loading, error]);
-
 
   const fetchDeviceLogsAndUpdateStatus = useCallback(async () => {
     // Set to true to enable background sync when the hardware API is online
@@ -1685,7 +1679,6 @@ const Setting = () => {
                             user.user_name && (
                               !usernameFilter || user.user_name.toLowerCase().includes(usernameFilter.toLowerCase()))
                           );
-                        console.log("Setting Page - Filtered Users COUNT:", filtered.length);
                         return filtered;
                       })().map((user, index) => (
                         <tr key={`user-${user?.id || index}`} className="hover:bg-gray-50">

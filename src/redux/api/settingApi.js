@@ -18,7 +18,7 @@ export const fetchUserDetailsApi = async () => {
       .from("users")
       .select('*', { count: 'exact', head: true });
 
-    console.log("📊 Total rows in users table:", count, "Error:", countError);
+    // console.log("📊 Total rows in users table:", count, "Error:", countError);
 
     const { data, error } = await supabase
       .from("users")
@@ -29,7 +29,6 @@ export const fetchUserDetailsApi = async () => {
       return [];
     }
 
-    console.log("✅ Fetched users successfully:", data?.length, "rows");
     return data || [];
   } catch (error) {
     console.log("Error from Supabase", error);
@@ -79,7 +78,6 @@ export const fetchShopDataApi = async () => {
       given_by: d.given_by || ""
     }));
 
-    console.log("fetch successfully", formatted);
     return formatted;
   } catch (error) {
     console.log("error from supabase", error);

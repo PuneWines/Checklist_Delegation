@@ -489,36 +489,38 @@ function DelegationDataPage() {
   const handleSelectItem = useCallback((id, isChecked) => {
     setSelectedItems((prev) => {
       const newSelected = new Set(prev);
-
       if (isChecked) {
         newSelected.add(id);
-        setStatusData((prevStatus) => ({ ...prevStatus, [id]: "Done" }));
       } else {
         newSelected.delete(id);
-        setAdditionalData((prevData) => {
-          const newAdditionalData = { ...prevData };
-          delete newAdditionalData[id];
-          return newAdditionalData;
-        });
-        setRemarksData((prevRemarks) => {
-          const newRemarksData = { ...prevRemarks };
-          delete newRemarksData[id];
-          return newRemarksData;
-        });
-        setStatusData((prevStatus) => {
-          const newStatusData = { ...prevStatus };
-          delete newStatusData[id];
-          return newStatusData;
-        });
-        setNextTargetDate((prevDate) => {
-          const newDateData = { ...prevDate };
-          delete newDateData[id];
-          return newDateData;
-        });
       }
-
       return newSelected;
     });
+
+    if (isChecked) {
+      setStatusData((prevStatus) => ({ ...prevStatus, [id]: "Done" }));
+    } else {
+      setAdditionalData((prevData) => {
+        const newAdditionalData = { ...prevData };
+        delete newAdditionalData[id];
+        return newAdditionalData;
+      });
+      setRemarksData((prevRemarks) => {
+        const newRemarksData = { ...prevRemarks };
+        delete newRemarksData[id];
+        return newRemarksData;
+      });
+      setStatusData((prevStatus) => {
+        const newStatusData = { ...prevStatus };
+        delete newStatusData[id];
+        return newStatusData;
+      });
+      setNextTargetDate((prevDate) => {
+        const newDateData = { ...prevDate };
+        delete newDateData[id];
+        return newDateData;
+      });
+    }
   }, []);
 
   const handleCheckboxClick = useCallback(
@@ -543,41 +545,42 @@ function DelegationDataPage() {
         // SELECT ALL on current page
         setSelectedItems((prev) => {
           const next = new Set(prev);
-          selectableIds.forEach(id => {
-            next.add(id);
-            setStatusData((prevStatus) => ({ ...prevStatus, [id]: "Done" }));
-          });
+          selectableIds.forEach(id => next.add(id));
           return next;
+        });
+        setStatusData((prevStatus) => {
+          const nextStatus = { ...prevStatus };
+          selectableIds.forEach(id => {
+            nextStatus[id] = "Done";
+          });
+          return nextStatus;
         });
       } else {
         // UNSELECT ALL on current page
         setSelectedItems((prev) => {
           const next = new Set(prev);
-          selectableIds.forEach(id => {
-            next.delete(id);
-            // Optionally clear associated data for these specific IDs
-            setAdditionalData((prevData) => {
-              const nextData = { ...prevData };
-              delete nextData[id];
-              return nextData;
-            });
-            setRemarksData((prevRemarks) => {
-              const nextRemarks = { ...prevRemarks };
-              delete nextRemarks[id];
-              return nextRemarks;
-            });
-            setStatusData((prevStatus) => {
-              const nextStatus = { ...prevStatus };
-              delete nextStatus[id];
-              return nextStatus;
-            });
-            setNextTargetDate((prevDate) => {
-              const nextDates = { ...prevDate };
-              delete nextDates[id];
-              return nextDates;
-            });
-          });
+          selectableIds.forEach(id => next.delete(id));
           return next;
+        });
+        setAdditionalData((prevData) => {
+          const nextData = { ...prevData };
+          selectableIds.forEach(id => delete nextData[id]);
+          return nextData;
+        });
+        setRemarksData((prevRemarks) => {
+          const nextRemarks = { ...prevRemarks };
+          selectableIds.forEach(id => delete nextRemarks[id]);
+          return nextRemarks;
+        });
+        setStatusData((prevStatus) => {
+          const nextStatus = { ...prevStatus };
+          selectableIds.forEach(id => delete nextStatus[id]);
+          return nextStatus;
+        });
+        setNextTargetDate((prevDate) => {
+          const nextDates = { ...prevDate };
+          selectableIds.forEach(id => delete nextDates[id]);
+          return nextDates;
         });
       }
     },

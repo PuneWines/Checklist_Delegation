@@ -33,6 +33,7 @@ import { sendTaskExtensionNotification, sendUrgentTaskNotification } from "../..
 import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../context/MagicToastContext";
 import RenderDescription from "../../components/RenderDescription";
+import WorkTasksTab from "./WorkTasksTab";
 
 const isAudioUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
@@ -43,83 +44,6 @@ const isAudioUrl = (url) => {
   );
 };
 
-const getWorkTaskTimeBounds = (task) => {
-  const startStr = task.task_assignments?.start_datetime;
-  const endStr = task.task_assignments?.end_datetime;
-
-  let startHour = 0;
-  let startMin = 0;
-  let endHour = 23;
-  let endMin = 59;
-
-  if (startStr) {
-    const parts = startStr.split('T');
-    if (parts[1]) {
-      const timeParts = parts[1].split(':');
-      startHour = parseInt(timeParts[0]) || 0;
-      startMin = parseInt(timeParts[1]) || 0;
-    }
-  }
-
-  if (endStr) {
-    const parts = endStr.split('T');
-    if (parts[1]) {
-      const timeParts = parts[1].split(':');
-      endHour = parseInt(timeParts[0]) || 0;
-      endMin = parseInt(timeParts[1]) || 0;
-    }
-  }
-
-  // Be defensive: some task objects may not have `current_date`.
-  let year, month, day;
-  if (task.current_date && typeof task.current_date === 'string' && task.current_date.includes('-')) {
-    [year, month, day] = task.current_date.split('-').map(Number);
-  } else if (startStr && startStr.includes('T')) {
-    // fallback to date part of start_datetime
-    const datePart = startStr.split('T')[0];
-    [year, month, day] = datePart.split('-').map(Number);
-  } else {
-    const today = new Date();
-    year = today.getFullYear();
-    month = today.getMonth() + 1;
-    day = today.getDate();
-  }
-  const taskStart = new Date(year, month - 1, day, startHour, startMin, 0);
-
-  const estimatedMins = task.duration || 0; // minutes
-  const baseEnd = new Date(year, month - 1, day, endHour, endMin, 0);
-
-  // Total time allowed is end time + estimated_min
-  const taskEnd = new Date(baseEnd.getTime() + estimatedMins * 60 * 1000);
-
-  // Task is available for the entire day (until 23:59:59)
-  const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
-
-  return { taskStart, taskEnd, endOfDay };
-};
-
-const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
-  if (task.status === "APPROVED" || task.status === "APPROVED") return "APPROVED";
-  if (task.status === "SUBMITTED" || task.status === "Done" || task.status === "done" || task.submission_date) return "SUBMITTED";
-  if (task.status === "REJECTED") return "REJECTED";
-
-  const { taskStart, endOfDay } = getWorkTaskTimeBounds(task);
-
-  if (currentTime < taskStart) {
-    return "UPCOMING";
-  } else if (currentTime <= endOfDay) {
-    return "ACTIVE";
-  } else {
-    return "NOT_DONE";
-  }
-};
-
-const getExtraTimeRemaining = (task, currentTime) => {
-  const { taskEnd } = getWorkTaskTimeBounds(task);
-  const diffMs = taskEnd.getTime() - currentTime.getTime();
-  if (diffMs <= 0) return 0;
-  return Math.ceil(diffMs / (60 * 1000));
-};
 
 const AllTasks = () => {
   const dispatch = useDispatch();
@@ -155,13 +79,9 @@ const AllTasks = () => {
   const [dateFilter, setDateFilter] = useState("all"); // all, today, overdue, upcoming
   const [workEmployeeFilter, setWorkEmployeeFilter] = useState("all");
   const [dropdownOpen, setDropdownOpen] = useState({ dateFilter: false, workEmployee: false });
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 60000);
-    return () => clearInterval(timer);
+  const childSubmitRef = useRef(null);
+  const handleRegisterSubmit = useCallback((fn) => {
+    childSubmitRef.current = fn;
   }, []);
   const [lightboxImage, setLightboxImage] = useState(null); // { url, name }
   const [fetchingProgress, setFetchingProgress] = useState(0);
@@ -189,9 +109,9 @@ const AllTasks = () => {
   const [visibleCount, setVisibleCount] = useState(50);
   const loadingRef = useRef(null);
 
-  const statusDateColumn = activeTab === "repair" ? "created_at" : (activeTab === "work" ? "current_date" : "planned_date");
+  const statusDateColumn = activeTab === "repair" ? "created_at" : "planned_date";
   // Use planned_date for checklist/delegation sort — task_start_date is same for all occurrences of a recurring task
-  const sortDateColumn = activeTab === "repair" ? "created_at" : (activeTab === "work" ? "current_date" : "planned_date");
+  const sortDateColumn = activeTab === "repair" ? "created_at" : "planned_date";
   const [holidaysList, setHolidaysList] = useState([]);
   const [workingDaysList, setWorkingDaysList] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -303,14 +223,14 @@ const AllTasks = () => {
 
     // Extended tasks should show as "Today" until the planned date passes
     if (isExtended) {
-      if (taskDate < today) return activeTab === "work" ? "Not Done" : "Overdue";
+      if (taskDate < today) return "Overdue";
       return "Today"; // Treat both today and upcoming as "Today" for extended tasks
     }
 
-    if (taskDate < today) return activeTab === "work" ? "Not Done" : "Overdue";
+    if (taskDate < today) return "Overdue";
     if (taskDate.getTime() === today.getTime()) return "Today";
     return "Upcoming";
-  }, [activeTab]);
+  }, []);
 
   const calculateNextDueDate = (currentDateStr, frequency) => {
     if (!currentDateStr || !frequency) return null;
@@ -475,23 +395,6 @@ const AllTasks = () => {
             headers.push({ id: "updated_at", label: "Submitted" });
           }
           break;
-        case "work":
-          tableName = "work_task";
-          dateColumn = "current_date";
-          completionField = "submission_date";
-          headers = [
-            { id: "time_status", label: "Time" },
-            { id: "id", label: "ID" },
-            { id: "task_description", label: "Description" },
-            { id: "manager_name", label: "Manager Name" },
-            { id: "shop_name", label: "Shop" },
-            { id: "department", label: "Department" },
-            { id: "name", label: "Employee" },
-            { id: "current_date", label: "Date" },
-            { id: "duration", label: "Mins" },
-            { id: "status", label: "Status" },
-          ];
-          break;
         case "checklist":
         default:
           tableName = "checklist";
@@ -516,12 +419,7 @@ const AllTasks = () => {
 
       setTableHeaders(showHistory ? headers.filter(h => h.id !== "time_status") : headers);
 
-      let query;
-      if (activeTab === "work") {
-        query = supabase.from(tableName).select("*, task_assignments:assignment_id(start_datetime, end_datetime, manager_name)");
-      } else {
-        query = supabase.from(tableName).select("*");
-      }
+      let query = supabase.from(tableName).select("*");
 
       const currentUsername = (username || "");
       const currentUserRole = (userRole || "").toLowerCase();
@@ -594,22 +492,12 @@ const AllTasks = () => {
           if (applyNameFilter) {
             query = query.in('doer_name', reportingUsers);
           }
-        } else if (activeTab === "work") {
-          // For work history, we want to retrieve both submitted tasks and unsubmitted tasks from today or past
-          const todayStr = new Date().toISOString().split('T')[0];
-          query = query.or(`submission_date.not.is.null,current_date.lte.${todayStr}`).order('current_date', { ascending: false });
         } else {
           query = query.not(completionField, "is", null).order(completionField, { ascending: false });
         }
       } else {
         if (activeTab === "repair") {
           query = query.is("submission_date", null).order(dateColumn, { ascending: false });
-        } else if (activeTab === "work") {
-          const todayStr = new Date(new Date().getTime() + (330 * 60000)).toISOString().split('T')[0];
-          query = query
-            .or('submission_date.is.null,status.eq.REJECTED')
-            .lte('current_date', todayStr)
-            .order('current_date', { ascending: true });
         } else if (activeTab === "ea") {
           query = query.in("status", ["pending", "extend", "extended"]).order("task_start_date", { ascending: true });
         } else if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance") {
@@ -645,9 +533,6 @@ const AllTasks = () => {
           case "ea":
             searchFields = ["task_description", "doer_name", "phone_number"];
             break;
-          case "work":
-            searchFields = ["task_description", "shop_name", "name"];
-            break;
           case "checklist":
           case "delegation":
           default:
@@ -674,56 +559,6 @@ const AllTasks = () => {
             query = query.or(orQuery);
           }
         }
-      }
-
-      if (activeTab === "work" && workEmployeeFilter && workEmployeeFilter !== "all") {
-        query = query.eq('name', workEmployeeFilter);
-      }
-
-      if (activeTab === "work") {
-        const { data, error: fetchError } = await query;
-        if (fetchError) throw fetchError;
-        const mappedData = (data || []).map(item => {
-          const mapped = {
-            ...item,
-            id: item.id || item.task_id,
-            _table: item._table || tableName,
-            shop: item.shop || item.shop_name || "-",
-            manager_name: item.task_assignments?.manager_name || "—"
-          };
-
-          // Override for REJECTED work tasks to make them reappear on their rejected date
-          // Per user request: they should appear in "Today" section so users know they can submit it.
-          if (mapped.status === "REJECTED") {
-            // Get today's local date (IST)
-            const todayStr = new Date(new Date().getTime() + (330 * 60000)).toISOString().split('T')[0];
-            mapped.current_date = todayStr;
-            mapped.submission_date = null; // Clear it so it behaves like a pending task
-          }
-
-          return mapped;
-        });
-        
-        let filteredWorkTasks = mappedData;
-        if (currentUserRole === "manager") {
-          filteredWorkTasks = mappedData.filter(item =>
-            item.name === currentUsername || item.manager_name === currentUsername
-          );
-        }
-        
-        if (showHistory) {
-          // Keep tasks that are NOT_DONE or have submission_date not null
-          const historyTasks = filteredWorkTasks.filter(item => {
-            const ds = getWorkTaskDynamicStatus(item, currentTime);
-            return ds === "NOT_DONE" || item.submission_date;
-          });
-          setHistoryData(historyTasks);
-        } else {
-          // For work module, we keep all tasks including NOT_DONE (Not Done tasks) in the live tasks list
-          setTasks(filteredWorkTasks);
-        }
-        setIsLoading(false);
-        return;
       }
 
       // Fetch
@@ -775,7 +610,7 @@ const AllTasks = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [username, userRole, activeTab, showHistory, holidaysList, workingDaysList, debouncedSearchTerm, dateFilter, workEmployeeFilter]);
+  }, [username, userRole, activeTab, showHistory, holidaysList, workingDaysList, debouncedSearchTerm, dateFilter]);
 
   useEffect(() => {
     fetchData();
@@ -827,19 +662,14 @@ const AllTasks = () => {
         }
       }
 
-      // Smart deduplication for checklist, delegation, maintenance, and work tabs
-      if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance" || activeTab === "work") {
+      // Smart deduplication for checklist, delegation, and maintenance tabs
+      if (activeTab === "checklist" || activeTab === "delegation" || activeTab === "maintenance") {
         const descKey = task.task_description || task.issue_description || "";
         const nameKey = task.name || task.assigned_person || task.doer_name || "";
         const shopKey = task.shop || task.shop_name || "";
 
         // Use series_id or assignment_id as the unique identifier if available, otherwise fallback to the old key
-        let seriesBase = task.series_id || task.assignment_id || `${shopKey}::${descKey}::${nameKey}`;
-
-        // Differentiate work tasks by their unique employee name and task id so they aren't incorrectly collapsed/deduplicated
-        if (activeTab === "work") {
-          seriesBase = `${task.assignment_id || ""}_${nameKey}_${task.id || ""}`;
-        }
+        const seriesBase = task.series_id || task.assignment_id || `${shopKey}::${descKey}::${nameKey}`;
 
         if (status === "Upcoming") {
           // UPCOMING: only show the NEXT (earliest) occurrence per task series
@@ -898,36 +728,33 @@ const AllTasks = () => {
         next.add(id);
       } else {
         next.delete(id);
-        setRemarksData((prevR) => {
-          const n = { ...prevR };
-          delete n[id];
-          return n;
-        });
-        setUploadedImages((prevI) => {
-          const n = { ...prevI };
-          delete n[id];
-          return n;
-        });
-        setStatusData((prevS) => {
-          const n = { ...prevS };
-          delete n[id];
-          return n;
-        });
       }
       return next;
     });
+
+    if (!isChecked) {
+      setRemarksData((prevR) => {
+        const n = { ...prevR };
+        delete n[id];
+        return n;
+      });
+      setUploadedImages((prevI) => {
+        const n = { ...prevI };
+        delete n[id];
+        return n;
+      });
+      setStatusData((prevS) => {
+        const n = { ...prevS };
+        delete n[id];
+        return n;
+      });
+    }
   }, []);
 
   const handleSelectAll = useCallback(
     (e) => {
       if (e.target.checked) {
         const submittableTasks = filteredPendingTasks.filter(t => {
-          if (activeTab === "work") {
-            const ds = getWorkTaskDynamicStatus(t, currentTime);
-            const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username && t.name !== username;
-            return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
-          }
-          // Use statusDateColumn instead of hardcoded ternary for robust support across all tabs (including work)
           const timeStatus = getTimeStatus(t[statusDateColumn], t.status);
           return timeStatus !== "Upcoming";
         });
@@ -938,7 +765,7 @@ const AllTasks = () => {
         setUploadedImages({});
         setStatusData({});
       }
-    }, [filteredPendingTasks, dateFilter, activeTab, getTimeStatus, userRole, username, currentTime]);
+    }, [filteredPendingTasks, getTimeStatus, statusDateColumn]);
 
   const paginatedTasks = useMemo(() => {
     return (showHistory ? filteredHistoryTasks : filteredPendingTasks).slice(0, visibleCount);
@@ -1162,8 +989,7 @@ const AllTasks = () => {
         activeTab === "delegation" ? "delegation" :
           activeTab === "maintenance" ? "maintenance_tasks" :
             activeTab === "ea" ? "ea_tasks" :
-              activeTab === "work" ? "work_task" :
-                "repair_tasks";
+              "repair_tasks";
       const completionField = "submission_date";
 
       const selectedArray = Array.from(selectedItems);
@@ -1174,8 +1000,8 @@ const AllTasks = () => {
           imageUrl = await uploadFile(id, uploadedImages[id]);
         }
 
-        const remarksField = (activeTab === "checklist" || activeTab === "work") ? "remark" : "remarks";
-        const imageField = (activeTab === "checklist" || activeTab === "delegation" || activeTab === "work") ? "image" : (activeTab === "maintenance" ? "uploaded_image_url" : "image_url");
+        const remarksField = activeTab === "checklist" ? "remark" : "remarks";
+        const imageField = (activeTab === "checklist" || activeTab === "delegation") ? "image" : (activeTab === "maintenance" ? "uploaded_image_url" : "image_url");
 
         // Handle EA tasks differently - consolidate into ea_tasks
         if (activeTab === "ea") {
@@ -1258,16 +1084,6 @@ const AllTasks = () => {
               updates.image_url = imageUrl;
             }
             const { error: updateError = null } = await supabase.from("ea_tasks").update(updates).eq("task_id", id);
-            if (updateError) throw updateError;
-          } else if (activeTab === "work") {
-            const updates = {
-              remark: remarksData[id] || null,
-              image: imageUrl,
-              status: 'SUBMITTED',
-              submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
-              submitted_by: username
-            };
-            const { error: updateError } = await supabase.from("work_task").update(updates).eq("id", id);
             if (updateError) throw updateError;
           }
         } else {
@@ -1447,17 +1263,25 @@ const AllTasks = () => {
                           className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-sm ${dateFilter !== 'all' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200'}`}
                         >
                           <Filter className="h-3 w-3" />
-                          <span className="capitalize">{dateFilter}</span>
+                          <span className="capitalize">{dateFilter === "not_done" ? "Not Done" : dateFilter}</span>
                           <ChevronDown size={14} className={`transition-transform ${dropdownOpen?.dateFilter ? 'rotate-180' : ''}`} />
                         </button>
                         {dropdownOpen?.dateFilter && (
                           <div className="absolute z-50 mt-2 w-40 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                            {[
-                              { id: 'all', label: 'All Tasks' },
-                              { id: activeTab === 'work' ? 'not_done' : 'overdue', label: activeTab === 'work' ? 'Not Done' : 'Overdue' },
-                              { id: 'today', label: 'Today' },
-                              { id: 'upcoming', label: 'Upcoming' }
-                            ].map((filter) => (
+                            {(activeTab === "work"
+                              ? [
+                                  { id: 'all', label: 'All Tasks' },
+                                  { id: 'not_done', label: 'Not Done' },
+                                  { id: 'today', label: 'Today' },
+                                  { id: 'upcoming', label: 'Upcoming' }
+                                ]
+                              : [
+                                  { id: 'all', label: 'All Tasks' },
+                                  { id: 'overdue', label: 'Overdue' },
+                                  { id: 'today', label: 'Today' },
+                                  { id: 'upcoming', label: 'Upcoming' }
+                                ]
+                            ).map((filter) => (
                                 <button
                                   key={filter.id}
                                   onClick={() => {
@@ -1474,18 +1298,9 @@ const AllTasks = () => {
                         )}
                       </div>
 
-                      {/* <button
-                        onClick={handleSendUrgentWhatsApp}
-                        disabled={selectedItems.size === 0 || isSubmitting}
-                        className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-40 shadow-md shadow-green-600/10 transition-all"
-                      >
-                        <BellRing className="h-4 w-4" />
-                        <span className="hidden md:inline">Urgent</span>
-                      </button> */}
-
                       {activeTab !== "repair" && (
                         <button
-                          onClick={handleSubmit}
+                          onClick={activeTab === "work" ? () => childSubmitRef.current?.() : handleSubmit}
                           disabled={selectedItems.size === 0 || isSubmitting}
                           className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 rounded-xl hover:bg-purple-700 disabled:opacity-40 shadow-md shadow-purple-600/10 transition-all"
                         >
@@ -1500,117 +1315,516 @@ const AllTasks = () => {
           </div>
         </div>
 
-        {/* Success Message */}
-        {successMessage && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 sm:px-4 py-3 rounded-md flex items-center justify-between text-sm sm:text-base animate-in fade-in duration-300">
-            <div className="flex items-center">
-              <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-emerald-600 flex-shrink-0" />
-              <span className="break-words font-black uppercase tracking-wide">{successMessage}</span>
-            </div>
-            <button onClick={() => setSuccessMessage("")} className="text-emerald-600 hover:text-emerald-800 ml-2 flex-shrink-0">
-              <X className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
-          </div>
-        )}
-
-        {/* Removed redundant date filter tabs - now in dropdown */}
-
-
-
-        {/* Table Container */}
-        <div className="rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden">
-
-          {showHistory && (
-            <div className="p-3 sm:p-4 border-b border-purple-100 bg-gray-50 flex flex-col sm:flex-row gap-3 items-center">
-              <span className="text-xs sm:text-sm font-medium text-purple-700 whitespace-nowrap">Filter by Range:</span>
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-500">From</span>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="text-xs sm:text-sm border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none"
-                  />
+        {activeTab === "work" ? (
+          <WorkTasksTab
+            username={username}
+            userRole={userRole}
+            holidaysList={holidaysList}
+            allUsers={allUsers}
+            formatDate={formatDate}
+            formatTimeOnly={formatTimeOnly}
+            formatDateWithTime={formatDateWithTime}
+            setLightboxImage={setLightboxImage}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            showHistory={showHistory}
+            setShowHistory={setShowHistory}
+            dateFilter={dateFilter}
+            setDateFilter={setDateFilter}
+            workEmployeeFilter={workEmployeeFilter}
+            setWorkEmployeeFilter={setWorkEmployeeFilter}
+            selectedItems={selectedItems}
+            setSelectedItems={setSelectedItems}
+            startDate={startDate}
+            setStartDate={setStartDate}
+            endDate={endDate}
+            setEndDate={setEndDate}
+            isSubmitting={isSubmitting}
+            setIsSubmitting={setIsSubmitting}
+            registerSubmit={handleRegisterSubmit}
+          />
+        ) : (
+          <>
+            {/* Success Message */}
+            {successMessage && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 sm:px-4 py-3 rounded-md flex items-center justify-between text-sm sm:text-base animate-in fade-in duration-300">
+                <div className="flex items-center">
+                  <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-emerald-600 flex-shrink-0" />
+                  <span className="break-words font-black uppercase tracking-wide">{successMessage}</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-500">To</span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="text-xs sm:text-sm border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none"
-                  />
-                </div>
-                {(startDate || endDate) && (
-                  <button onClick={() => { setStartDate(""); setEndDate(""); }} className="text-xs text-red-500 hover:underline">Clear</button>
-                )}
+                <button onClick={() => setSuccessMessage("")} className="text-emerald-600 hover:text-emerald-800 ml-2 flex-shrink-0">
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="min-h-[300px]">
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-20">
-                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-500 mb-2"></div>
-                <p className="text-purple-600 text-sm font-bold uppercase tracking-wider">Loading data...</p>
-              </div>
-            ) : error ? (
-              <div className="py-20 text-center">
-                <p className="text-red-500 mb-2 font-medium">{error}</p>
-                <button onClick={fetchData} className="text-sm text-purple-600 underline">Try again</button>
-              </div>
-            ) : (
-              <>
-                {/* Desktop view */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50 sticky top-0 z-20 shadow-sm transition-all duration-300">
-                      <tr>
-                        {!showHistory && (
-                          <th className="px-3 sm:px-6 py-3 sm:py-4 text-left font-bold text-gray-900">
-                            <input
-                              type="checkbox"
-                              checked={(() => {
-                                const submittableTasks = filteredPendingTasks.filter(t => {
-                                  if (activeTab === "work") {
-                                    const ds = getWorkTaskDynamicStatus(t, currentTime);
-                                    const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username && t.name !== username;
-                                    return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
-                                  }
-                                  const col = activeTab === "repair" ? "created_at" : "planned_date";
-                                  return getTimeStatus(t[col], t.status) !== "Upcoming";
-                                });
-                                return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
-                              })()}
-                              onChange={handleSelectAll}
-                              className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30"
-                            />
-                          </th>
-                        )}
-                        {tableHeaders.map((header) => (
-                          <th key={header.id} className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                            {header.label}
-                          </th>
-                        ))}
-                        {!showHistory && activeTab === "ea" && (
-                          <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Extended Date</th>
-                        )}
-                        {!showHistory && activeTab !== "repair" && (
-                          <>
-                            <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
-                            <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Image</th>
-                          </>
-                        )}
-                        {showHistory && (
-                          <>
-                            <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
-                            <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Attachment</th>
-                          </>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+            {/* Removed redundant date filter tabs - now in dropdown */}
+
+
+
+            {/* Table Container */}
+            <div className="rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden">
+
+              {showHistory && (
+                <div className="p-3 sm:p-4 border-b border-purple-100 bg-gray-50 flex flex-col sm:flex-row gap-3 items-center">
+                  <span className="text-xs sm:text-sm font-medium text-purple-700 whitespace-nowrap">Filter by Range:</span>
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-gray-500">From</span>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="text-xs sm:text-sm border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-gray-500">To</span>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="text-xs sm:text-sm border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none"
+                      />
+                    </div>
+                    {(startDate || endDate) && (
+                      <button onClick={() => { setStartDate(""); setEndDate(""); }} className="text-xs text-red-500 hover:underline">Clear</button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="min-h-[300px]">
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20">
+                    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-500 mb-2"></div>
+                    <p className="text-purple-600 text-sm font-bold uppercase tracking-wider">Loading data...</p>
+                  </div>
+                ) : error ? (
+                  <div className="py-20 text-center">
+                    <p className="text-red-500 mb-2 font-medium">{error}</p>
+                    <button onClick={fetchData} className="text-sm text-purple-600 underline">Try again</button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Desktop view */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0 z-20 shadow-sm transition-all duration-300">
+                          <tr>
+                            {!showHistory && (
+                              <th className="px-3 sm:px-6 py-3 sm:py-4 text-left font-bold text-gray-900">
+                                <input
+                                  type="checkbox"
+                                  checked={(() => {
+                                    const submittableTasks = filteredPendingTasks.filter(t => {
+                                      const col = activeTab === "repair" ? "created_at" : "planned_date";
+                                      return getTimeStatus(t[col], t.status) !== "Upcoming";
+                                    });
+                                    return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
+                                  })()}
+                                  onChange={handleSelectAll}
+                                  className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30"
+                                />
+                              </th>
+                            )}
+                            {tableHeaders.map((header) => (
+                              <th key={header.id} className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                                {header.label}
+                              </th>
+                            ))}
+                            {!showHistory && activeTab === "ea" && (
+                              <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Extended Date</th>
+                            )}
+                            {!showHistory && activeTab !== "repair" && (
+                              <>
+                                <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
+                                <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Image</th>
+                              </>
+                            )}
+                            {showHistory && (
+                              <>
+                                <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
+                                <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Attachment</th>
+                              </>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {paginatedTasks.length > 0 ? (
+                            paginatedTasks.map((task, index) => {
+                              const currentStatus = getTimeStatus(task[statusDateColumn], task.status);
+                              const prevStatus = index > 0 ? getTimeStatus(paginatedTasks[index - 1][statusDateColumn], paginatedTasks[index - 1].status) : null;
+                              const showGroupHeader = currentStatus !== prevStatus;
+
+                              return (
+                                <Fragment key={task.id}>
+                                  {showGroupHeader && !showHistory && (
+                                    <tr className="bg-gray-100/30">
+                                      <td colSpan={tableHeaders.length + 6} className="px-4 sm:px-6 py-2">
+                                        <div className="flex items-center gap-2">
+                                          <div className={`w-1.5 h-1.5 rounded-full ${(currentStatus === 'Overdue' || currentStatus === 'Not Done') ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                          <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-gray-500">
+                                            {currentStatus} {activeTab === "ea" && currentStatus === "Today" ? " & Extended" : ""}
+                                          </span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                  <tr className="hover:bg-gray-50">
+                                    {!showHistory && (
+                                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedItems.has(task.id)}
+                                          onChange={(e) => handleSelectItem(task.id, e.target.checked)}
+                                          disabled={getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"}
+                                          className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                                        />
+                                      </td>
+                                    )}
+                                    {activeTab === "repair" ? (
+                                      <>
+                                        {!showHistory ? (
+                                          <>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                              <button onClick={() => openUpdateModal(task)} className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1">
+                                                <Edit className="h-3 w-3" /> Process
+                                              </button>
+                                            </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{task.id}</td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
+                                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task.created_at, task.status) === 'Overdue' ? 'bg-red-100 text-red-800' : getTimeStatus(task.created_at, task.status) === 'Today' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                                                {getTimeStatus(task.created_at, task.status)}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
+                                              <RenderDescription text={task.issue_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                                            </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.filled_by}</td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                              <span className="font-bold text-gray-900">{task.assigned_person || "—"}</span>
+                                            </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.machine_name}</td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
+                                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === "Pending" ? "bg-yellow-100 text-yellow-800" :
+                                                (task.status === "Approved" || task.status === "Completed") ? "bg-green-100 text-green-800" :
+                                                  (!task.admin_done && task.submission_date) ? "bg-orange-100 text-orange-800" :
+                                                    "bg-gray-100 text-gray-800"}`}>
+                                                {(!task.admin_done && task.submission_date) ? "Pending Approval" : task.status}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.part_replaced || "—"}</td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.bill_amount ? `₹${task.bill_amount}` : "—"}</td>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{task.id}</td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
+                                              <RenderDescription text={task.issue_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                                            </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                              {task.submission_date ? new Date(task.submission_date).toLocaleString() : "—"}
+                                            </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.filled_by}</td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.assigned_person}</td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.machine_name}</td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
+                                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === "Pending" ? "bg-yellow-100 text-yellow-800" :
+                                                (task.status === "Approved" || task.status === "Completed") ? "bg-green-100 text-green-800" :
+                                                  task.status === "Pending Approval" ? "bg-orange-100 text-orange-800" :
+                                                    "bg-gray-100 text-gray-800"}`}>
+                                                {task.status}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.part_replaced || "—"}</td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.bill_amount ? `₹${task.bill_amount}` : "—"}</td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">{task.remarks || "—"}</td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                              {task.work_photo_url || task.bill_copy_url ? (
+                                                <div className="flex flex-col gap-1">
+                                                  {task.work_photo_url && (
+                                                    <a href={task.work_photo_url} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline text-xs">
+                                                      View Work Photo
+                                                    </a>
+                                                  )}
+                                                  {task.bill_copy_url && (
+                                                    <a href={task.bill_copy_url} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline text-xs">
+                                                      View Bill
+                                                    </a>
+                                                  )}
+                                                </div>
+                                              ) : "—"}
+                                            </td>
+                                          </>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <>
+                                        {tableHeaders.map((header) => (
+                                          <td key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 ${header.id === 'task_description' || header.id === 'issue_description' ? 'min-w-[200px] whitespace-normal' : 'whitespace-nowrap'}`}>
+                                            {header.id === "time_status"
+                                              ? (
+                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task[statusDateColumn], task.status) === 'Overdue' ? 'bg-red-100 text-red-800' :
+                                                  getTimeStatus(task[statusDateColumn], task.status) === 'Today' ? 'bg-green-100 text-green-800' :
+                                                    'bg-blue-100 text-blue-800'}`}>
+                                                  {getTimeStatus(task[statusDateColumn], task.status)}
+                                                </span>
+                                              )
+                                              : header.id === "task_start_date" || header.id === "created_at" || header.id === "planned_date" || header.id === "updated_at" || header.id === "current_date"
+                                                ? (
+                                                  <div className="flex flex-col">
+                                                    <span className="font-bold text-gray-900">{formatDate(task[header.id])}</span>
+                                                    <span className="text-[11px] text-gray-400">{header.id === "current_date" ? (task.task_assignments?.start_datetime ? formatTimeOnly(task.task_assignments.start_datetime) : "") : formatTimeOnly(task[header.id])}</span>
+                                                  </div>
+                                                )
+                                                : (header.id === "id" || header.id === "task_id")
+                                                  ? (
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="font-bold text-gray-900">{task[header.id]}</span>
+                                                      {(task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend") && (
+                                                        <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded uppercase tracking-tighter border border-amber-200 shadow-sm animate-pulse">Extended</span>
+                                                      )}
+                                                    </div>
+                                                  )
+                                                  : header.id === "submission_date"
+                                                    ? (activeTab === "maintenance" && showHistory)
+                                                      ? (
+                                                        <div className="flex flex-col">
+                                                          <span className="font-bold text-gray-900">{formatDate(task[header.id])}</span>
+                                                          <span className="text-[11px] text-gray-400">{formatTimeOnly(task[header.id])}</span>
+                                                        </div>
+                                                      )
+                                                      : formatDateWithTime(task[header.id])
+                                                    : header.id === "status"
+                                                      ? !showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")
+                                                          ? (
+                                                            <select
+                                                              value={statusData[task.id] || task.status || ""}
+                                                              onChange={(e) => setStatusData(prev => ({ ...prev, [task.id]: e.target.value }))}
+                                                              disabled={!selectedItems.has(task.id)}
+                                                              className="block w-full py-1.5 pl-3 pr-8 text-xs sm:text-sm text-gray-700 bg-white border border-gray-200 rounded-md focus:border-purple-500 focus:outline-none disabled:bg-gray-50/50 disabled:text-gray-400 appearance-none shadow-sm cursor-pointer hover:border-gray-300 transition-colors"
+                                                              style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
+                                                            >
+                                                              <option value="">Select Status</option>
+                                                              {activeTab === "ea" ? (
+                                                                <>
+                                                                  <option value="done">Done</option>
+                                                                  <option value="extended">Extend</option>
+                                                                </>
+                                                              ) : (
+                                                                <>
+                                                                  <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'yes' : 'Done'}>Done</option>
+                                                                  <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'no' : 'Not Done'}>Not Done</option>
+                                                                </>
+                                                              )}
+                                                            </select>
+                                                          )
+                                                          : (
+                                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${activeTab === "ea"
+                                                              ? (task[header.id]?.toLowerCase() === "approved" ? "bg-green-100 text-green-800" : task[header.id]?.toLowerCase() === "done" ? "bg-orange-100 text-orange-800" : (task[header.id]?.toLowerCase() === "pending" || task[header.id]?.toLowerCase() === "extend" || task[header.id]?.toLowerCase() === "extended") ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-800")
+                                                              : (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "approved" || task[header.id] === "Completed")
+                                                                ? (task.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
+                                                                : (task[header.id] === "extend" || task[header.id] === "pending" || task[header.id] === "extended")
+                                                                  ? "bg-yellow-100 text-yellow-800"
+                                                                  : "bg-gray-100 text-gray-800"
+                                                              }`}>
+                                                              {activeTab === "ea" && showHistory
+                                                                ? (task[header.id]?.toLowerCase() === "approved" || (task[header.id]?.toLowerCase() === "done" && task.admin_done) ? "Completed" : task[header.id]?.toLowerCase() === "done" ? "Pending Approval" : (task[header.id]?.toLowerCase() === "extended" || task[header.id]?.toLowerCase() === "extend") ? "Extended" : task[header.id])
+                                                                : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && !task.admin_done)
+                                                                  ? "Pending Approval"
+                                                                  : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && task.admin_done)
+                                                                    ? "Approved"
+                                                                    : task[header.id]}
+                                                            </span>
+                                                          )
+                                                      : (header.id === "enable_reminders" || header.id === "require_attachment" || header.id === "enable_reminder" || header.id === "attachment")
+                                                        ? (task[header.id] ? "Yes" : "No")
+                                                        : (header.id === 'name' || header.id === 'assigned_person' || header.id === 'doer_name' || header.id === 'manager_name')
+                                                          ? <span className="font-bold text-gray-900">{task[header.id] || "—"}</span>
+                                                          : header.id === "machine_name"
+                                                            ? (task.machine_name || (task.task_description ? task.task_description.split(' - ')[0] : "—"))
+                                                            : header.id === "part_name"
+                                                              ? (
+                                                                <div className="flex flex-col gap-1 min-w-[120px]">
+                                                                  <span className="text-gray-900">{task.part_name || "—"}</span>
+                                                                  <div className="flex gap-1 flex-wrap">
+                                                                    {task.part_name && task.part_name.split(',').map(p => p.trim()).map((part, idx) => {
+                                                                      const match = customDropdowns.find(d => d.category === "Part Name" && d.value === part && d.image_url);
+                                                                      return match ? (
+                                                                        <img
+                                                                          key={idx}
+                                                                          src={match.image_url}
+                                                                          alt={part}
+                                                                          className="w-10 h-10 object-cover rounded shadow-sm border border-gray-200 bg-gray-50 flex-shrink-0 cursor-zoom-in hover:ring-2 hover:ring-purple-400 hover:scale-105 transition-all"
+                                                                          title={`Click to enlarge: ${part}`}
+                                                                          onClick={() => setLightboxImage({ url: match.image_url, name: part })}
+                                                                        />
+                                                                      ) : null;
+                                                                    })}
+                                                                  </div>
+                                                                </div>
+                                                              )
+                                                              : (header.id === 'task_description' || header.id === 'issue_description' || header.id === 'remarks')
+                                                                ? <RenderDescription text={task[header.id]} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                                                                : isAudioUrl(task[header.id])
+                                                                  ? <AudioPlayer url={task[header.id]} />
+                                                                  : header.id === 'work_photo_url' || header.id === 'bill_copy_url'
+                                                                    ? task[header.id] ? <a href={task[header.id]} target="_blank" rel="noopener noreferrer" className="text-purple-600 underline">View</a> : "—"
+                                                                    : task[header.id] || "—"}</td>
+                                        ))}
+                                        {!showHistory && activeTab === "ea" && (
+                                          <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                            <input
+                                              type="date"
+                                              placeholder="Extended Date"
+                                              value={extendedDateData[task.id] || ""}
+                                              onChange={(e) => setExtendedDateData((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                                              className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
+                                              disabled={!selectedItems.has(task.id) || statusData[task.id] !== 'extended'}
+                                            />
+                                          </td>
+                                        )}
+                                        {!showHistory && activeTab !== "repair" && (
+                                          <>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                              <input
+                                                type="text"
+                                                placeholder="Enter remarks"
+                                                value={remarksData[task.id] || ""}
+                                                onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                                                className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
+                                                disabled={!selectedItems.has(task.id)}
+                                              />
+                                            </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 bg-emerald-50/30">
+                                              <div className="flex flex-col gap-2">
+                                                {imagePreviews[task.id] && (
+                                                  <div className="relative w-16 h-16 mb-1 group">
+                                                    <img
+                                                      src={imagePreviews[task.id]}
+                                                      className="w-full h-full object-cover rounded-md border-2 border-purple-200 shadow-sm"
+                                                      alt="Preview"
+                                                    />
+                                                    <button
+                                                      onClick={() => {
+                                                        URL.revokeObjectURL(imagePreviews[task.id]);
+                                                        setImagePreviews(prev => {
+                                                          const next = { ...prev };
+                                                          delete next[task.id];
+                                                          return next;
+                                                        });
+                                                        setUploadedImages(prev => {
+                                                          const next = { ...prev };
+                                                          delete next[task.id];
+                                                          return next;
+                                                        });
+                                                      }}
+                                                      className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                      <X size={10} />
+                                                    </button>
+                                                  </div>
+                                                )}
+                                                {activeTab !== "work" && (
+                                                  <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-purple-600 hover:text-purple-800" : "text-gray-400 cursor-not-allowed"}`}>
+                                                    <Upload className="h-3.5 w-3.5" />
+                                                    <span>
+                                                      {uploadedImages[task.id] ? "Change File" : (task.require_attachment || task.attachment) ? <span>Upload Proof <span className="text-red-500 font-bold">*</span></span> : "Upload Proof"}
+                                                    </span>
+                                                    <input
+                                                      type="file"
+                                                      className="hidden"
+                                                      onChange={(e) => handleImageUpload(task.id, e)}
+                                                      disabled={!selectedItems.has(task.id)}
+                                                    />
+                                                  </label>
+                                                )}
+                                                <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-cyan-500 hover:text-cyan-700" : "text-gray-400 cursor-not-allowed"}`}>
+                                                  <Camera className="h-3.5 w-3.5" />
+                                                  <span>
+                                                    {uploadedImages[task.id] ? "Retake Photo" : (task.require_attachment || task.attachment) ? <span>Take Photo <span className="text-red-500 font-bold">*</span></span> : "Take Photo"}
+                                                  </span>
+                                                  <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={(e) => handleImageUpload(task.id, e)}
+                                                    disabled={!selectedItems.has(task.id)}
+                                                  />
+                                                </label>
+                                              </div>
+                                            </td>
+                                          </>
+                                        )}
+                                        {showHistory && (
+                                          <>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">
+                                              <RenderDescription text={task.remark || task.remarks} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                                            </td>
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
+                                              {task.image || task.uploaded_image_url || task.image_url ? (
+                                                <a href={task.image || task.uploaded_image_url || task.image_url} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">View</a>
+                                              ) : "—"}
+                                            </td>
+                                          </>
+                                        )}
+                                      </>
+                                    )}
+                                  </tr>
+                                </Fragment>
+                              )
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={tableHeaders.length + 6} className="px-6 py-20 text-center text-gray-400">
+                                <div className="flex flex-col items-center gap-2">
+                                  <Search size={40} className="text-gray-200" />
+                                  <p>No {showHistory ? "history" : "pending tasks"} found.</p>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile view Toolbar */}
+                    {!showHistory && (
+                      <div className="md:hidden sticky top-[header_height] z-30 transition-all duration-300">
+                        <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <div className="relative flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={(() => {
+                                  const submittableTasks = filteredPendingTasks.filter(t => {
+                                    const col = activeTab === "repair" ? "created_at" : "planned_date";
+                                    return getTimeStatus(t[col], t.status) !== "Upcoming";
+                                  });
+                                  return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
+                                })()}
+                                onChange={handleSelectAll}
+                                className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition-all cursor-pointer"
+                              />
+                            </div>
+                            <span className="text-sm font-black text-gray-700 uppercase tracking-tight">Select All Tasks</span>
+                          </div>
+
+                          {selectedItems.size > 0 && (
+                            <button
+                              onClick={() => { setSelectedItems(new Set()); setRemarksData({}); setUploadedImages({}); setStatusData({}); }}
+                              className="text-[10px] font-black text-red-500 uppercase tracking-widest hover:text-red-700 transition-colors"
+                            >
+                              Clear Selection
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Mobile view Cards */}
+                    <div className="md:hidden space-y-4 p-4 bg-gray-50/50 pb-24">
                       {paginatedTasks.length > 0 ? (
                         paginatedTasks.map((task, index) => {
                           const currentStatus = getTimeStatus(task[statusDateColumn], task.status);
@@ -1620,870 +1834,441 @@ const AllTasks = () => {
                           return (
                             <Fragment key={task.id}>
                               {showGroupHeader && !showHistory && (
-                                <tr className="bg-gray-100/30">
-                                  <td colSpan={tableHeaders.length + 6} className="px-4 sm:px-6 py-2">
-                                    <div className="flex items-center gap-2">
-                                      <div className={`w-1.5 h-1.5 rounded-full ${(currentStatus === 'Overdue' || currentStatus === 'Not Done') ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                                      <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-gray-500">
-                                        {currentStatus} {activeTab === "ea" && currentStatus === "Today" ? " & Extended" : ""}
-                                      </span>
-                                    </div>
-                                  </td>
-                                </tr>
+                                <div className="pt-2 pb-1 px-1">
+                                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
+                                    <div className={`w-1 h-1 rounded-full ${(currentStatus === 'Overdue' || currentStatus === 'Not Done') ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                    {currentStatus} {activeTab === "ea" && currentStatus === "Today" ? " & Extended" : ""}
+                                  </span>
+                                </div>
                               )}
-                              <tr className="hover:bg-gray-50">
-                                {!showHistory && (
-                                  <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedItems.has(task.id)}
-                                      onChange={(e) => handleSelectItem(task.id, e.target.checked)}
-                                      disabled={
-                                        activeTab === "work"
-                                          ? (() => {
-                                            const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                            const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && task.manager_name === username && task.name !== username;
-                                            return ds === "UPCOMING" || ds === "NOT_DONE" || isAssignedByMe;
-                                          })()
-                                          : getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"
-                                      }
-                                      className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed"
-                                    />
-                                  </td>
-                                )}
-                                {activeTab === "repair" ? (
-                                  <>
-                                    {!showHistory ? (
-                                      <>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                          <button onClick={() => openUpdateModal(task)} className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1">
-                                            <Edit className="h-3 w-3" /> Process
-                                          </button>
-                                        </td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{task.id}</td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
-                                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task.created_at, task.status) === 'Overdue' ? 'bg-red-100 text-red-800' : getTimeStatus(task.created_at, task.status) === 'Today' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
-                                            {getTimeStatus(task.created_at, task.status)}
-                                          </span>
-                                        </td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
-                                          <RenderDescription text={task.issue_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
-                                        </td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.filled_by}</td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                          <span className="font-bold text-gray-900">{task.assigned_person || "—"}</span>
-                                        </td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.machine_name}</td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
-                                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === "Pending" ? "bg-yellow-100 text-yellow-800" :
-                                            (task.status === "Approved" || task.status === "Completed") ? "bg-green-100 text-green-800" :
-                                              (!task.admin_done && task.submission_date) ? "bg-orange-100 text-orange-800" :
-                                                "bg-gray-100 text-gray-800"}`}>
-                                            {(!task.admin_done && task.submission_date) ? "Pending Approval" : task.status}
-                                          </span>
-                                        </td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.part_replaced || "—"}</td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.bill_amount ? `₹${task.bill_amount}` : "—"}</td>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 font-bold">{task.id}</td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 min-w-[200px]">
-                                          <RenderDescription text={task.issue_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
-                                        </td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                          {task.submission_date ? new Date(task.submission_date).toLocaleString() : "—"}
-                                        </td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.filled_by}</td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.assigned_person}</td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.machine_name}</td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm">
-                                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${task.status === "Pending" ? "bg-yellow-100 text-yellow-800" :
-                                            (task.status === "Approved" || task.status === "Completed") ? "bg-green-100 text-green-800" :
-                                              task.status === "Pending Approval" ? "bg-orange-100 text-orange-800" :
-                                                "bg-gray-100 text-gray-800"}`}>
-                                            {task.status}
-                                          </span>
-                                        </td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.part_replaced || "—"}</td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">{task.bill_amount ? `₹${task.bill_amount}` : "—"}</td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">{task.remarks || "—"}</td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                          {task.work_photo_url || task.bill_copy_url ? (
-                                            <div className="flex flex-col gap-1">
-                                              {task.work_photo_url && (
-                                                <a href={task.work_photo_url} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline text-xs">
-                                                  View Work Photo
-                                                </a>
-                                              )}
-                                              {task.bill_copy_url && (
-                                                <a href={task.bill_copy_url} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline text-xs">
-                                                  View Bill
-                                                </a>
-                                              )}
-                                            </div>
-                                          ) : "—"}
-                                        </td>
-                                      </>
+                              <div className="bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden animate-fade-in">
+                                {/* Card Header */}
+                                <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
+                                  <div className="flex items-center gap-2">
+                                    {!showHistory && (
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedItems.has(task.id)}
+                                        onChange={(e) => handleSelectItem(task.id, e.target.checked)}
+                                        disabled={getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"}
+                                        className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                      />
                                     )}
-                                  </>
-                                ) : (
-                                  <>
-                                    {tableHeaders.map((header) => (
-                                      <td key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 ${header.id === 'task_description' || header.id === 'issue_description' ? 'min-w-[200px] whitespace-normal' : 'whitespace-nowrap'}`}>
-                                        {header.id === "time_status"
-                                          ? activeTab === "work"
-                                            ? (() => {
-                                              const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                              const badgeColors = ds === 'NOT_DONE' ? 'bg-red-50 text-red-500' : ds === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
-                                              const label = ds === 'NOT_DONE' ? 'Not Done' : ds === 'ACTIVE' ? 'Active' : 'Upcoming';
-                                              return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${badgeColors}`}>{label}</span>;
-                                            })()
-                                            : (
-                                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task[statusDateColumn], task.status) === 'Overdue' ? 'bg-red-100 text-red-800' :
-                                                getTimeStatus(task[statusDateColumn], task.status) === 'Today' ? 'bg-green-100 text-green-800' :
-                                                  'bg-blue-100 text-blue-800'}`}>
-                                                {getTimeStatus(task[statusDateColumn], task.status)}
-                                              </span>
-                                            )
-                                          : header.id === "task_start_date" || header.id === "created_at" || header.id === "planned_date" || header.id === "updated_at" || header.id === "current_date"
-                                            ? (
-                                              <div className="flex flex-col">
-                                                <span className="font-bold text-gray-900">{formatDate(task[header.id])}</span>
-                                                <span className="text-[11px] text-gray-400">{header.id === "current_date" ? (task.task_assignments?.start_datetime ? formatTimeOnly(task.task_assignments.start_datetime) : "") : formatTimeOnly(task[header.id])}</span>
-                                              </div>
-                                            )
-                                            : (header.id === "id" || header.id === "task_id")
-                                              ? (
-                                                <div className="flex items-center gap-2">
-                                                  <span className="font-bold text-gray-900">{task[header.id]}</span>
-                                                  {(task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend") && (
-                                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded uppercase tracking-tighter border border-amber-200 shadow-sm animate-pulse">Extended</span>
-                                                  )}
-                                                </div>
-                                              )
-                                              : header.id === "submission_date"
-                                                ? (activeTab === "maintenance" && showHistory)
-                                                  ? (
-                                                    <div className="flex flex-col">
-                                                      <span className="font-bold text-gray-900">{formatDate(task[header.id])}</span>
-                                                      <span className="text-[11px] text-gray-400">{formatTimeOnly(task[header.id])}</span>
-                                                    </div>
-                                                  )
-                                                  : formatDateWithTime(task[header.id])
-                                                : header.id === "status"
-                                                  ? activeTab === "work"
-                                                    ? (() => {
-                                                      const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                                      if (ds === "APPROVED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>;
-                                                      if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
-                                                      if (ds === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
-                                                      if (ds === "UPCOMING") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>;
-                                                      if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
-                                                      return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>;
-                                                    })()
-                                                    : !showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")
-                                                      ? (
-                                                        <select
-                                                          value={statusData[task.id] || task.status || ""}
-                                                          onChange={(e) => setStatusData(prev => ({ ...prev, [task.id]: e.target.value }))}
-                                                          disabled={!selectedItems.has(task.id)}
-                                                          className="block w-full py-1.5 pl-3 pr-8 text-xs sm:text-sm text-gray-700 bg-white border border-gray-200 rounded-md focus:border-purple-500 focus:outline-none disabled:bg-gray-50/50 disabled:text-gray-400 appearance-none shadow-sm cursor-pointer hover:border-gray-300 transition-colors"
-                                                          style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                        >
-                                                          <option value="">Select Status</option>
-                                                          {activeTab === "ea" ? (
-                                                            <>
-                                                              <option value="done">Done</option>
-                                                              <option value="extended">Extend</option>
-                                                            </>
-                                                          ) : activeTab === "work" ? (
-                                                            <>
-                                                              <option value="SUBMITTED">Done</option>
-                                                            </>
-                                                          ) : (
-                                                            <>
-                                                              <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'yes' : 'Done'}>Done</option>
-                                                              <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'no' : 'Not Done'}>Not Done</option>
-                                                            </>
-                                                          )}
-                                                        </select>
-                                                      )
-                                                      : (
-                                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${activeTab === "ea"
-                                                          ? (task[header.id]?.toLowerCase() === "approved" ? "bg-green-100 text-green-800" : task[header.id]?.toLowerCase() === "done" ? "bg-orange-100 text-orange-800" : (task[header.id]?.toLowerCase() === "pending" || task[header.id]?.toLowerCase() === "extend" || task[header.id]?.toLowerCase() === "extended") ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-800")
-                                                          : (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "approved" || task[header.id] === "Completed")
-                                                            ? (task.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
-                                                            : (task[header.id] === "extend" || task[header.id] === "pending" || task[header.id] === "extended")
-                                                              ? "bg-yellow-100 text-yellow-800"
-                                                              : "bg-gray-100 text-gray-800"
-                                                          }`}>
-                                                          {activeTab === "ea" && showHistory
-                                                            ? (task[header.id]?.toLowerCase() === "approved" || (task[header.id]?.toLowerCase() === "done" && task.admin_done) ? "Completed" : task[header.id]?.toLowerCase() === "done" ? "Pending Approval" : (task[header.id]?.toLowerCase() === "extended" || task[header.id]?.toLowerCase() === "extend") ? "Extended" : task[header.id])
-                                                            : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && !task.admin_done)
-                                                              ? "Pending Approval"
-                                                              : (showHistory && (task[header.id] === "Done" || task[header.id] === "yes" || task[header.id] === "done" || task[header.id] === "Completed") && task.admin_done)
-                                                                ? "Approved"
-                                                                : task[header.id]}
-                                                        </span>
-                                                      )
-                                                  : (header.id === "enable_reminders" || header.id === "require_attachment" || header.id === "enable_reminder" || header.id === "attachment")
-                                                    ? (task[header.id] ? "Yes" : "No")
-                                                    : (header.id === 'name' || header.id === 'assigned_person' || header.id === 'doer_name' || header.id === 'manager_name')
-                                                      ? <span className="font-bold text-gray-900">{task[header.id] || "—"}</span>
-                                                      : header.id === "machine_name"
-                                                        ? (task.machine_name || (task.task_description ? task.task_description.split(' - ')[0] : "—"))
-                                                        : header.id === "part_name"
-                                                          ? (
-                                                            <div className="flex flex-col gap-1 min-w-[120px]">
-                                                              <span className="text-gray-900">{task.part_name || "—"}</span>
-                                                              <div className="flex gap-1 flex-wrap">
-                                                                {task.part_name && task.part_name.split(',').map(p => p.trim()).map((part, idx) => {
-                                                                  const match = customDropdowns.find(d => d.category === "Part Name" && d.value === part && d.image_url);
-                                                                  return match ? (
-                                                                    <img
-                                                                      key={idx}
-                                                                      src={match.image_url}
-                                                                      alt={part}
-                                                                      className="w-10 h-10 object-cover rounded shadow-sm border border-gray-200 bg-gray-50 flex-shrink-0 cursor-zoom-in hover:ring-2 hover:ring-purple-400 hover:scale-105 transition-all"
-                                                                      title={`Click to enlarge: ${part}`}
-                                                                      onClick={() => setLightboxImage({ url: match.image_url, name: part })}
-                                                                    />
-                                                                  ) : null;
-                                                                })}
-                                                              </div>
-                                                            </div>
-                                                          )
-                                                          : (header.id === 'task_description' || header.id === 'issue_description' || header.id === 'remarks')
-                                                            ? <RenderDescription text={task[header.id]} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
-                                                            : isAudioUrl(task[header.id])
-                                                              ? <AudioPlayer url={task[header.id]} />
-                                                              : header.id === 'work_photo_url' || header.id === 'bill_copy_url'
-                                                                ? task[header.id] ? <a href={task[header.id]} target="_blank" rel="noopener noreferrer" className="text-purple-600 underline">View</a> : "—"
-                                                                : task[header.id] || "—"}</td>
-                                    ))}
-                                    {!showHistory && activeTab === "ea" && (
-                                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                        <input
-                                          type="date"
-                                          placeholder="Extended Date"
-                                          value={extendedDateData[task.id] || ""}
-                                          onChange={(e) => setExtendedDateData((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                                          className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
-                                          disabled={!selectedItems.has(task.id) || statusData[task.id] !== 'extended'}
-                                        />
-                                      </td>
+                                    <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">#{task.id}</span>
+                                    {(task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend") && (
+                                      <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded uppercase tracking-tighter border border-amber-200 animate-pulse">Extended</span>
                                     )}
-                                    {!showHistory && activeTab !== "repair" && (
-                                      <>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                          <input
-                                            type="text"
-                                            placeholder="Enter remarks"
-                                            value={remarksData[task.id] || ""}
-                                            onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                                            className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-purple-400 outline-none text-xs text-gray-700 disabled:opacity-50"
+                                  </div>
+                                  <span className={`px-2 py-0.5 inline-flex text-[10px] leading-5 font-semibold rounded-full ${['Overdue', 'Not Done'].includes(getTimeStatus(task[statusDateColumn] || task.created_at, task.status)) ? 'bg-red-100 text-red-800' :
+                                    getTimeStatus(task[statusDateColumn] || task.created_at, task.status) === 'Today' ? 'bg-green-100 text-green-800' :
+                                      'bg-blue-100 text-blue-800'}`}>
+                                    {getTimeStatus(task[statusDateColumn] || task.created_at, task.status)}
+                                  </span>
+                                </div>
+
+                                {/* Card Body */}
+                                <div className="p-4 space-y-3">
+                                  {/* Main Description */}
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Description</p>
+                                    <div className="text-sm text-gray-800">
+                                      <RenderDescription text={task.issue_description || task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                      <p className="text-[10px] text-gray-400 uppercase font-semibold">Assigned To</p>
+                                      <p className="text-sm font-bold text-gray-900">{task.assigned_person || task.name || task.doer_name || "—"}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="text-[10px] text-gray-400 uppercase font-semibold">Status</p>
+                                      <div className="text-sm">
+                                        {(!showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")) ? (
+                                          <select
+                                            value={statusData[task.id] || task.status || ""}
+                                            onChange={(e) => setStatusData(prev => ({ ...prev, [task.id]: e.target.value }))}
                                             disabled={!selectedItems.has(task.id)}
-                                          />
-                                        </td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800 bg-emerald-50/30">
-                                          <div className="flex flex-col gap-2">
-                                            {imagePreviews[task.id] && (
-                                              <div className="relative w-16 h-16 mb-1 group">
-                                                <img
-                                                  src={imagePreviews[task.id]}
-                                                  className="w-full h-full object-cover rounded-md border-2 border-purple-200 shadow-sm"
-                                                  alt="Preview"
-                                                />
-                                                <button
-                                                  onClick={() => {
-                                                    URL.revokeObjectURL(imagePreviews[task.id]);
-                                                    setImagePreviews(prev => {
-                                                      const next = { ...prev };
-                                                      delete next[task.id];
-                                                      return next;
-                                                    });
-                                                    setUploadedImages(prev => {
-                                                      const next = { ...prev };
-                                                      delete next[task.id];
-                                                      return next;
-                                                    });
-                                                  }}
-                                                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                >
-                                                  <X size={10} />
-                                                </button>
-                                              </div>
+                                            className="w-full text-xs border-gray-200 rounded-md py-1 focus:ring-purple-400"
+                                          >
+                                            <option value="">Status</option>
+                                            {activeTab === "ea" ? (
+                                              <>
+                                                <option value="done">Done</option>
+                                                <option value="extended">Extend</option>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'yes' : 'Done'}>Done</option>
+                                                <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'no' : 'Not Done'}>Not Done</option>
+                                              </>
                                             )}
-                                            {activeTab !== "work" && (
-                                              <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-purple-600 hover:text-purple-800" : "text-gray-400 cursor-not-allowed"}`}>
-                                                <Upload className="h-3.5 w-3.5" />
-                                                <span>
-                                                  {uploadedImages[task.id] ? "Change File" : (task.require_attachment || task.attachment) ? <span>Upload Proof <span className="text-red-500 font-bold">*</span></span> : "Upload Proof"}
-                                                </span>
-                                                <input
-                                                  type="file"
-                                                  className="hidden"
-                                                  onChange={(e) => handleImageUpload(task.id, e)}
-                                                  disabled={!selectedItems.has(task.id)}
-                                                />
-                                              </label>
-                                            )}
-                                            <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-cyan-500 hover:text-cyan-700" : "text-gray-400 cursor-not-allowed"}`}>
-                                              <Camera className="h-3.5 w-3.5" />
-                                              <span>
-                                                {uploadedImages[task.id] ? "Retake Photo" : (task.require_attachment || task.attachment) ? <span>Take Photo <span className="text-red-500 font-bold">*</span></span> : "Take Photo"}
-                                              </span>
-                                              <input
-                                                type="file"
-                                                accept="image/*"
-                                                {...(activeTab === "work" ? { capture: "environment" } : {})}
-                                                className="hidden"
-                                                onChange={(e) => handleImageUpload(task.id, e)}
-                                                disabled={!selectedItems.has(task.id)}
+                                          </select>
+                                        ) : (
+                                          <span className={`px-2 inline-flex text-[10px] leading-5 font-semibold rounded-full ${(task.status === "Done" || task.status === "yes" || task.status === "done" || task.status === "approved" || task.status === "Completed")
+                                            ? (task.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
+                                            : (task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend")
+                                              ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                              : "bg-gray-100 text-gray-800"
+                                            }`}>
+                                            {(!task.admin_done && task.submission_date) ? "Pending Approval" : (task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend") ? "Extended" : task.status}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-4 pt-1 border-t border-gray-50">
+                                    <div className="space-y-1">
+                                      <p className="text-[10px] text-gray-400 uppercase font-semibold">Planned Date</p>
+                                      <p className="text-sm font-bold text-purple-700">{formatDate(task.planned_date || task.task_start_date || task.created_at)}</p>
+                                    </div>
+                                    {(task.shop || task.shop_name) && (
+                                      <div className="space-y-1">
+                                        <p className="text-[10px] text-gray-400 uppercase font-semibold">Shop</p>
+                                        <p className="text-sm text-gray-800 uppercase text-[11px] font-bold">{task.shop || task.shop_name}</p>
+                                      </div>
+                                    )}
+                                    {task.task_level && (
+                                      <div className="space-y-1">
+                                        <p className="text-[10px] text-gray-400 uppercase font-semibold">Level</p>
+                                        <p className="text-sm font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md w-fit uppercase text-[11px]">{task.task_level}</p>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Extra fields based on tab */}
+                                  {(activeTab === "repair" || task.machine_name) && (
+                                    <div className="space-y-1 pt-1 border-t border-gray-50">
+                                      <p className="text-[10px] text-gray-400 uppercase font-semibold">Machine / Unit</p>
+                                      <p className="text-sm text-gray-800">{task.machine_name || "—"}</p>
+                                    </div>
+                                  )}
+
+                                  {task.part_name && (
+                                    <div className="space-y-1">
+                                      <p className="text-[10px] text-gray-400 uppercase font-semibold">Part</p>
+                                      <div className="flex flex-col gap-1">
+                                        <span className="text-sm text-gray-800">{task.part_name}</span>
+                                        <div className="flex gap-3 flex-wrap mt-2">
+                                          {task.part_name.split(',').map(p => p.trim()).map((part, idx) => {
+                                            const match = customDropdowns?.find(d => d.category === "Part Name" && d.value === part && d.image_url);
+                                            return match ? (
+                                              <img
+                                                key={idx}
+                                                src={match.image_url}
+                                                alt={part}
+                                                className="w-24 h-24 object-cover rounded-lg shadow-md border-2 border-purple-100 bg-gray-50 flex-shrink-0 cursor-zoom-in transition-all active:scale-95"
+                                                title={`Click to enlarge: ${part}`}
+                                                onClick={() => setLightboxImage({ url: match.image_url, name: part })}
                                               />
-                                            </label>
+                                            ) : null;
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {activeTab === "repair" && task.bill_amount && (
+                                    <div className="space-y-1">
+                                      <p className="text-[10px] text-gray-400 uppercase font-semibold">Amount</p>
+                                      <p className="text-sm font-bold text-gray-900">₹{task.bill_amount}</p>
+                                    </div>
+                                  )}
+
+                                  {/* Actions for Pending Tasks */}
+                                  {!showHistory && activeTab !== "repair" && (
+                                    <div className="pt-2 space-y-3 border-t border-gray-50">
+                                      {activeTab === "ea" && statusData[task.id] === "extended" && (
+                                        <div className="space-y-1">
+                                          <p className="text-[10px] text-red-500 uppercase font-bold">Extended Date *</p>
+                                          <input
+                                            type="date"
+                                            value={extendedDateData[task.id] || ""}
+                                            onChange={(e) => setExtendedDateData((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                                            disabled={!selectedItems.has(task.id)}
+                                            className="w-full text-xs border-red-200 rounded-md py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-red-400 bg-red-50/30"
+                                          />
+                                        </div>
+                                      )}
+                                      <div className="space-y-1">
+                                        <p className="text-[10px] text-gray-400 uppercase font-semibold">Remarks</p>
+                                        <input
+                                          type="text"
+                                          placeholder="Enter remarks"
+                                          value={remarksData[task.id] || ""}
+                                          onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                                          disabled={!selectedItems.has(task.id)}
+                                          className="w-full text-xs border-gray-200 rounded-md py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                                        />
+                                      </div>
+                                      <div className="flex flex-col gap-3">
+                                        {imagePreviews[task.id] && (
+                                          <div className="relative w-full h-32 rounded-lg border-2 border-dashed border-purple-200 bg-purple-50/30 flex items-center justify-center overflow-hidden">
+                                            <img src={imagePreviews[task.id]} className="w-full h-full object-contain" alt="Preview" />
+                                            <button
+                                              onClick={() => {
+                                                URL.revokeObjectURL(imagePreviews[task.id]);
+                                                setImagePreviews(prev => {
+                                                  const next = { ...prev };
+                                                  delete next[task.id];
+                                                  return next;
+                                                });
+                                                setUploadedImages(prev => {
+                                                  const next = { ...prev };
+                                                  delete next[task.id];
+                                                  return next;
+                                                });
+                                              }}
+                                              className="absolute top-2 right-2 bg-red-500/80 backdrop-blur-sm text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"
+                                            >
+                                              <X size={14} />
+                                            </button>
                                           </div>
-                                        </td>
-                                      </>
-                                    )}
-                                    {showHistory && (
-                                      <>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 max-w-xs truncate">
-                                          <RenderDescription text={task.remark || task.remarks} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
-                                        </td>
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-800">
-                                          {task.image || task.uploaded_image_url || task.image_url ? (
-                                            <a href={task.image || task.uploaded_image_url || task.image_url} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">View</a>
-                                          ) : "—"}
-                                        </td>
-                                      </>
-                                    )}
-                                  </>
-                                )}
-                              </tr>
+                                        )}
+                                        <div className="flex gap-2">
+                                          <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-purple-200 bg-purple-50 text-purple-600 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
+                                            <Upload className="h-3.5 w-3.5" />
+                                            <span>{uploadedImages[task.id] ? "Change" : "Upload"}</span>
+                                            <input type="file" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
+                                          </label>
+                                          <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
+                                            <Camera className="h-3.5 w-3.5" />
+                                            <span>{uploadedImages[task.id] ? "Retake" : "Photo"}</span>
+                                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
+                                          </label>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Repair Process Button */}
+                                  {!showHistory && activeTab === "repair" && (
+                                    <div className="pt-2">
+                                      <button
+                                        onClick={() => openUpdateModal(task)}
+                                        className="w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
+                                      >
+                                        <Edit className="h-3.5 w-3.5" /> PROCESS REPAIR
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* History attachments */}
+                                  {showHistory && (task.work_photo_url || task.bill_copy_url || task.image_url || task.uploaded_image_url) && (
+                                    <div className="pt-2 border-t border-gray-50">
+                                      <p className="text-[10px] text-gray-400 uppercase font-semibold mb-2">Attachments</p>
+                                      <div className="flex flex-wrap gap-3">
+                                        {(task.work_photo_url || task.image_url || task.uploaded_image_url) && (
+                                          <div className="flex flex-col gap-1">
+                                            <span className="text-[10px] text-gray-500 font-medium">Work Photo</span>
+                                            <img
+                                              src={task.work_photo_url || task.image_url || task.uploaded_image_url}
+                                              alt="Work"
+                                              className="w-24 h-24 object-cover rounded-lg border-2 border-purple-100 shadow-sm cursor-zoom-in"
+                                              onClick={() => setLightboxImage({ url: task.work_photo_url || task.image_url || task.uploaded_image_url, name: "Work Photo" })}
+                                            />
+                                          </div>
+                                        )}
+                                        {task.bill_copy_url && (
+                                          <div className="flex flex-col gap-1">
+                                            <span className="text-[10px] text-gray-500 font-medium">Bill Copy</span>
+                                            <img
+                                              src={task.bill_copy_url}
+                                              alt="Bill"
+                                              className="w-24 h-24 object-cover rounded-lg border-2 border-blue-100 shadow-sm cursor-zoom-in"
+                                              onClick={() => setLightboxImage({ url: task.bill_copy_url, name: "Bill Copy" })}
+                                            />
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </Fragment>
                           )
                         })
                       ) : (
-                        <tr>
-                          <td colSpan={tableHeaders.length + 6} className="px-6 py-20 text-center text-gray-400">
-                            <div className="flex flex-col items-center gap-2">
-                              <Search size={40} className="text-gray-200" />
-                              <p>No {showHistory ? "history" : "pending tasks"} found.</p>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile view Toolbar */}
-                {!showHistory && (
-                  <div className="md:hidden sticky top-[header_height] z-30 transition-all duration-300">
-                    <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="relative flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={(() => {
-                              const submittableTasks = filteredPendingTasks.filter(t => {
-                                if (activeTab === "work") {
-                                  const ds = getWorkTaskDynamicStatus(t, currentTime);
-                                  const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && t.manager_name === username && t.name !== username;
-                                  return ds !== "UPCOMING" && ds !== "NOT_DONE" && !isAssignedByMe;
-                                }
-                                const col = activeTab === "repair" ? "created_at" : "planned_date";
-                                return getTimeStatus(t[col], t.status) !== "Upcoming";
-                              });
-                              return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
-                            })()}
-                            onChange={handleSelectAll}
-                            className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition-all cursor-pointer"
-                          />
+                        <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-200">
+                          <Search size={40} className="text-gray-200 mx-auto mb-3" />
+                          <p className="text-gray-400 text-sm">No tasks found.</p>
                         </div>
-                        <span className="text-sm font-black text-gray-700 uppercase tracking-tight">Select All Tasks</span>
-                      </div>
-
-                      {selectedItems.size > 0 && (
-                        <button
-                          onClick={() => { setSelectedItems(new Set()); setRemarksData({}); setUploadedImages({}); setStatusData({}); }}
-                          className="text-[10px] font-black text-red-500 uppercase tracking-widest hover:text-red-700 transition-colors"
-                        >
-                          Clear Selection
-                        </button>
                       )}
                     </div>
-                  </div>
-                )}
 
-                {/* Mobile view Cards */}
-                <div className="md:hidden space-y-4 p-4 bg-gray-50/50 pb-24">
-                  {paginatedTasks.length > 0 ? (
-                    paginatedTasks.map((task, index) => {
-                      const currentStatus = getTimeStatus(task[statusDateColumn], task.status);
-                      const prevStatus = index > 0 ? getTimeStatus(paginatedTasks[index - 1][statusDateColumn], paginatedTasks[index - 1].status) : null;
-                      const showGroupHeader = currentStatus !== prevStatus;
-
-                      return (
-                        <Fragment key={task.id}>
-                          {showGroupHeader && !showHistory && (
-                            <div className="pt-2 pb-1 px-1">
-                              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
-                                <div className={`w-1 h-1 rounded-full ${(currentStatus === 'Overdue' || currentStatus === 'Not Done') ? 'bg-red-500' : currentStatus === 'Today' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                                {currentStatus} {activeTab === "ea" && currentStatus === "Today" ? " & Extended" : ""}
-                              </span>
+                    {/* Mobile Floating Submit Bar */}
+                    {!showHistory && selectedItems.size > 0 && (
+                      <div className="md:hidden fixed bottom-6 left-4 right-4 z-40 animate-in slide-in-from-bottom-8 duration-500">
+                        <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-purple-100 p-2 overflow-hidden">
+                          <div className="flex items-center justify-between">
+                            <div className="pl-4">
+                              <p className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em] mb-0.5">Ready to Submit</p>
+                              <p className="text-xs font-bold text-gray-500">{selectedItems.size} task{selectedItems.size !== 1 ? 's' : ''} selected</p>
                             </div>
-                          )}
-                          <div className="bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden animate-fade-in">
-                            {/* Card Header */}
-                            <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
-                              <div className="flex items-center gap-2">
-                                {!showHistory && (
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedItems.has(task.id)}
-                                    onChange={(e) => handleSelectItem(task.id, e.target.checked)}
-                                    disabled={
-                                      activeTab === "work"
-                                        ? (() => {
-                                          const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                          const isAssignedByMe = (userRole || "").toLowerCase() === "manager" && task.manager_name === username && task.name !== username;
-                                          return ds === "UPCOMING" || ds === "NOT_DONE" || isAssignedByMe;
-                                        })()
-                                        : getTimeStatus(task[statusDateColumn], task.status) === "Upcoming"
-                                    }
-                                    className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                                  />
-                                )}
-                                <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">#{task.id}</span>
-                                {(task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend") && (
-                                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded uppercase tracking-tighter border border-amber-200 animate-pulse">Extended</span>
-                                )}
-                              </div>
-                              <span className={`px-2 py-0.5 inline-flex text-[10px] leading-5 font-semibold rounded-full ${['Overdue', 'Not Done'].includes(getTimeStatus(task[statusDateColumn] || task.created_at, task.status)) ? 'bg-red-100 text-red-800' :
-                                getTimeStatus(task[statusDateColumn] || task.created_at, task.status) === 'Today' ? 'bg-green-100 text-green-800' :
-                                  'bg-blue-100 text-blue-800'}`}>
-                                {getTimeStatus(task[statusDateColumn] || task.created_at, task.status)}
-                              </span>
-                            </div>
-
-                            {/* Card Body */}
-                            <div className="p-4 space-y-3">
-                              {/* Main Description */}
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Description</p>
-                                <div className="text-sm text-gray-800">
-                                  <RenderDescription text={task.issue_description || task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Assigned To</p>
-                                  <p className="text-sm font-bold text-gray-900">{task.assigned_person || task.name || task.doer_name || "—"}</p>
-                                </div>
-                                <div className="space-y-1">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Status</p>
-                                  <div className="text-sm">
-                                    {(!showHistory && (activeTab === "maintenance" || activeTab === "checklist" || activeTab === "ea" || activeTab === "delegation")) ? (
-                                      <select
-                                        value={statusData[task.id] || task.status || ""}
-                                        onChange={(e) => setStatusData(prev => ({ ...prev, [task.id]: e.target.value }))}
-                                        disabled={!selectedItems.has(task.id)}
-                                        className="w-full text-xs border-gray-200 rounded-md py-1 focus:ring-purple-400"
-                                      >
-                                        <option value="">Status</option>
-                                        {activeTab === "ea" ? (
-                                          <>
-                                            <option value="done">Done</option>
-                                            <option value="extended">Extend</option>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'yes' : 'Done'}>Done</option>
-                                            <option value={(activeTab === 'checklist' || activeTab === 'delegation') ? 'no' : 'Not Done'}>Not Done</option>
-                                          </>
-                                        )}
-                                      </select>
-                                    ) : (
-                                      <span className={`px-2 inline-flex text-[10px] leading-5 font-semibold rounded-full ${(task.status === "Done" || task.status === "yes" || task.status === "done" || task.status === "approved" || task.status === "Completed")
-                                        ? (task.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
-                                        : (task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend")
-                                          ? "bg-amber-100 text-amber-800 border border-amber-200"
-                                          : "bg-gray-100 text-gray-800"
-                                        }`}>
-                                        {(!task.admin_done && task.submission_date) ? "Pending Approval" : (task.status?.toLowerCase() === "extended" || task.status?.toLowerCase() === "extend") ? "Extended" : task.status}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4 pt-1 border-t border-gray-50">
-                                <div className="space-y-1">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Planned Date</p>
-                                  <p className="text-sm font-bold text-purple-700">{activeTab === "work" ? (<>{formatDate(task.current_date)}{task.task_assignments?.start_datetime && (<span className="text-xs text-gray-500 font-normal block">{formatTimeOnly(task.task_assignments.start_datetime)}</span>)}</>) : (formatDate(task.planned_date || task.task_start_date || task.created_at))}</p>
-                                </div>
-                                {activeTab === "work" && task.manager_name && (
-                                  <div className="space-y-1">
-                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Manager</p>
-                                    <p className="text-sm text-gray-800 text-[11px] font-bold">{task.manager_name}</p>
-                                  </div>
-                                )}
-                                {(task.shop || task.shop_name) && (
-                                  <div className="space-y-1">
-                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Shop</p>
-                                    <p className="text-sm text-gray-800 uppercase text-[11px] font-bold">{task.shop || task.shop_name}</p>
-                                  </div>
-                                )}
-                                {activeTab === "work" && task.department && (
-                                  <div className="space-y-1">
-                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Department</p>
-                                    <p className="text-sm text-gray-800 uppercase text-[11px] font-bold">{task.department}</p>
-                                  </div>
-                                )}
-                                {task.task_level && (
-                                  <div className="space-y-1">
-                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Level</p>
-                                    <p className="text-sm font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md w-fit uppercase text-[11px]">{task.task_level}</p>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Extra fields based on tab */}
-                              {(activeTab === "repair" || task.machine_name) && (
-                                <div className="space-y-1 pt-1 border-t border-gray-50">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Machine / Unit</p>
-                                  <p className="text-sm text-gray-800">{task.machine_name || "—"}</p>
-                                </div>
+                            <button
+                              onClick={handleSubmit}
+                              disabled={isSubmitting}
+                              className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-sm font-black rounded-xl shadow-lg shadow-purple-200 transition-all active:scale-95 flex items-center gap-2"
+                            >
+                              {isSubmitting ? (
+                                <><Loader2 className="w-4 h-4 animate-spin" /> Submitting</>
+                              ) : (
+                                <><CheckCircle2 className="w-4 h-4" /> Submit Now</>
                               )}
-
-                              {task.part_name && (
-                                <div className="space-y-1">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Part</p>
-                                  <div className="flex flex-col gap-1">
-                                    <span className="text-sm text-gray-800">{task.part_name}</span>
-                                    <div className="flex gap-3 flex-wrap mt-2">
-                                      {task.part_name.split(',').map(p => p.trim()).map((part, idx) => {
-                                        const match = customDropdowns?.find(d => d.category === "Part Name" && d.value === part && d.image_url);
-                                        return match ? (
-                                          <img
-                                            key={idx}
-                                            src={match.image_url}
-                                            alt={part}
-                                            className="w-24 h-24 object-cover rounded-lg shadow-md border-2 border-purple-100 bg-gray-50 flex-shrink-0 cursor-zoom-in transition-all active:scale-95"
-                                            title={`Click to enlarge: ${part}`}
-                                            onClick={() => setLightboxImage({ url: match.image_url, name: part })}
-                                          />
-                                        ) : null;
-                                      })}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {activeTab === "repair" && task.bill_amount && (
-                                <div className="space-y-1">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Amount</p>
-                                  <p className="text-sm font-bold text-gray-900">₹{task.bill_amount}</p>
-                                </div>
-                              )}
-
-                              {/* Actions for Pending Tasks */}
-                              {!showHistory && activeTab !== "repair" && (
-                                <div className="pt-2 space-y-3 border-t border-gray-50">
-                                  {activeTab === "ea" && statusData[task.id] === "extended" && (
-                                    <div className="space-y-1">
-                                      <p className="text-[10px] text-red-500 uppercase font-bold">Extended Date *</p>
-                                      <input
-                                        type="date"
-                                        value={extendedDateData[task.id] || ""}
-                                        onChange={(e) => setExtendedDateData((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                                        disabled={!selectedItems.has(task.id)}
-                                        className="w-full text-xs border-red-200 rounded-md py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-red-400 bg-red-50/30"
-                                      />
-                                    </div>
-                                  )}
-                                  <div className="space-y-1">
-                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Remarks</p>
-                                    <input
-                                      type="text"
-                                      placeholder="Enter remarks"
-                                      value={remarksData[task.id] || ""}
-                                      onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                                      disabled={!selectedItems.has(task.id)}
-                                      className="w-full text-xs border-gray-200 rounded-md py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-purple-400"
-                                    />
-                                  </div>
-                                  <div className="flex flex-col gap-3">
-                                    {imagePreviews[task.id] && (
-                                      <div className="relative w-full h-32 rounded-lg border-2 border-dashed border-purple-200 bg-purple-50/30 flex items-center justify-center overflow-hidden">
-                                        <img src={imagePreviews[task.id]} className="w-full h-full object-contain" alt="Preview" />
-                                        <button
-                                          onClick={() => {
-                                            URL.revokeObjectURL(imagePreviews[task.id]);
-                                            setImagePreviews(prev => {
-                                              const next = { ...prev };
-                                              delete next[task.id];
-                                              return next;
-                                            });
-                                            setUploadedImages(prev => {
-                                              const next = { ...prev };
-                                              delete next[task.id];
-                                              return next;
-                                            });
-                                          }}
-                                          className="absolute top-2 right-2 bg-red-500/80 backdrop-blur-sm text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"
-                                        >
-                                          <X size={14} />
-                                        </button>
-                                      </div>
-                                    )}
-                                    <div className="flex gap-2">
-                                      {activeTab !== "work" && (
-                                        <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-purple-200 bg-purple-50 text-purple-600 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
-                                          <Upload className="h-3.5 w-3.5" />
-                                          <span>{uploadedImages[task.id] ? "Change" : "Upload"}</span>
-                                          <input type="file" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
-                                        </label>
-                                      )}
-                                      <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
-                                        <Camera className="h-3.5 w-3.5" />
-                                        <span>{uploadedImages[task.id] ? "Retake" : "Photo"}</span>
-                                        <input type="file" accept="image/*" {...(activeTab === "work" ? { capture: "environment" } : {})} className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
-                                      </label>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Repair Process Button */}
-                              {!showHistory && activeTab === "repair" && (
-                                <div className="pt-2">
-                                  <button
-                                    onClick={() => openUpdateModal(task)}
-                                    className="w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
-                                  >
-                                    <Edit className="h-3.5 w-3.5" /> PROCESS REPAIR
-                                  </button>
-                                </div>
-                              )}
-
-                              {/* History attachments */}
-                              {showHistory && (task.work_photo_url || task.bill_copy_url || task.image_url || task.uploaded_image_url) && (
-                                <div className="pt-2 border-t border-gray-50">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold mb-2">Attachments</p>
-                                  <div className="flex flex-wrap gap-3">
-                                    {(task.work_photo_url || task.image_url || task.uploaded_image_url) && (
-                                      <div className="flex flex-col gap-1">
-                                        <span className="text-[10px] text-gray-500 font-medium">Work Photo</span>
-                                        <img
-                                          src={task.work_photo_url || task.image_url || task.uploaded_image_url}
-                                          alt="Work"
-                                          className="w-24 h-24 object-cover rounded-lg border-2 border-purple-100 shadow-sm cursor-zoom-in"
-                                          onClick={() => setLightboxImage({ url: task.work_photo_url || task.image_url || task.uploaded_image_url, name: "Work Photo" })}
-                                        />
-                                      </div>
-                                    )}
-                                    {task.bill_copy_url && (
-                                      <div className="flex flex-col gap-1">
-                                        <span className="text-[10px] text-gray-500 font-medium">Bill Copy</span>
-                                        <img
-                                          src={task.bill_copy_url}
-                                          alt="Bill"
-                                          className="w-24 h-24 object-cover rounded-lg border-2 border-blue-100 shadow-sm cursor-zoom-in"
-                                          onClick={() => setLightboxImage({ url: task.bill_copy_url, name: "Bill Copy" })}
-                                        />
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
+                            </button>
                           </div>
-                        </Fragment>
-                      )
-                    })
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Infinite Scroll Sentinel */}
+                    {exactTotalAvailable > 0 && (
+                      <div ref={loadingRef} className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm w-full">
+                        {totalItemsRendered < exactTotalAvailable ? (
+                          <div className="flex items-center space-x-3 bg-white px-6 py-3 rounded-full shadow-sm border border-gray-100">
+                            <div className="w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+                            <span className="font-medium text-gray-600">Loading more tasks...</span>
+                          </div>
+                        ) : (
+                          <span className="bg-gray-50 text-gray-400 px-4 py-2 rounded-full font-medium text-xs">All tasks loaded.</span>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Repair Update Modal */}
+      {isModalOpen && selectedUpdateTask && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden animate-fade-in border border-purple-100">
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-purple-100 flex justify-between items-center">
+              <h3 className="text-sm font-bold text-purple-800 uppercase">Update Ticket #{selectedUpdateTask.id}</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-purple-400 hover:text-purple-600"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleRepairUpdateSubmit} className="p-6">
+              <div className="bg-purple-50 rounded border border-purple-200 p-3 mb-6 flex gap-4 text-sm">
+                <div className="flex-1">
+                  <span className="block text-xs font-bold text-purple-500 uppercase mb-1">Machine</span>
+                  <span className="text-gray-800 font-medium">{selectedUpdateTask.machine_name}</span>
+                </div>
+                <div className="flex-[2]">
+                  <span className="block text-xs font-bold text-purple-500 uppercase mb-1">Issue</span>
+                  {isAudioUrl(selectedUpdateTask.issue_description) ? (
+                    <AudioPlayer url={selectedUpdateTask.issue_description} />
                   ) : (
-                    <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-200">
-                      <Search size={40} className="text-gray-200 mx-auto mb-3" />
-                      <p className="text-gray-400 text-sm">No tasks found.</p>
-                    </div>
+                    <span className="text-gray-600">{selectedUpdateTask.issue_description}</span>
                   )}
                 </div>
-
-                {/* Mobile Floating Submit Bar */}
-                {!showHistory && selectedItems.size > 0 && (
-                  <div className="md:hidden fixed bottom-6 left-4 right-4 z-40 animate-in slide-in-from-bottom-8 duration-500">
-                    <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-purple-100 p-2 overflow-hidden">
-                      <div className="flex items-center justify-between">
-                        <div className="pl-4">
-                          <p className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em] mb-0.5">Ready to Submit</p>
-                          <p className="text-xs font-bold text-gray-500">{selectedItems.size} task{selectedItems.size !== 1 ? 's' : ''} selected</p>
-                        </div>
-                        <button
-                          onClick={handleSubmit}
-                          disabled={isSubmitting}
-                          className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-sm font-black rounded-xl shadow-lg shadow-purple-200 transition-all active:scale-95 flex items-center gap-2"
-                        >
-                          {isSubmitting ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" /> Submitting</>
-                          ) : (
-                            <><CheckCircle2 className="w-4 h-4" /> Submit Now</>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Infinite Scroll Sentinel */}
-                {exactTotalAvailable > 0 && (
-                  <div ref={loadingRef} className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm w-full">
-                    {totalItemsRendered < exactTotalAvailable ? (
-                      <div className="flex items-center space-x-3 bg-white px-6 py-3 rounded-full shadow-sm border border-gray-100">
-                        <div className="w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-                        <span className="font-medium text-gray-600">Loading more tasks...</span>
-                      </div>
-                    ) : (
-                      <span className="bg-gray-50 text-gray-400 px-4 py-2 rounded-full font-medium text-xs">All tasks loaded.</span>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Repair Update Modal */}
-        {isModalOpen && selectedUpdateTask && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden animate-fade-in border border-purple-100">
-              <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-purple-100 flex justify-between items-center">
-                <h3 className="text-sm font-bold text-purple-800 uppercase">Update Ticket #{selectedUpdateTask.id}</h3>
-                <button onClick={() => setIsModalOpen(false)} className="text-purple-400 hover:text-purple-600"><X className="w-5 h-5" /></button>
               </div>
-              <form onSubmit={handleRepairUpdateSubmit} className="p-6">
-                <div className="bg-purple-50 rounded border border-purple-200 p-3 mb-6 flex gap-4 text-sm">
-                  <div className="flex-1">
-                    <span className="block text-xs font-bold text-purple-500 uppercase mb-1">Machine</span>
-                    <span className="text-gray-800 font-medium">{selectedUpdateTask.machine_name}</span>
-                  </div>
-                  <div className="flex-[2]">
-                    <span className="block text-xs font-bold text-purple-500 uppercase mb-1">Issue</span>
-                    {isAudioUrl(selectedUpdateTask.issue_description) ? (
-                      <AudioPlayer url={selectedUpdateTask.issue_description} />
-                    ) : (
-                      <span className="text-gray-600">{selectedUpdateTask.issue_description}</span>
-                    )}
-                  </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Status <span className="text-red-500">*</span></label>
+                  <select className="w-full p-2 text-sm border border-gray-300 rounded focus:border-purple-500 outline-none" value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}>
+                    <option value="">Select Status...</option>
+                    <option value="Completed">✅ Completed (कार्य पूर्ण)</option>
+                    <option value="Pending">⏳ Pending (लंबित कार्य)</option>
+                    <option value="Observation">🔍 Under Observation (निरीक्षण)</option>
+                    <option value="Temporary Fix">🔄 Temporary Fix (अस्थायी/जुगाड़)</option>
+                    <option value="Cancelled">🚫 Cancelled (रद्द)</option>
+                  </select>
                 </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Status <span className="text-red-500">*</span></label>
-                    <select className="w-full p-2 text-sm border border-gray-300 rounded focus:border-purple-500 outline-none" value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}>
-                      <option value="">Select Status...</option>
-                      <option value="Completed">✅ Completed (कार्य पूर्ण)</option>
-                      <option value="Pending">⏳ Pending (लंबित कार्य)</option>
-                      <option value="Observation">🔍 Under Observation (निरीक्षण)</option>
-                      <option value="Temporary Fix">🔄 Temporary Fix (अस्थायी/जुगाड़)</option>
-                      <option value="Cancelled">🚫 Cancelled (रद्द)</option>
-                    </select>
-                  </div>
 
-                  {/* Conditional Fields for Completed Status */}
-                  {updateForm.status === 'Completed' && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Part Replaced</label>
-                          <select
-                            className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-purple-500"
-                            value={updateForm.partReplaced}
-                            onChange={(e) => setUpdateForm({ ...updateForm, partReplaced: e.target.value })}
-                          >
-                            <option value="">Select part...</option>
-                            <option value="Part Replaced">Part Replaced</option>
-                            <option value="Repairing">Repairing</option>
-                            <option value="Service/Maintenance">Service/Maintenance</option>
-                            <option value="Installation">Installation</option>
-                            <option value="Other">Other</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Vendor Name</label>
-                          <input
-                            className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-purple-500"
-                            value={updateForm.vendorName}
-                            onChange={(e) => setUpdateForm({ ...updateForm, vendorName: e.target.value })}
-                            placeholder="Enter vendor name..."
-                          />
-                        </div>
+                {/* Conditional Fields for Completed Status */}
+                {updateForm.status === 'Completed' && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Part Replaced</label>
+                        <select
+                          className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-purple-500"
+                          value={updateForm.partReplaced}
+                          onChange={(e) => setUpdateForm({ ...updateForm, partReplaced: e.target.value })}
+                        >
+                          <option value="">Select part...</option>
+                          <option value="Part Replaced">Part Replaced</option>
+                          <option value="Repairing">Repairing</option>
+                          <option value="Service/Maintenance">Service/Maintenance</option>
+                          <option value="Installation">Installation</option>
+                          <option value="Other">Other</option>
+                        </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bill Amount (₹)</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Vendor Name</label>
                         <input
-                          type="number"
                           className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-purple-500"
-                          value={updateForm.billAmount}
-                          onChange={(e) => setUpdateForm({ ...updateForm, billAmount: e.target.value })}
-                          placeholder="Enter bill amount..."
+                          value={updateForm.vendorName}
+                          onChange={(e) => setUpdateForm({ ...updateForm, vendorName: e.target.value })}
+                          placeholder="Enter vendor name..."
                         />
                       </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Remarks</label>
-                        <textarea
-                          className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-purple-500"
-                          rows="2"
-                          value={updateForm.remarks}
-                          onChange={(e) => setUpdateForm({ ...updateForm, remarks: e.target.value })}
-                          placeholder="Enter any additional remarks..."
-                        ></textarea>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                          <Upload className="h-6 w-6 text-gray-400 mb-2" />
-                          <span className="text-xs font-bold text-gray-500">
-                            Photo of Work Done
-                            {(selectedUpdateTask.require_attachment || selectedUpdateTask.attachment) && <span className="text-red-500 ml-1">*</span>}
-                          </span>
-                          <span className="text-[10px] text-gray-400 mt-1">{updateForm.workPhoto ? updateForm.workPhoto.name : "Click to upload"}</span>
-                          <input type="file" className="hidden" accept="image/*" onChange={(e) => setUpdateForm({ ...updateForm, workPhoto: e.target.files[0] })} />
-                        </label>
-                        <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                          <Upload className="h-6 w-6 text-gray-400 mb-2" />
-                          <span className="text-xs font-bold text-gray-500">Bill Copy</span>
-                          <span className="text-[10px] text-gray-400 mt-1">{updateForm.billCopy ? updateForm.billCopy.name : "Click to upload"}</span>
-                          <input type="file" className="hidden" accept="image/*" onChange={(e) => setUpdateForm({ ...updateForm, billCopy: e.target.files[0] })} />
-                        </label>
-                      </div>
                     </div>
-                  )}
-
-                  {updateForm.status && updateForm.status !== 'Completed' && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bill Amount (₹)</label>
+                      <input
+                        type="number"
+                        className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-purple-500"
+                        value={updateForm.billAmount}
+                        onChange={(e) => setUpdateForm({ ...updateForm, billAmount: e.target.value })}
+                        placeholder="Enter bill amount..."
+                      />
+                    </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Remarks</label>
                       <textarea
                         className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-purple-500"
-                        rows="3"
+                        rows="2"
                         value={updateForm.remarks}
                         onChange={(e) => setUpdateForm({ ...updateForm, remarks: e.target.value })}
-                        placeholder="Add remarks..."
+                        placeholder="Enter any additional remarks..."
                       ></textarea>
                     </div>
-                  )}
-                </div>
-                <div className="flex justify-end gap-3 pt-6 mt-2 border-t border-gray-100">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded hover:bg-gray-50 text-sm">Cancel</button>
-                  <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded text-sm flex items-center gap-2">{isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes</button>
-                </div>
-              </form>
-            </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                        <Upload className="h-6 w-6 text-gray-400 mb-2" />
+                        <span className="text-xs font-bold text-gray-500">
+                          Photo of Work Done
+                          {(selectedUpdateTask.require_attachment || selectedUpdateTask.attachment) && <span className="text-red-500 ml-1">*</span>}
+                        </span>
+                        <span className="text-[10px] text-gray-400 mt-1">{updateForm.workPhoto ? updateForm.workPhoto.name : "Click to upload"}</span>
+                        <input type="file" className="hidden" accept="image/*" onChange={(e) => setUpdateForm({ ...updateForm, workPhoto: e.target.files[0] })} />
+                      </label>
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                        <Upload className="h-6 w-6 text-gray-400 mb-2" />
+                        <span className="text-xs font-bold text-gray-500">Bill Copy</span>
+                        <span className="text-[10px] text-gray-400 mt-1">{updateForm.billCopy ? updateForm.billCopy.name : "Click to upload"}</span>
+                        <input type="file" className="hidden" accept="image/*" onChange={(e) => setUpdateForm({ ...updateForm, billCopy: e.target.files[0] })} />
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {updateForm.status && updateForm.status !== 'Completed' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Remarks</label>
+                    <textarea
+                      className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-purple-500"
+                      rows="3"
+                      value={updateForm.remarks}
+                      onChange={(e) => setUpdateForm({ ...updateForm, remarks: e.target.value })}
+                      placeholder="Add remarks..."
+                    ></textarea>
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-3 pt-6 mt-2 border-t border-gray-100">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded hover:bg-gray-50 text-sm">Cancel</button>
+                <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded text-sm flex items-center gap-2">{isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes</button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Image Lightbox */}
       {lightboxImage && (

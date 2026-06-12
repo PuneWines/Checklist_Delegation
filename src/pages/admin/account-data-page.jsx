@@ -368,33 +368,31 @@ function AccountDataPage() {
     fetchSheetData()
   }, [fetchSheetData])
 
-  // Fixed checkbox handlers with better state management
   const handleSelectItem = useCallback((id, isChecked) => {
     console.log(`Checkbox action: ${id} -> ${isChecked}`)
    
     setSelectedItems((prev) => {
       const newSelected = new Set(prev)
-     
       if (isChecked) {
         newSelected.add(id)
       } else {
         newSelected.delete(id)
-        // Clean up related data when unchecking
-        setAdditionalData((prevData) => {
-          const newAdditionalData = { ...prevData }
-          delete newAdditionalData[id]
-          return newAdditionalData
-        })
-        setRemarksData((prevRemarks) => {
-          const newRemarksData = { ...prevRemarks }
-          delete newRemarksData[id]
-          return newRemarksData
-        })
       }
-     
-      console.log(`Updated selection: ${Array.from(newSelected)}`)
       return newSelected
     })
+
+    if (!isChecked) {
+      setAdditionalData((prevData) => {
+        const newAdditionalData = { ...prevData }
+        delete newAdditionalData[id]
+        return newAdditionalData
+      })
+      setRemarksData((prevRemarks) => {
+        const newRemarksData = { ...prevRemarks }
+        delete newRemarksData[id]
+        return newRemarksData
+      })
+    }
   }, [])
 
   const handleCheckboxClick = useCallback((e, id) => {
