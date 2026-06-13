@@ -41,9 +41,9 @@ export const fetchDashboardDataApi = async (
     const isAscending = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'work');
 
     const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
-                      dashboardType === 'repair' ? 'repair_tasks' :
-                      dashboardType === 'ea' ? 'ea_tasks' : 
-                      dashboardType === 'work' ? 'work_task' : dashboardType;
+      dashboardType === 'repair' ? 'repair_tasks' :
+        dashboardType === 'ea' ? 'ea_tasks' :
+          dashboardType === 'work' ? 'work_task' : dashboardType;
 
     let query = supabase
       .from(tableName)
@@ -88,10 +88,10 @@ export const fetchDashboardDataApi = async (
         // Today's tasks only (or restricted to custom date range)
         if (startDate && endDate) {
           query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
-                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`));
+            .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`));
         } else {
           query = query.gte(dateColumn, `${today}T00:00:00`)
-                       .lte(dateColumn, `${today}T23:59:59`);
+            .lte(dateColumn, `${today}T23:59:59`);
         }
         if (dashboardType === 'ea') {
           query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
@@ -105,8 +105,8 @@ export const fetchDashboardDataApi = async (
         // All future tasks (after today, restricted to custom date range if present)
         if (startDate && endDate) {
           query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
-                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
-                       .gt(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
+            .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
+            .gt(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
         } else {
           query = query.gt(dateColumn, `${today}T23:59:59`);
         }
@@ -116,8 +116,8 @@ export const fetchDashboardDataApi = async (
         // Tasks before today that are not completed (restricted to custom date range if present)
         if (startDate && endDate) {
           query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
-                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
-                       .lt(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`));
+            .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
+            .lt(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`));
         } else {
           query = query.lt(dateColumn, `${today}T00:00:00`);
         }
@@ -194,9 +194,9 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     const dateColumn = getDateColumn(dashboardType);
 
     const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
-                      dashboardType === 'repair' ? 'repair_tasks' :
-                      dashboardType === 'ea' ? 'ea_tasks' : 
-                      dashboardType === 'work' ? 'work_task' : dashboardType;
+      dashboardType === 'repair' ? 'repair_tasks' :
+        dashboardType === 'ea' ? 'ea_tasks' :
+          dashboardType === 'work' ? 'work_task' : dashboardType;
 
     let query = supabase
       .from(tableName)
@@ -237,12 +237,12 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
       case 'recent':
         if (startDate && endDate) {
           query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
-                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`));
+            .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`));
         } else {
           query = query.gte(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`))
-                       .lte(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
+            .lte(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
         }
-        
+
         if (dashboardType === 'ea') {
           query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
         } else if (dashboardType === 'checklist' || dashboardType === 'maintenance' || dashboardType === 'delegation' || dashboardType === 'work') {
@@ -254,8 +254,8 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
         // All future tasks (after today)
         if (startDate && endDate) {
           query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
-                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
-                       .gt(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
+            .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
+            .gt(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
         } else {
           query = query.gt(dateColumn, (dashboardType === 'work' ? today : `${today}T23:59:59`));
         }
@@ -265,8 +265,8 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
         // Tasks before today that are not completed
         if (startDate && endDate) {
           query = query.gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
-                       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
-                       .lt(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`));
+            .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
+            .lt(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`));
         } else {
           query = query.lt(dateColumn, (dashboardType === 'work' ? today : `${today}T00:00:00`));
         }
@@ -338,8 +338,8 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
     } else {
       const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : 
-          dashboardType === 'work' ? 'work_task' : dashboardType;
+          dashboardType === 'ea' ? 'ea_tasks' :
+            dashboardType === 'work' ? 'work_task' : dashboardType;
 
       query = supabase
         .from(tableName)
@@ -356,7 +356,7 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
     }
 
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
-                      dashboardType === 'ea' ? 'doer_name' : 'name';
+      dashboardType === 'ea' ? 'doer_name' : 'name';
 
     const upperRole = (role || "").toUpperCase();
     // Apply filters
@@ -382,7 +382,7 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
         const userAccess = localStorage.getItem('user_access') || "";
         targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       }
-      
+
       if (targetShops.length > 0) {
         const { data: dbUsers } = await supabase
           .from("users")
@@ -498,14 +498,14 @@ export const fetchStaffTasksDataApi = async (
     // });
 
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
-                      dashboardType === 'ea' ? 'doer_name' : 'name';
+      dashboardType === 'ea' ? 'doer_name' : 'name';
 
     // Build the query
     let query = supabase
       .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : 
-          dashboardType === 'work' ? 'work_task' : dashboardType)
+          dashboardType === 'ea' ? 'ea_tasks' :
+            dashboardType === 'work' ? 'work_task' : dashboardType)
       .select(dashboardType === 'work' ? '*, task_assignments:assignment_id(end_datetime, manager_name)' : '*')
       .gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
@@ -537,7 +537,7 @@ export const fetchStaffTasksDataApi = async (
         const userAccess = localStorage.getItem('user_access') || "";
         targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       }
-      
+
       if (targetShops.length > 0) {
         const { data: dbUsers } = await supabase
           .from("users")
@@ -849,16 +849,16 @@ export const getStaffTasksCountApi = async (
     const dateColumn = getDateColumn(dashboardType);
 
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
-                      dashboardType === 'ea' ? 'doer_name' : 'name';
+      dashboardType === 'ea' ? 'doer_name' : 'name';
     const selectFields = dashboardType === 'ea' ? 'doer_name' :
-                         dashboardType === 'repair' ? 'shop_name, assigned_person' :
-                         dashboardType === 'work' ? 'shop_name, name, task_assignments:assignment_id(manager_name)' : 'shop_name, name';
+      dashboardType === 'repair' ? 'shop_name, assigned_person' :
+        dashboardType === 'work' ? 'shop_name, name, task_assignments:assignment_id(manager_name)' : 'shop_name, name';
 
     let query = supabase
       .from(dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : 
-          dashboardType === 'work' ? 'work_task' : dashboardType)
+          dashboardType === 'ea' ? 'ea_tasks' :
+            dashboardType === 'work' ? 'work_task' : dashboardType)
       .select(selectFields)
       .gte(dateColumn, (dashboardType === 'work' ? startDate : `${startDate}T00:00:00`))
       .lte(dateColumn, (dashboardType === 'work' ? endDate : `${endDate}T23:59:59`))
@@ -890,7 +890,7 @@ export const getStaffTasksCountApi = async (
         const userAccess = localStorage.getItem('user_access') || "";
         targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       }
-      
+
       if (targetShops.length > 0) {
         const { data: dbUsers } = await supabase
           .from("users")
@@ -1132,14 +1132,14 @@ export const getStaffNamesByShopApi = async (shopFilter = null) => {
       staff = staff.filter(user => {
         const userAccessStr = (user.user_access || "").toLowerCase();
         const shopFilterLower = shopFilter.toLowerCase();
-        
+
         // If user_access contains admin, check their shop_name
         if (userAccessStr === 'admin' || userAccessStr.includes('admin')) {
           const userShopNameStr = (user.shop_name || "").toLowerCase();
           const shopNameList = userShopNameStr.split(',').map(dept => dept.trim());
           return shopNameList.includes(shopFilterLower);
         }
-        
+
         // Otherwise, check user_access
         const userAccessList = userAccessStr.split(',').map(dept => dept.trim());
         return userAccessList.includes(shopFilterLower);
@@ -1632,15 +1632,15 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
     const { start: defaultStart, end: defaultEnd } = getCurrentMonthRange();
     const start = startDate ? `${startDate}T00:00:00` : defaultStart;
     const end = endDate ? `${endDate}T23:59:59` : defaultEnd;
-    
+
     // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
     //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
     const dateColumn = getDateColumn(dashboardType);
-    
+
     const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
       dashboardType === 'repair' ? 'repair_tasks' :
-        dashboardType === 'ea' ? 'ea_tasks' : 
-        dashboardType === 'work' ? 'work_task' : dashboardType;
+        dashboardType === 'ea' ? 'ea_tasks' :
+          dashboardType === 'work' ? 'work_task' : dashboardType;
 
     let query = supabase
       .from(tableName)
@@ -1649,7 +1649,7 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
       .lte(dateColumn, (dashboardType === 'work' ? (endDate || defaultEnd.split('T')[0]) : end));
 
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
-                      dashboardType === 'ea' ? 'doer_name' : 'name';
+      dashboardType === 'ea' ? 'doer_name' : 'name';
 
     // Apply filters
     const upperRole = (role || "").toUpperCase();
@@ -1675,7 +1675,7 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, shopF
         const userAccess = localStorage.getItem('user_access') || "";
         targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       }
-      
+
       if (targetShops.length > 0) {
         const { data: dbUsers } = await supabase
           .from("users")
@@ -1730,7 +1730,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
     const { start: defaultStart, end: defaultEnd } = getCurrentMonthRange();
     const start = startDate ? `${startDate}T00:00:00` : defaultStart;
     const end = endDate ? `${endDate}T23:59:59` : defaultEnd;
-    
+
     // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
     //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
     const dateColumn = getDateColumn(dashboardType);
@@ -1747,8 +1747,8 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
     } else {
       const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : 
-          dashboardType === 'work' ? 'work_task' : dashboardType;
+          dashboardType === 'ea' ? 'ea_tasks' :
+            dashboardType === 'work' ? 'work_task' : dashboardType;
 
       query = supabase
         .from(tableName)
@@ -1759,7 +1759,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
       if (dashboardType === 'work') {
         // Very inclusive check for Work tasks to ensure nothing is missed
         query = query.or('status.in.("Done","SUBMITTED","done","APPROVED","Approved","submitted"),admin_done.eq.true,submission_date.not.is.null')
-                     .not('status', 'ilike', 'REJECTED');
+          .not('status', 'ilike', 'REJECTED');
       } else if (dashboardType === 'ea') {
         // EA doesn't have submission_date, use status/admin_done
         query = query.or('status.ilike.done,admin_done.eq.true');
@@ -1769,7 +1769,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
     }
 
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
-                      dashboardType === 'ea' ? 'doer_name' : 'name';
+      dashboardType === 'ea' ? 'doer_name' : 'name';
 
     const upperRole = (role || "").toUpperCase();
     // Apply filters
@@ -1795,7 +1795,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, sh
         const userAccess = localStorage.getItem('user_access') || "";
         targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       }
-      
+
       if (targetShops.length > 0) {
         const { data: dbUsers } = await supabase
           .from("users")
@@ -1848,7 +1848,7 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
   try {
     const { start: defaultStart, todayStart } = getCurrentMonthRange();
     const start = startDate ? `${startDate}T00:00:00` : defaultStart;
-    
+
     // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
     //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
     const dateColumn = getDateColumn(dashboardType);
@@ -1865,13 +1865,13 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     } else {
       const tableName = dashboardType === 'maintenance' ? 'maintenance_tasks' :
         dashboardType === 'repair' ? 'repair_tasks' :
-          dashboardType === 'ea' ? 'ea_tasks' : 
-          dashboardType === 'work' ? 'work_task' : dashboardType;
+          dashboardType === 'ea' ? 'ea_tasks' :
+            dashboardType === 'work' ? 'work_task' : dashboardType;
 
       query = supabase
         .from(tableName)
         .select('*', { count: 'exact', head: true });
-      
+
       if (dashboardType === 'ea') {
         query = query.in('status', ['pending', 'extend', 'extended', 'Pending']);
       } else {
@@ -1883,7 +1883,7 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     }
 
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
-                      dashboardType === 'ea' ? 'doer_name' : 'name';
+      dashboardType === 'ea' ? 'doer_name' : 'name';
 
     const upperRole = (role || "").toUpperCase();
     // Apply filters
@@ -1909,7 +1909,7 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
         const userAccess = localStorage.getItem('user_access') || "";
         targetShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       }
-      
+
       if (targetShops.length > 0) {
         const { data: dbUsers } = await supabase
           .from("users")
@@ -1969,15 +1969,15 @@ export const fetchDashboardStatsApi = async (filters) => {
         endDate: filters.endDate
       }
     })
-    
+
     if (error) {
       console.error("Error calling edge function:", error)
       return null
     }
-    
+
     return data // Returns: { tasks, summaryStats }
   } catch (err) {
     console.error("Exception calling edge function:", err)
     return null
   }
-}
+}

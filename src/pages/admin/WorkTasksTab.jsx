@@ -90,6 +90,100 @@ const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
   }
 };
 
+const renderUserStatus = (task) => {
+  const isDone = !!(task.submission_date || ["SUBMITTED", "MANAGER_APPROVED", "APPROVED"].includes(task.status));
+  if (isDone) {
+    return (
+      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+        Done
+      </span>
+    );
+  }
+  return (
+    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+      Not Done
+    </span>
+  );
+};
+
+const renderManagerStatus = (task) => {
+  const isApproved = task.status === "APPROVED" || task.status === "MANAGER_APPROVED" || !!task.manager_approval_date;
+  const isRejected = task.status === "REJECTED" && !!task.manager_approved_by;
+  
+  if (isApproved) {
+    return (
+      <div className="flex flex-col">
+        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 w-fit">
+          Approved
+        </span>
+        {task.manager_approved_by && (
+          <span className="text-[10px] text-gray-500 mt-0.5">By: {task.manager_approved_by}</span>
+        )}
+      </div>
+    );
+  }
+  if (isRejected) {
+    return (
+      <div className="flex flex-col">
+        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800 w-fit" title={task.rejection_reason}>
+          Rejected
+        </span>
+        {task.manager_approved_by && (
+          <span className="text-[10px] text-gray-500 mt-0.5">By: {task.manager_approved_by}</span>
+        )}
+      </div>
+    );
+  }
+  const isUserDone = !!(task.submission_date || ["SUBMITTED", "MANAGER_APPROVED", "APPROVED"].includes(task.status));
+  if (!isUserDone) {
+    return <span className="text-gray-400 text-xs">—</span>;
+  }
+  return (
+    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800 w-fit">
+      Pending
+    </span>
+  );
+};
+
+const renderAdminStatus = (task) => {
+  const isApproved = task.status === "APPROVED" || !!task.admin_approval_date;
+  const isRejected = task.status === "REJECTED" && !!task.admin_approved_by;
+  
+  if (isApproved) {
+    return (
+      <div className="flex flex-col">
+        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 w-fit">
+          Approved
+        </span>
+        {task.admin_approved_by && (
+          <span className="text-[10px] text-gray-500 mt-0.5">By: {task.admin_approved_by}</span>
+        )}
+      </div>
+    );
+  }
+  if (isRejected) {
+    return (
+      <div className="flex flex-col">
+        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800 w-fit" title={task.rejection_reason}>
+          Rejected
+        </span>
+        {task.admin_approved_by && (
+          <span className="text-[10px] text-gray-500 mt-0.5">By: {task.admin_approved_by}</span>
+        )}
+      </div>
+    );
+  }
+  const isUserDone = !!(task.submission_date || ["SUBMITTED", "MANAGER_APPROVED", "APPROVED"].includes(task.status));
+  if (!isUserDone) {
+    return <span className="text-gray-400 text-xs">—</span>;
+  }
+  return (
+    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800 w-fit">
+      Pending
+    </span>
+  );
+};
+
 const WorkTasksTab = ({
   username,
   userRole,
@@ -192,10 +286,33 @@ const WorkTasksTab = ({
       { id: "name", label: "Employee" },
       { id: "current_date", label: "Date" },
       { id: "duration", label: "Mins" },
-      { id: "status", label: "Status" },
     ];
-    return showHistory ? baseHeaders.filter(h => h.id !== "time_status") : baseHeaders;
-  }, [showHistory]);
+
+    if (showHistory) {
+      const role = (userRole || "").toLowerCase();
+      if (role === "admin") {
+        return [
+          ...baseHeaders.filter(h => h.id !== "time_status"),
+          { id: "user_status", label: "Employee Task" },
+          { id: "manager_status", label: "Manager Approval" },
+          { id: "admin_status", label: "Admin Approval" }
+        ];
+      } else if (role === "manager") {
+        return [
+          ...baseHeaders.filter(h => h.id !== "time_status"),
+          { id: "user_status", label: "Employee Task" },
+          { id: "manager_status", label: "Manager Approval" }
+        ];
+      } else {
+        return [
+          ...baseHeaders.filter(h => h.id !== "time_status"),
+          { id: "user_status", label: "Task Status" }
+        ];
+      }
+    } else {
+      return [...baseHeaders, { id: "status", label: "Status" }];
+    }
+  }, [showHistory, userRole]);
 
   const fetchData = useCallback(async (pageNumber = 0, append = false) => {
     if (!username) return;
@@ -817,6 +934,12 @@ const WorkTasksTab = ({
                                     </div>
                                   ) : header.id === "submission_date" ? (
                                     formatDateWithTime(task[header.id])
+                                  ) : header.id === "user_status" ? (
+                                    renderUserStatus(task)
+                                  ) : header.id === "manager_status" ? (
+                                    renderManagerStatus(task)
+                                  ) : header.id === "admin_status" ? (
+                                    renderAdminStatus(task)
                                   ) : header.id === "status" ? (
                                     (() => {
                                       const ds = getWorkTaskDynamicStatus(task, currentTime);
@@ -1019,20 +1142,66 @@ const WorkTasksTab = ({
                                   <p className="text-[10px] text-gray-400 uppercase font-semibold">Employee</p>
                                   <p className="text-sm font-bold text-gray-900">{task.name || "—"}</p>
                               </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Status</p>
-                                <div className="text-sm">
+                              {showHistory ? (
+                                <div className="space-y-2 col-span-2 border-t border-gray-100 pt-2">
                                   {(() => {
-                                    const ds = getWorkTaskDynamicStatus(task, currentTime);
-                                    if (ds === "APPROVED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>;
-                                    if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
-                                    if (ds === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
-                                    if (ds === "UPCOMING") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>;
-                                    if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
-                                    return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>;
+                                    const role = (userRole || "").toLowerCase();
+                                    if (role === "admin") {
+                                      return (
+                                        <div className="grid grid-cols-3 gap-2">
+                                          <div className="space-y-0.5">
+                                            <p className="text-[9px] text-gray-400 uppercase font-semibold">Employee Task</p>
+                                            <div>{renderUserStatus(task)}</div>
+                                          </div>
+                                          <div className="space-y-0.5">
+                                            <p className="text-[9px] text-gray-400 uppercase font-semibold">Manager Approval</p>
+                                            <div>{renderManagerStatus(task)}</div>
+                                          </div>
+                                          <div className="space-y-0.5">
+                                            <p className="text-[9px] text-gray-400 uppercase font-semibold">Admin Approval</p>
+                                            <div>{renderAdminStatus(task)}</div>
+                                          </div>
+                                        </div>
+                                      );
+                                    } else if (role === "manager") {
+                                      return (
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <div className="space-y-0.5">
+                                            <p className="text-[9px] text-gray-400 uppercase font-semibold">Employee Task</p>
+                                            <div>{renderUserStatus(task)}</div>
+                                          </div>
+                                          <div className="space-y-0.5">
+                                            <p className="text-[9px] text-gray-400 uppercase font-semibold">Manager Approval</p>
+                                            <div>{renderManagerStatus(task)}</div>
+                                          </div>
+                                        </div>
+                                      );
+                                    } else {
+                                      return (
+                                        <div className="space-y-0.5">
+                                          <p className="text-[9px] text-gray-400 uppercase font-semibold">Task Status</p>
+                                          <div>{renderUserStatus(task)}</div>
+                                        </div>
+                                      );
+                                    }
                                   })()}
                                 </div>
-                              </div>
+                              ) : (
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Status</p>
+                                  <div className="text-sm">
+                                    {(() => {
+                                      const ds = getWorkTaskDynamicStatus(task, currentTime);
+                                      if (ds === "APPROVED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Approved</span>;
+                                      if (ds === "SUBMITTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Pending Approval</span>;
+                                      if (ds === "REJECTED") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
+                                      if (ds === "UPCOMING") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-50 text-blue-600">Upcoming</span>;
+                                      if (ds === "NOT_DONE") return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-500">Not Done</span>;
+                                      return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-50 text-purple-700">Active</span>;
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 pt-1 border-t border-gray-50">
