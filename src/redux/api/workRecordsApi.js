@@ -301,9 +301,8 @@ export const fetchWorkTaskHistoryApi = async (role, username) => {
 
     if (userRole === 'manager') {
       query = query
-        .in('status', ['MANAGER_APPROVED', 'APPROVED'])
-        .eq('manager_approved_by', userName)
-        .order('manager_approval_date', { ascending: false });
+        .or(`manager_approved_by.eq."${userName}",status.in.("SUBMITTED","Done","done")`)
+        .order('submission_date', { ascending: false });
     } else {
       query = query
         .in('status', ['APPROVED', 'REJECTED'])

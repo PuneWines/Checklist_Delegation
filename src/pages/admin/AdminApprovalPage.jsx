@@ -197,7 +197,18 @@ export default function AdminApprovalPage() {
             } else if (currentUserRole === "manager" && activeTab === "work") {
                 filteredData = filteredData.filter(task => {
                     const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
-                    return managerShops.length === 0 || managerShops.includes(taskShop);
+                    const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
+                    if (!isShopAllowed) return false;
+
+                    const isPast = isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at);
+                    if (viewMode === "history") {
+                        const isApprovedByMe = (task.manager_approved_by || "").toLowerCase() === currentUsername;
+                        const isPastUnapproved = !task.manager_approved_by && isPast;
+                        return isApprovedByMe || isPastUnapproved;
+                    } else {
+                        // Pending mode: show only tasks that are NOT in the past (so they can be approved today)
+                        return !isPast;
+                    }
                 });
             } else {
                 filteredData = [];
@@ -860,7 +871,11 @@ export default function AdminApprovalPage() {
                                                          </div>
                                                     )
                                                 ) : (
-                                                    task.status === 'rejected' || task.rejection_reason ? (
+                                            isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !task.manager_approved_by ? (
+                                                <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-800">
+                                                    Unable to Approve
+                                                </span>
+                                            ) : task.status === 'rejected' || task.rejection_reason ? (
                                                         <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-800" title={task.rejection_reason || task.reason}>
                                                             Rejected
                                                         </span>
@@ -1129,8 +1144,10 @@ export default function AdminApprovalPage() {
                                                 </div>
                                             )
                                         ) : (
-                                            <div className="text-center space-y-1">
-                                                {task.rejection_reason ? (
+                                             <div className="text-center space-y-1">
+                                                 {isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !task.manager_approved_by ? (
+                                                     <span className="block w-full py-1.5 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Unable to Approve</span>
+                                                 ) : task.rejection_reason ? (
                                                     <span className="block w-full py-1.5 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Rejected: {task.rejection_reason}</span>
                                                 ) : task.status === 'MANAGER_APPROVED' ? (
                                                     <span className="block w-full py-1.5 bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Manager Approved</span>
