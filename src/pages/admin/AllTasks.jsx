@@ -1300,7 +1300,6 @@ const AllTasks = () => {
                             {(activeTab === "work"
                               ? [
                                   { id: 'all', label: 'All Tasks' },
-                                  { id: 'not_done', label: 'Not Done' },
                                   { id: 'today', label: 'Today' },
                                   { id: 'upcoming', label: 'Upcoming' }
                                 ]

@@ -238,10 +238,32 @@ const WorkTasksTab = ({
   const [uploadedImages, setUploadedImages] = useState({});
   const [successMessage, setSuccessMessage] = useState("");
   const [remarksData, setRemarksData] = useState({});
-  const [historyShopFilter, setHistoryShopFilter] = useState("all");
+  const [historyShopFilter, setHistoryShopFilter] = useState(() => {
+    const role = (userRole || "").toLowerCase();
+    if (role === "manager") {
+      const userAccess = localStorage.getItem("user_access") || "";
+      const firstShop = userAccess.split(',').map(s => s.trim()).filter(Boolean)[0];
+      return firstShop || "all";
+    }
+    return "all";
+  });
   const [historyManagerFilter, setHistoryManagerFilter] = useState("all");
   const [availableShops, setAvailableShops] = useState([]);
   const [availableManagers, setAvailableManagers] = useState([]);
+
+  useEffect(() => {
+    const role = (userRole || "").toLowerCase();
+    if (role === "manager" && availableShops.length > 0) {
+      const userAccess = localStorage.getItem("user_access") || "";
+      const firstShop = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)[0];
+      if (firstShop) {
+        const matchedShop = availableShops.find(s => s.toLowerCase() === firstShop);
+        if (matchedShop) {
+          setHistoryShopFilter(matchedShop);
+        }
+      }
+    }
+  }, [userRole, availableShops]);
 
   useEffect(() => {
     const fetchFilterOptions = async () => {
@@ -438,10 +460,10 @@ const WorkTasksTab = ({
         const todayStr = getLocalStyleDate(new Date());
         query = query.or(`submission_date.not.is.null,current_date.lt.${todayStr}`);
         if (startDate) {
-          query = query.gte("submission_date", startDate);
+          query = query.gte("current_date", startDate);
         }
         if (endDate) {
-          query = query.lte("submission_date", endDate + 'T23:59:59');
+          query = query.lte("current_date", endDate);
         }
         query = query.order('current_date', { ascending: false });
       } else {
@@ -609,18 +631,19 @@ const WorkTasksTab = ({
     return historyData.filter((task) => {
       let matchesDateRange = true;
       if (startDate || endDate) {
-        const itemDate = task[completionField] ? new Date(task[completionField]) : null;
-        if (!itemDate) return false;
+        if (!task.current_date) return false;
+        const taskDate = new Date(task.current_date);
+        taskDate.setHours(0, 0, 0, 0);
 
         if (startDate) {
           const start = new Date(startDate);
           start.setHours(0, 0, 0, 0);
-          if (itemDate < start) matchesDateRange = false;
+          if (taskDate < start) matchesDateRange = false;
         }
         if (endDate) {
           const end = new Date(endDate);
           end.setHours(23, 59, 59, 999);
-          if (itemDate > end) matchesDateRange = false;
+          if (taskDate > end) matchesDateRange = false;
         }
       }
       let matchesShop = true;
@@ -877,7 +900,8 @@ const WorkTasksTab = ({
               <select
                 value={historyShopFilter}
                 onChange={(e) => setHistoryShopFilter(e.target.value)}
-                className="text-xs sm:text-sm border border-gray-200 rounded-md p-1.5 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium text-gray-700"
+                disabled={(userRole || "").toLowerCase() === "manager"}
+                className="text-xs sm:text-sm border border-gray-200 rounded-md p-1.5 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium text-gray-700 disabled:opacity-75 disabled:cursor-not-allowed"
               >
                 <option value="all">All Shops</option>
                 {availableShops.map(s => (

@@ -23,6 +23,19 @@ const extractAudioUrl = (text) => {
     return match ? match[0] : null;
 };
 
+const isPastSubmission = (submissionDateStr) => {
+    if (!submissionDateStr) return false;
+    const today = new Date();
+    const options = { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' };
+    const formatter = new Intl.DateTimeFormat('en-CA', options);
+    const todayStr = formatter.format(today);
+    
+    const taskDate = new Date(submissionDateStr);
+    const taskDateStr = formatter.format(taskDate);
+    
+    return taskDateStr < todayStr;
+};
+
 export default function AdminApprovalPage() {
     const { showToast } = useMagicToast();
     const currentRole = (localStorage.getItem("role") || "").toLowerCase();
@@ -136,7 +149,15 @@ export default function AdminApprovalPage() {
 
             // Deduplicate data to ensure each task only shows once
             const seenIds = new Set();
-            const uniqueData = (data || []).filter(task => {
+            const uniqueData = (data || []).map(task => {
+                if (activeTab === 'work') {
+                    return {
+                        ...task,
+                        manager_name: task.task_assignments?.manager_name || task.manager_name || '—'
+                    };
+                }
+                return task;
+            }).filter(task => {
                 // For Work Detail, every daily record is unique. For others, we might deduplicate by template ID.
                 const baseId = activeTab === 'work' ? task.id : (task.task_id || task.original_task_id || task.id);
                 if (!baseId || seenIds.has(baseId)) return false;
@@ -224,6 +245,11 @@ export default function AdminApprovalPage() {
             return;
         }
 
+        if (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
+            showToast("You cannot approve a past task.", "error");
+            return;
+        }
+
         setProcessingId(task.id);
         if (!task.id) {
             console.error("Task ID is missing!", task);
@@ -263,6 +289,10 @@ export default function AdminApprovalPage() {
     };
 
     const handleReject = (task) => {
+        if (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
+            showToast("You cannot reject a past task.", "error");
+            return;
+        }
         setTaskToReject(task);
         setRejectionReason("");
         setShowRejectModal(true);
@@ -301,8 +331,9 @@ export default function AdminApprovalPage() {
             const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
             const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
             const isNotSelf = isSystemAdmin || doerName !== currentUsername;
+            const isNotPastForManager = !isManager || !isPastSubmission(t.submission_date || t.submission_timestamp || t.created_at);
             
-            return isSelected && isNotExtended && isNotSelf;
+            return isSelected && isNotExtended && isNotSelf && isNotPastForManager;
         });
 
         if (tasksToApprove.length === 0) {
@@ -653,9 +684,10 @@ export default function AdminApprovalPage() {
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <input
                                                         type="checkbox"
-                                                        className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
+                                                        className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                                                         checked={selectedTaskIds.includes(task.id)}
                                                         onChange={() => toggleTaskSelection(task.id)}
+                                                        disabled={isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)}
                                                     />
                                                 </td>
                                             )}
@@ -805,27 +837,27 @@ export default function AdminApprovalPage() {
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-2">
-                                                            <button
-                                                                onClick={() => handleApprove(task)}
-                                                                disabled={processingId === task.id}
-                                                                className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md shadow-green-100 text-xs font-bold border-none"
-                                                            >
-                                                                {processingId === task.id ? (
-                                                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                                                ) : (
-                                                                    <CheckCircle2 size={14} />
-                                                                )}
-                                                                Approve
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleReject(task)}
-                                                                disabled={processingId === task.id}
-                                                                className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-100 disabled:opacity-50 transition-all text-xs font-bold"
-                                                            >
-                                                                <XCircle size={14} />
-                                                                Reject
-                                                            </button>
-                                                        </div>
+                                                             <button
+                                                                 onClick={() => handleApprove(task)}
+                                                                 disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at))}
+                                                                 className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-green-100 text-xs font-bold border-none"
+                                                             >
+                                                                 {processingId === task.id ? (
+                                                                     <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                                                 ) : (
+                                                                     <CheckCircle2 size={14} />
+                                                                 )}
+                                                                 Approve
+                                                             </button>
+                                                             <button
+                                                                 onClick={() => handleReject(task)}
+                                                                 disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at))}
+                                                                 className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-bold"
+                                                             >
+                                                                 <XCircle size={14} />
+                                                                 Reject
+                                                             </button>
+                                                         </div>
                                                     )
                                                 ) : (
                                                     task.status === 'rejected' || task.rejection_reason ? (
@@ -916,9 +948,10 @@ export default function AdminApprovalPage() {
                                             {viewMode === 'pending' && (
                                                 <input
                                                     type="checkbox"
-                                                    className="w-5 h-5 mt-1 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
+                                                    className="w-5 h-5 mt-1 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                                                     checked={selectedTaskIds.includes(task.id)}
                                                     onChange={() => toggleTaskSelection(task.id)}
+                                                    disabled={isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)}
                                                 />
                                             )}
                                             <div className="space-y-1">
@@ -1075,8 +1108,8 @@ export default function AdminApprovalPage() {
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <button
                                                         onClick={() => handleApprove(task)}
-                                                        disabled={processingId === task.id}
-                                                        className="flex items-center justify-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black shadow-lg shadow-green-100 disabled:opacity-50 active:scale-95 transition-all"
+                                                        disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at))}
+                                                        className="flex items-center justify-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black shadow-lg shadow-green-100 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all"
                                                     >
                                                         {processingId === task.id ? (
                                                             <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
@@ -1087,8 +1120,8 @@ export default function AdminApprovalPage() {
                                                     </button>
                                                     <button
                                                         onClick={() => handleReject(task)}
-                                                        disabled={processingId === task.id}
-                                                        className="flex items-center justify-center gap-2 py-2.5 bg-red-100 text-red-600 rounded-xl text-xs font-black active:scale-95 transition-all"
+                                                        disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at))}
+                                                        className="flex items-center justify-center gap-2 py-2.5 bg-red-100 text-red-600 rounded-xl text-xs font-black disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all"
                                                     >
                                                         <XCircle size={16} />
                                                         Reject
