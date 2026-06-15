@@ -90,13 +90,20 @@ const getWorkTaskDynamicStatus = (task, currentTime = new Date()) => {
   }
 };
 
-const renderUserStatus = (task) => {
+const renderUserStatus = (task, formatDateWithTime) => {
   const isDone = !!(task.submission_date || ["SUBMITTED", "MANAGER_APPROVED", "APPROVED"].includes(task.status));
   if (isDone) {
     return (
-      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-        Done
-      </span>
+      <div className="flex flex-col">
+        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 w-fit">
+          Done
+        </span>
+        {task.submission_date && (
+          <span className="text-[10px] text-gray-500 mt-0.5">
+            {formatDateWithTime ? formatDateWithTime(task.submission_date) : task.submission_date}
+          </span>
+        )}
+      </div>
     );
   }
   return (
@@ -106,7 +113,7 @@ const renderUserStatus = (task) => {
   );
 };
 
-const renderManagerStatus = (task) => {
+const renderManagerStatus = (task, formatDateWithTime) => {
   const isApproved = task.status === "APPROVED" || task.status === "MANAGER_APPROVED" || !!task.manager_approval_date;
   const isRejected = task.status === "REJECTED" && !!task.manager_approved_by;
   
@@ -119,6 +126,11 @@ const renderManagerStatus = (task) => {
         {task.manager_approved_by && (
           <span className="text-[10px] text-gray-500 mt-0.5">By: {task.manager_approved_by}</span>
         )}
+        {task.manager_approval_date && (
+          <span className="text-[10px] text-gray-500 mt-0.5">
+            {formatDateWithTime ? formatDateWithTime(task.manager_approval_date) : task.manager_approval_date}
+          </span>
+        )}
       </div>
     );
   }
@@ -130,6 +142,11 @@ const renderManagerStatus = (task) => {
         </span>
         {task.manager_approved_by && (
           <span className="text-[10px] text-gray-500 mt-0.5">By: {task.manager_approved_by}</span>
+        )}
+        {task.manager_approval_date && (
+          <span className="text-[10px] text-gray-500 mt-0.5">
+            {formatDateWithTime ? formatDateWithTime(task.manager_approval_date) : task.manager_approval_date}
+          </span>
         )}
       </div>
     );
@@ -221,6 +238,30 @@ const WorkTasksTab = ({
   const [uploadedImages, setUploadedImages] = useState({});
   const [successMessage, setSuccessMessage] = useState("");
   const [remarksData, setRemarksData] = useState({});
+  const [historyShopFilter, setHistoryShopFilter] = useState("all");
+  const [historyManagerFilter, setHistoryManagerFilter] = useState("all");
+  const [availableShops, setAvailableShops] = useState([]);
+  const [availableManagers, setAvailableManagers] = useState([]);
+
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      try {
+        const [shopsRes, managersRes] = await Promise.all([
+          supabase.from('shop').select('shop_name').order('shop_name', { ascending: true }),
+          supabase.from('users').select('user_name').eq('status', 'active').ilike('role', 'manager').order('user_name', { ascending: true })
+        ]);
+        if (shopsRes.data) {
+          setAvailableShops(shopsRes.data.map(s => s.shop_name).filter(Boolean));
+        }
+        if (managersRes.data) {
+          setAvailableManagers(managersRes.data.map(u => u.user_name).filter(Boolean));
+        }
+      } catch (err) {
+        console.error("Error fetching history filter options:", err);
+      }
+    };
+    fetchFilterOptions();
+  }, []);
   const [statusData, setStatusData] = useState({});
   const [imagePreviews, setImagePreviews] = useState({});
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -582,10 +623,21 @@ const WorkTasksTab = ({
           if (itemDate > end) matchesDateRange = false;
         }
       }
+      let matchesShop = true;
+      if (historyShopFilter && historyShopFilter !== "all") {
+        const taskShop = (task.shop_name || "").trim().toLowerCase();
+        matchesShop = taskShop === historyShopFilter.trim().toLowerCase();
+      }
 
-      return matchesDateRange;
+      let matchesManager = true;
+      if (historyManagerFilter && historyManagerFilter !== "all") {
+        const taskManager = (task.manager_name || "").trim().toLowerCase();
+        matchesManager = taskManager === historyManagerFilter.trim().toLowerCase();
+      }
+
+      return matchesDateRange && matchesShop && matchesManager;
     });
-  }, [historyData, startDate, endDate]);
+  }, [historyData, startDate, endDate, historyShopFilter, historyManagerFilter]);
 
   const paginatedTasks = useMemo(() => {
     return showHistory ? filteredHistoryTasks : filteredPendingTasks;
@@ -793,9 +845,9 @@ const WorkTasksTab = ({
       {/* Table Container */}
       <div className="rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden">
         {showHistory && (
-          <div className="p-3 sm:p-4 border-b border-purple-100 bg-gray-50 flex flex-col sm:flex-row gap-3 items-center">
-            <span className="text-xs sm:text-sm font-medium text-purple-700 whitespace-nowrap">Filter by Range:</span>
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="p-3 sm:p-4 border-b border-purple-100 bg-gray-50 flex flex-wrap gap-4 items-center">
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-sm font-medium text-purple-700 whitespace-nowrap">Filter by Range:</span>
               <div className="flex items-center gap-1">
                 <span className="text-xs text-gray-500">From</span>
                 <input
@@ -818,6 +870,38 @@ const WorkTasksTab = ({
                 <button onClick={() => { setStartDate(""); setEndDate(""); }} className="text-xs text-red-500 hover:underline">Clear</button>
               )}
             </div>
+
+            {/* Shop Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-sm font-medium text-purple-700 whitespace-nowrap">Shop:</span>
+              <select
+                value={historyShopFilter}
+                onChange={(e) => setHistoryShopFilter(e.target.value)}
+                className="text-xs sm:text-sm border border-gray-200 rounded-md p-1.5 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium text-gray-700"
+              >
+                <option value="all">All Shops</option>
+                {availableShops.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Manager Filter (shown for admin role only) */}
+            {(userRole || "").toLowerCase() === "admin" && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs sm:text-sm font-medium text-purple-700 whitespace-nowrap">Manager:</span>
+                <select
+                  value={historyManagerFilter}
+                  onChange={(e) => setHistoryManagerFilter(e.target.value)}
+                  className="text-xs sm:text-sm border border-gray-200 rounded-md p-1.5 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium text-gray-700"
+                >
+                  <option value="all">All Managers</option>
+                  {availableManagers.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
 
@@ -935,9 +1019,9 @@ const WorkTasksTab = ({
                                   ) : header.id === "submission_date" ? (
                                     formatDateWithTime(task[header.id])
                                   ) : header.id === "user_status" ? (
-                                    renderUserStatus(task)
+                                    renderUserStatus(task, formatDateWithTime)
                                   ) : header.id === "manager_status" ? (
-                                    renderManagerStatus(task)
+                                    renderManagerStatus(task, formatDateWithTime)
                                   ) : header.id === "admin_status" ? (
                                     renderAdminStatus(task)
                                   ) : header.id === "status" ? (
@@ -1151,11 +1235,11 @@ const WorkTasksTab = ({
                                         <div className="grid grid-cols-3 gap-2">
                                           <div className="space-y-0.5">
                                             <p className="text-[9px] text-gray-400 uppercase font-semibold">Employee Task</p>
-                                            <div>{renderUserStatus(task)}</div>
+                                            <div>{renderUserStatus(task, formatDateWithTime)}</div>
                                           </div>
                                           <div className="space-y-0.5">
                                             <p className="text-[9px] text-gray-400 uppercase font-semibold">Manager Approval</p>
-                                            <div>{renderManagerStatus(task)}</div>
+                                            <div>{renderManagerStatus(task, formatDateWithTime)}</div>
                                           </div>
                                           <div className="space-y-0.5">
                                             <p className="text-[9px] text-gray-400 uppercase font-semibold">Admin Approval</p>
@@ -1168,11 +1252,11 @@ const WorkTasksTab = ({
                                         <div className="grid grid-cols-2 gap-2">
                                           <div className="space-y-0.5">
                                             <p className="text-[9px] text-gray-400 uppercase font-semibold">Employee Task</p>
-                                            <div>{renderUserStatus(task)}</div>
+                                            <div>{renderUserStatus(task, formatDateWithTime)}</div>
                                           </div>
                                           <div className="space-y-0.5">
                                             <p className="text-[9px] text-gray-400 uppercase font-semibold">Manager Approval</p>
-                                            <div>{renderManagerStatus(task)}</div>
+                                            <div>{renderManagerStatus(task, formatDateWithTime)}</div>
                                           </div>
                                         </div>
                                       );
@@ -1180,7 +1264,7 @@ const WorkTasksTab = ({
                                       return (
                                         <div className="space-y-0.5">
                                           <p className="text-[9px] text-gray-400 uppercase font-semibold">Task Status</p>
-                                          <div>{renderUserStatus(task)}</div>
+                                          <div>{renderUserStatus(task, formatDateWithTime)}</div>
                                         </div>
                                       );
                                     }

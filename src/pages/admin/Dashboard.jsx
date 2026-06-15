@@ -66,10 +66,32 @@ export default function AdminDashboard() {
   const handleDashboardTypeChange = (newType) => {
     setDashboardType(newType)
     setDashboardStaffFilter("all")
-    setShopFilter("all")
+    if ((userRole || "").toLowerCase() !== "manager") {
+      setShopFilter("all")
+    }
     setCurrentPage(1)
     setHasMoreData(true)
   }
+
+  useEffect(() => {
+    const initializeManagerShop = async () => {
+      if ((userRole || "").toLowerCase() === "manager" && username) {
+        try {
+          const { data: mgrData } = await supabase
+            .from("users")
+            .select("shop_name")
+            .ilike("user_name", username)
+            .maybeSingle();
+          if (mgrData?.shop_name) {
+            setShopFilter(mgrData.shop_name);
+          }
+        } catch (e) {
+          console.error("Error setting manager shop filter:", e);
+        }
+      }
+    };
+    initializeManagerShop();
+  }, [userRole, username]);
 
   // Caching mechanism
   // OLD: const shopDataCache = useRef({});
@@ -576,7 +598,27 @@ export default function AdminDashboard() {
       const currentUserRoleForStaff = (localStorage.getItem("role") || "").toLowerCase()
       
       let uniqueStaff;
-      if (currentMainTab === 'maintenance' || currentMainTab === 'repair' ||
+      if (currentUserRoleForStaff === "manager" && currentUsername) {
+        try {
+          const { data: mgrData } = await supabase
+            .from("users")
+            .select("shop_name")
+            .ilike("user_name", currentUsername)
+            .maybeSingle();
+          const managerShop = mgrData?.shop_name || "";
+          
+          const { data: shopUsers } = await supabase
+            .from("users")
+            .select("user_name")
+            .eq("shop_name", managerShop)
+            .eq("status", "active");
+          
+          uniqueStaff = (shopUsers || []).map(u => u.user_name).filter(Boolean);
+        } catch (error) {
+          console.error('Error fetching manager shop staff:', error);
+          uniqueStaff = [];
+        }
+      } else if (currentMainTab === 'maintenance' || currentMainTab === 'repair' ||
         currentShopFilter === 'Maintenance' || currentShopFilter === 'Repair') {
         uniqueStaff = [...new Set((data || []).map((task) => task.name).filter((name) => name && name.trim() !== ""))];
       } else {

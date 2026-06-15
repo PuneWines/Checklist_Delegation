@@ -116,20 +116,43 @@ const AllTasks = () => {
   const [workingDaysList, setWorkingDaysList] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
 
+  const filteredEmployeesList = useMemo(() => {
+    const role = (userRole || "").toLowerCase();
+    const currentUsername = username || "";
+
+    if (role === "admin") {
+      return allUsers.map(u => typeof u === 'object' ? u.user_name : u).filter(Boolean);
+    } else if (role === "manager") {
+      const managerUser = allUsers.find(u => typeof u === 'object' && u.user_name === currentUsername);
+      const managerShop = managerUser ? (managerUser.shop_name || "").trim().toLowerCase() : "";
+      
+      const matched = allUsers.filter(u => {
+        if (typeof u !== 'object') return false;
+        const userShop = (u.shop_name || "").trim().toLowerCase();
+        return managerShop && userShop === managerShop;
+      }).map(u => u.user_name);
+      
+      return [...new Set([currentUsername, ...matched])].filter(Boolean);
+    } else if (role === "user") {
+      return [currentUsername].filter(Boolean);
+    }
+    
+    return allUsers.map(u => typeof u === 'object' ? u.user_name : u).filter(Boolean);
+  }, [allUsers, userRole, username]);
+
   // Fetch holidays and users on mount
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
         const [holidaysRes, usersRes, workingDaysRes] = await Promise.all([
           supabase.from('holidays').select('holiday_date'),
-          supabase.from('users').select('user_name').eq('status', 'active').order('user_name', { ascending: true }),
+          supabase.from('users').select('user_name, shop_name, user_access').eq('status', 'active').order('user_name', { ascending: true }),
           supabase.from('working_day_calender').select('working_date')
         ]);
 
         if (holidaysRes.data) setHolidaysList(holidaysRes.data.map(h => h.holiday_date));
         if (usersRes.data) {
-          const uniqueUsers = [...new Set(usersRes.data.map(u => u.user_name).filter(Boolean))];
-          setAllUsers(uniqueUsers);
+          setAllUsers(usersRes.data);
         }
         if (workingDaysRes.data) setWorkingDaysList(workingDaysRes.data.map(w => w.working_date));
       } catch (err) {
@@ -155,6 +178,7 @@ const AllTasks = () => {
     setUsername(user || "");
     if ((role || "").toLowerCase() === "user") {
       setShowHistory(false);
+      setWorkEmployeeFilter(user || "");
     }
   }, []);
 
@@ -1183,7 +1207,7 @@ const AllTasks = () => {
                   setSelectedItems(new Set());
                   setSearchTerm("");
                   setDateFilter("all");
-                  setWorkEmployeeFilter("all");
+                  setWorkEmployeeFilter((userRole || "").toLowerCase() === "user" ? (username || "") : "all");
                 }} />
               </div>
 
@@ -1230,17 +1254,19 @@ const AllTasks = () => {
                       </button>
                       {dropdownOpen?.workEmployee && (
                         <div className="absolute z-50 mt-2 w-48 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-y-auto max-h-60 animate-in fade-in slide-in-from-top-2 duration-200">
-                          <button
-                            onClick={() => {
-                              setWorkEmployeeFilter("all");
-                              setSelectedItems(new Set());
-                              setDropdownOpen(prev => ({ ...prev, workEmployee: false }));
-                            }}
-                            className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${workEmployeeFilter === 'all' ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
-                          >
-                            All Employees
-                          </button>
-                          {allUsers.map((user) => (
+                          {(userRole || "").toLowerCase() !== "user" && (
+                            <button
+                              onClick={() => {
+                                setWorkEmployeeFilter("all");
+                                setSelectedItems(new Set());
+                                setDropdownOpen(prev => ({ ...prev, workEmployee: false }));
+                              }}
+                              className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${workEmployeeFilter === 'all' ? 'bg-purple-50 text-purple-700 border-l-2 border-purple-500' : 'text-gray-600 hover:bg-gray-50'}`}
+                            >
+                              All Employees
+                            </button>
+                          )}
+                          {filteredEmployeesList.map((user) => (
                             <button
                               key={user}
                               onClick={() => {

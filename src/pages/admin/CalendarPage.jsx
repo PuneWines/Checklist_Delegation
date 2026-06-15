@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { Plus, ClipboardList, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle2, AlertCircle, X, Edit, Save, Loader2, Play, Pause, Search, Mic, Users, Filter, Check, ChevronDown, ShieldAlert } from 'lucide-react';
+import { Plus, ClipboardList, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle2, AlertCircle, X, Edit, Save, Loader2, Play, Pause, Search, Mic, Users, Filter, Check, ChevronDown, ShieldAlert, LayoutGrid } from 'lucide-react';
 import AudioPlayer from '../../components/AudioPlayer';
 import supabase from '../../SupabaseClient';
 
@@ -205,6 +205,7 @@ const CalendarPage = () => {
             let repairQuery = supabase.from('repair_tasks').select('*').gte('created_at', startStr).lte('created_at', endStr);
             let delegationQuery = supabase.from('delegation').select('*').gte('planned_date', startStr).lte('planned_date', endStr);
             let eaQuery = supabase.from('ea_tasks').select('*').gte('planned_date', startStr).lte('planned_date', endStr);
+            let workQuery = supabase.from('work_task').select('*').gte('current_date', startStr).lte('current_date', endStr);
 
             // Role Filters
             if (role === 'user' && username) {
@@ -214,6 +215,7 @@ const CalendarPage = () => {
                 repairQuery = repairQuery.eq('assigned_person', filter);
                 delegationQuery = delegationQuery.eq('name', filter);
                 eaQuery = eaQuery.eq('doer_name', filter);
+                workQuery = workQuery.eq('name', filter);
             } else if (role === 'HOD' && username) {
                 const { data: reports } = await supabase
                     .from("users")
@@ -226,6 +228,7 @@ const CalendarPage = () => {
                 repairQuery = repairQuery.in('assigned_person', reportingUsers);
                 delegationQuery = delegationQuery.in('name', reportingUsers);
                 eaQuery = eaQuery.in('doer_name', reportingUsers);
+                workQuery = workQuery.in('name', reportingUsers);
             }
             // For admins, we now show EVERYTHING by default to match the global counts 
             // of the Working Day Calendar, unless we WANT to add optional filtering later.
@@ -238,6 +241,7 @@ const CalendarPage = () => {
                 repairRes,
                 delegationRes,
                 eaRes,
+                workRes,
                 holidaysRes,
                 workingDaysRes
             ] = await Promise.all([
@@ -246,6 +250,7 @@ const CalendarPage = () => {
                 repairQuery,
                 delegationQuery,
                 eaQuery,
+                workQuery,
                 supabase.from('holidays').select('*'),
                 supabase
                     .from('working_day_calender')
@@ -305,6 +310,16 @@ const CalendarPage = () => {
                     date: normalizeDate(t.planned_date || t.task_start_date || t.created_at),
                     type: 'ea',
                     name: t.doer_name || t.name
+                })),
+
+                ...(workRes.data || []).map(t => ({
+                    ...t,
+                    id: t.id,
+                    cat: 'WK',
+                    title: t.task_description || t.id,
+                    date: normalizeDate(t.current_date || t.created_at),
+                    type: 'work',
+                    name: t.name || t.assigned_person
                 }))
             ].filter(t => {
                 if (!t.date) return false;
@@ -353,6 +368,8 @@ const CalendarPage = () => {
             navigate(`/dashboard/checklist?date=${selectedDate}&type=delegation`);
         } else if (type === 'ea') {
             navigate(`/dashboard/ea-task?date=${selectedDate}`);
+        } else if (type === 'work') {
+            navigate(`/dashboard/work-details`);
         }
         setShowAssignTaskTypePopup(false);
         setIsModalOpen(false);
@@ -383,6 +400,10 @@ const CalendarPage = () => {
             } else if (task.type === 'repair') {
                 tableName = 'repair_tasks';
                 updates.remarks = editForm.remark;
+            } else if (task.type === 'work') {
+                tableName = 'work_task';
+                updates.remark = editForm.remark;
+                if (editForm.status === 'Done') updates.submission_date = new Date().toISOString();
             }
 
             const pkField = task.type === 'checklist' ? 'task_id' : 'id';
@@ -444,11 +465,14 @@ const CalendarPage = () => {
                     {dayTasks.length > 0 && !isHoliday && (
                         <div className="flex gap-0.5">
                             {Array.from(new Set(dayTasks.map(d => d.cat))).map(cat => (
-                                <div key={cat} className={`w-2 h-2 rounded-full ${cat === 'CK' ? 'bg-blue-600' :
+                                <div key={cat} className={`w-2 h-2 rounded-full ${
+                                    cat === 'CK' ? 'bg-blue-600' :
                                     cat === 'MT' ? 'bg-orange-600' :
-                                        cat === 'RP' ? 'bg-red-600' :
-                                            cat === 'DL' ? 'bg-purple-600' :
-                                                'bg-indigo-600'
+                                    cat === 'RP' ? 'bg-red-600' :
+                                    cat === 'DL' ? 'bg-purple-600' :
+                                    cat === 'EA' ? 'bg-green-600' :
+                                    cat === 'WK' ? 'bg-indigo-600' :
+                                    'bg-indigo-600'
                                     }`} title={cat} />
                             ))}
                         </div>
@@ -575,7 +599,8 @@ const CalendarPage = () => {
                         { label: 'Maintenance', color: 'bg-orange-600' },
                         { label: 'Repair', color: 'bg-red-600' },
                         { label: 'Delegation', color: 'bg-purple-600' },
-                        { label: 'EA', color: 'bg-indigo-600' },
+                        { label: 'EA', color: 'bg-green-600' },
+                        { label: 'Work', color: 'bg-indigo-600' },
                         { label: 'Holiday', color: 'bg-red-400' }
                     ].map(item => (
                         <div key={item.label} className="flex items-center gap-1.5 grayscale-[0.2] hover:grayscale-0 transition-all">
@@ -643,7 +668,15 @@ const CalendarPage = () => {
                                                 <div className="flex flex-wrap gap-1.5">
                                                     {dayTasksTotal.slice(0, 3).map((task, idx) => (
                                                         <div key={idx} className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-1 rounded border border-gray-100 max-w-full">
-                                                            <div className={`w-2 h-2 rounded-sm flex-shrink-0 ${task.cat === 'CK' ? 'bg-blue-600' : task.cat === 'MT' ? 'bg-orange-600' : task.cat === 'RP' ? 'bg-red-600' : 'bg-purple-600'}`}></div>
+                                                            <div className={`w-2 h-2 rounded-sm flex-shrink-0 ${
+                                                                task.cat === 'CK' ? 'bg-blue-600' :
+                                                                task.cat === 'MT' ? 'bg-orange-600' :
+                                                                task.cat === 'RP' ? 'bg-red-600' :
+                                                                task.cat === 'DL' ? 'bg-purple-600' :
+                                                                task.cat === 'EA' ? 'bg-green-600' :
+                                                                task.cat === 'WK' ? 'bg-indigo-600' :
+                                                                'bg-gray-400'
+                                                            }`}></div>
                                                             <span className="text-[10px] font-bold text-gray-600 truncate max-w-[120px] uppercase">{task.title}</span>
                                                         </div>
                                                     ))}
@@ -735,12 +768,28 @@ const CalendarPage = () => {
                                                     onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
                                                     className="p-4 flex items-center gap-4 cursor-pointer group"
                                                 >
-                                                    <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${task.cat === 'CK' ? 'bg-blue-600' : task.cat === 'MT' ? 'bg-orange-600' : task.cat === 'RP' ? 'bg-red-600' : 'bg-purple-600'}`}></div>
+                                                    <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${
+                                                        task.cat === 'CK' ? 'bg-blue-600' :
+                                                        task.cat === 'MT' ? 'bg-orange-600' :
+                                                        task.cat === 'RP' ? 'bg-red-600' :
+                                                        task.cat === 'DL' ? 'bg-purple-600' :
+                                                        task.cat === 'EA' ? 'bg-green-600' :
+                                                        task.cat === 'WK' ? 'bg-indigo-600' :
+                                                        'bg-gray-400'
+                                                    }`}></div>
                                                     
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2 mb-0.5">
                                                             <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">#{task.id}</span>
-                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${task.type === 'checklist' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${
+                                                                task.type === 'checklist' ? 'bg-blue-50 text-blue-600' :
+                                                                task.type === 'maintenance' ? 'bg-orange-50 text-orange-600' :
+                                                                task.type === 'repair' ? 'bg-red-50 text-red-600' :
+                                                                task.type === 'delegation' ? 'bg-purple-50 text-purple-600' :
+                                                                task.type === 'ea' ? 'bg-green-50 text-green-600' :
+                                                                task.type === 'work' ? 'bg-indigo-50 text-indigo-600' :
+                                                                'bg-gray-50 text-gray-600'
+                                                            }`}>
                                                                 {task.type}
                                                             </span>
                                                         </div>
@@ -810,7 +859,7 @@ const CalendarPage = () => {
                                                                 <div>
                                                                     <p className="text-[9px] font-black text-gray-400 uppercase mb-2 tracking-widest">Shop Unit</p>
                                                                     <div className="text-xs font-black text-purple-600 uppercase">
-                                                                        {task.shop || 'General Operations'}
+                                                                        {task.shop_name || task.shop || 'General Operations'}
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -922,6 +971,22 @@ const CalendarPage = () => {
                                 </div>
                                 <ChevronRight className="ml-auto opacity-20 group-hover:opacity-100 transition-all font-black" size={16} />
                             </button>
+
+                            {['admin', 'hod', 'manager'].includes(userRole.toLowerCase()) && (
+                                <button
+                                    onClick={() => handleAssignTask('work')}
+                                    className="w-full bg-gray-50 hover:bg-indigo-600 text-gray-900 hover:text-white p-5 rounded-3xl flex items-center gap-4 transition-all group border border-gray-100 hover:border-indigo-600"
+                                >
+                                    <div className="p-3 bg-white text-indigo-600 rounded-2xl shadow-sm group-hover:bg-indigo-500 group-hover:text-white transition-all">
+                                        <LayoutGrid size={20} />
+                                    </div>
+                                    <div className="text-left">
+                                        <h4 className="text-sm font-black uppercase leading-tight mb-0.5">Work Records</h4>
+                                        <p className="text-[9px] font-bold opacity-60 uppercase tracking-wider">Manager & Admin Panel</p>
+                                    </div>
+                                    <ChevronRight className="ml-auto opacity-20 group-hover:opacity-100 transition-all font-black" size={16} />
+                                </button>
+                            )}
 
                             <button 
                                 onClick={() => setShowAssignTaskTypePopup(false)}

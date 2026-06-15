@@ -283,7 +283,7 @@ export default function TaskNavigationTabs({
           ...task,
           id: task.id,
           title: task.task_description,
-          assignedTo: task.name || "Unassigned",
+          assignedTo: task.name || task.assigned_person || task.doer_name || "Unassigned",
           taskStartDate: formatDateToDDMMYYYY(taskStartDate),
           originalTaskStartDate: task.task_start_date,
           plannedDate: task.planned_date,
@@ -300,6 +300,14 @@ export default function TaskNavigationTabs({
 
       // Apply client-side search filter AND smart deduplication
       let filteredTasks = processedTasks.filter((task) => {
+        // Role-based client-side filtering for user role
+        const userRoleLower = (localStorage.getItem("role") || "").toLowerCase();
+        const currentUsername = (localStorage.getItem("user-name") || "").toLowerCase();
+        if (userRoleLower === "user" && currentUsername) {
+          const assigned = (task.assignedTo || "").toLowerCase();
+          if (assigned !== currentUsername) return false;
+        }
+
         // 0. Tab view strict filter (Prevents UTC offset task leakage across tabs)
         // If the task view is 'recent', we only want TODAY'S tasks. If the local calculation 
         // says it's "Upcoming", we hide it from this tab.

@@ -38,13 +38,59 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isHolidaySubmenuOpen, setIsHolidaySubmenuOpen] = useState(false);
   const [username, setUsername] = useState("");
-  const [userRole, setUserRole] = useState("");
+  const [userRole, setUserRole] = useState(() => localStorage.getItem("role") || "");
   const [userEmail, setUserEmail] = useState("");
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [pageAccess, setPageAccess] = useState([]);
   const [profileImage, setProfileImage] = useState("");
 
   const [isUserPopupOpen, setIsUserPopupOpen] = useState(false);
+
+  const [hasDelegationTasks, setHasDelegationTasks] = useState(() => {
+    const role = (localStorage.getItem("role") || "").toLowerCase();
+    const storedUsername = localStorage.getItem("user-name") || "";
+    if (role !== "user") return true;
+    try {
+      const cached = sessionStorage.getItem(`user_has_delegation_tasks_${storedUsername}`);
+      if (cached !== null) {
+        return cached === "true";
+      }
+    } catch (e) {}
+    return true;
+  });
+
+  useEffect(() => {
+    const storedUsername = localStorage.getItem("user-name");
+    const storedRole = localStorage.getItem("role");
+    if (!storedUsername || (storedRole || "").toLowerCase() !== "user") return;
+
+    // Skip query if cache is present
+    try {
+      const cached = sessionStorage.getItem(`user_has_delegation_tasks_${storedUsername}`);
+      if (cached !== null) return;
+    } catch (e) {}
+
+    const checkDelegation = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('delegation')
+          .select('task_id')
+          .eq('name', storedUsername)
+          .limit(1);
+
+        if (!error) {
+          const hasTasks = data && data.length > 0;
+          setHasDelegationTasks(hasTasks);
+          try {
+            sessionStorage.setItem(`user_has_delegation_tasks_${storedUsername}`, String(hasTasks));
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.error("Error checking delegation tasks:", err);
+      }
+    };
+    checkDelegation();
+  }, []);
 
   // Update the routes array based on user role and super admin status
   const routes = [
@@ -169,7 +215,6 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     setUserEmail(storedEmail);
     setIsSuperAdmin(storedUsername.toLowerCase() === "admin");
 
-    // Centralized Security Guard for User Role
     const path = location.pathname;
     const restrictedPages = [
       "/dashboard/assign-task",
@@ -183,6 +228,10 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       "/dashboard/working-day-calendar",
       "/dashboard/setting"
     ];
+    if (!hasDelegationTasks) {
+      restrictedPages.push("/dashboard/delegation");
+      restrictedPages.push("/dashboard/delegation-data");
+    }
 
     const storedRoleLower = (storedRole || "user").toLowerCase();
     const isSuperAdminUser = storedUsername?.toLowerCase() === "admin" || storedRoleLower === "admin";
@@ -221,6 +270,10 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     } else if (storedRoleLower === "user") {
       // Fallback to hardcoded for legacy or if pageAccess is empty
       const restrictedPages = ["/dashboard/assign-task", "/dashboard/admin-approval", "/dashboard/checklist", "/dashboard/maintenance", "/dashboard/repair", "/dashboard/ea-task", "/dashboard/quick-task", "/dashboard/holiday-list", "/dashboard/working-day-calendar", "/dashboard/setting"];
+      if (!hasDelegationTasks) {
+        restrictedPages.push("/dashboard/delegation");
+        restrictedPages.push("/dashboard/delegation-data");
+      }
       if (restrictedPages.some(p => path.startsWith(p))) {
         navigate("/dashboard/admin");
         return;
@@ -302,7 +355,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     // Check if this is the super admin (username = 'admin')
     const normalizedUsername = (storedUsername || "").toLowerCase();
     setIsSuperAdmin(normalizedUsername === "admin");
-  }, [navigate, location.pathname]);
+  }, [navigate, location.pathname, hasDelegationTasks]);
 
   // Fetch notifications globally for badge count
   useEffect(() => {
@@ -337,6 +390,13 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     return [];
   };
 
+  const getRouteDisplayLabel = (route) => {
+    if (route.href === "/dashboard/admin-approval" && userRole.toLowerCase() === "manager") {
+      return "Manager Approval";
+    }
+    return route.label;
+  };
+
   // Filter routes based on user role and super admin status
   const getAccessibleRoutes = () => {
     const userRole = localStorage.getItem("role") || "user";
@@ -364,6 +424,11 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
 
         // Hardcoded role check first
         const hasRoleAccess = route.showFor.some(role => role.toLowerCase() === userRoleNormalized);
+
+        // Hide delegation for users who do not have any tasks in the delegation table
+        if (route.href === "/dashboard/delegation" && userRoleNormalized === "user" && !hasDelegationTasks) {
+          return false;
+        }
         
         // Admin role users always follow showFor — never filtered by pageAccess
         if (isAdminOrSuperAdmin) {
@@ -436,7 +501,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
                           className={`h-4 w-4 ${route.active ? "text-blue-600" : ""}`}
                         />
                         <div className="flex items-center justify-between w-full">
-                          <span>{route.label}</span>
+                          <span>{getRouteDisplayLabel(route)}</span>
                           {route.badge && (
                             <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                               {route.badge}
@@ -480,7 +545,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
                       className={`h-4 w-4 ${route.active ? "text-blue-600" : ""}`}
                     />
                     <div className="flex items-center justify-between w-full">
-                      <span>{route.label}</span>
+                      <span>{getRouteDisplayLabel(route)}</span>
                       {route.badge && (
                         <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                           {route.badge}
@@ -626,7 +691,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
                             <route.icon
                               className={`h-4 w-4 ${route.active ? "text-blue-600" : ""}`}
                             />
-                            {route.label}
+                            {getRouteDisplayLabel(route)}
                           </div>
                           {route.isOpen ? (
                             <ChevronDown className="h-4 w-4" />
@@ -667,7 +732,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
                             }`}
                         />
                         <div className="flex items-center justify-between w-full">
-                          <span>{route.label}</span>
+                          <span>{getRouteDisplayLabel(route)}</span>
                           {route.badge && (
                             <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                               {route.badge}
@@ -854,16 +919,18 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
             </div>
           )}
 
-          <Link
-            to="/dashboard/delegation"
-            className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 ${location.pathname === "/dashboard/delegation"
-              ? "text-purple-600 bg-purple-50"
-              : "text-gray-400 hover:text-purple-400"
-              }`}
-          >
-            <BookmarkCheck size={22} strokeWidth={location.pathname === "/dashboard/delegation" ? 2.5 : 2} />
-            <span className="text-[10px] mt-1 font-bold">Status</span>
-          </Link>
+          {!(userRole?.toLowerCase() === "user" && !hasDelegationTasks) && (
+            <Link
+              to="/dashboard/delegation"
+              className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 ${location.pathname === "/dashboard/delegation"
+                ? "text-purple-600 bg-purple-50"
+                : "text-gray-400 hover:text-purple-400"
+                }`}
+            >
+              <BookmarkCheck size={22} strokeWidth={location.pathname === "/dashboard/delegation" ? 2.5 : 2} />
+              <span className="text-[10px] mt-1 font-bold">Status</span>
+            </Link>
+          )}
 
           <button
             onClick={() => setIsUserPopupOpen(true)}

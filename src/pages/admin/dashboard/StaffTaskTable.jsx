@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { fetchStaffTasksDataApi, getStaffTasksCountApi, getTotalUsersCountApi } from "../../../redux/api/dashboardApi"
+import supabase from "../../../SupabaseClient"
 
 export default function StaffTasksTable({
   dashboardType,
@@ -63,11 +64,40 @@ export default function StaffTasksTable({
       const endParam = useDateRange ? dateRange.endDate : null;
       const monthParam = useDateRange ? null : selectedMonth;
 
+      const userRoleLower = (localStorage.getItem("role") || "").toLowerCase();
+      const currentUsername = (localStorage.getItem("user-name") || "").toLowerCase();
+
+      let effectiveShopFilter = shopFilter;
+      let managerShopUsers = [];
+
+      if (userRoleLower === "manager" && currentUsername) {
+        try {
+          const { data: mgrData } = await supabase
+            .from("users")
+            .select("shop_name")
+            .ilike("user_name", currentUsername)
+            .maybeSingle();
+          if (mgrData?.shop_name) {
+            effectiveShopFilter = mgrData.shop_name;
+            const { data: shopUsers } = await supabase
+              .from("users")
+              .select("user_name")
+              .eq("shop_name", mgrData.shop_name)
+              .eq("status", "active");
+            if (shopUsers) {
+              managerShopUsers = shopUsers.map(u => (u.user_name || "").toLowerCase());
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching manager shop:", e);
+        }
+      }
+
       // Fetch staff data with their task summaries
       const data = await fetchStaffTasksDataApi(
         dashboardType,
         dashboardStaffFilter,
-        shopFilter,
+        effectiveShopFilter,
         page,
         itemsPerPage,
         monthParam,
@@ -81,15 +111,21 @@ export default function StaffTasksTable({
           getStaffTasksCountApi(
             dashboardType,
             dashboardStaffFilter,
-            shopFilter,
+            effectiveShopFilter,
             monthParam,
             startParam,
             endParam
           ),
-          getTotalUsersCountApi(shopFilter) // Pass shop filter to users count API
+          getTotalUsersCountApi(effectiveShopFilter) // Pass shop filter to users count API
         ]);
-        setTotalStaffCount(staffCount)
-        setTotalUsersCount(usersCount)
+        
+        if (userRoleLower === "user") {
+          setTotalStaffCount(1)
+          setTotalUsersCount(1)
+        } else {
+          setTotalStaffCount(staffCount)
+          setTotalUsersCount(usersCount)
+        }
       }
 
       if (!data || data.length === 0) {
@@ -101,10 +137,17 @@ export default function StaffTasksTable({
         return
       }
 
+      let filteredData = data || [];
+      if (userRoleLower === "user" && currentUsername) {
+        filteredData = filteredData.filter(staff => (staff.name || "").toLowerCase() === currentUsername);
+      } else if (userRoleLower === "manager" && managerShopUsers.length > 0) {
+        filteredData = filteredData.filter(staff => managerShopUsers.includes((staff.name || "").toLowerCase()));
+      }
+
       if (append) {
-        setStaffMembers(prev => [...prev, ...data])
+        setStaffMembers(prev => [...prev, ...filteredData])
       } else {
-        setStaffMembers(data)
+        setStaffMembers(filteredData)
       }
 
       // Check if we have more data
@@ -248,13 +291,27 @@ export default function StaffTasksTable({
         <div className="bg-white rounded-2xl border border-blue-100 shadow-xl overflow-hidden relative group">
           <div className="staff-table-container overflow-auto" style={{ maxHeight: "550px" }}>
             <table className="min-w-full divide-y divide-gray-100">
-              <thead className="bg-blue-50/80 backdrop-blur-md sticky top-0 z-10 border-b border-blue-100">
+              <thead>
                 <tr>
-                  {["Seq", "Staff Performance Detail", "Shop", "Total", "Done", "On-Time", "Done Score", "On-Time Score"].map((header, i) => (
-                    <th key={header} scope="col" className={`px-4 py-4 text-left text-[11px] font-black text-blue-900 uppercase tracking-widest ${i === 1 ? 'min-w-[220px]' : ''}`}>
-                      {header}
-                    </th>
-                  ))}
+                  {(() => {
+                    const getTabLabel = () => {
+                      switch (dashboardType) {
+                        case 'checklist': return 'Checklist';
+                        case 'delegation': return 'Delegation';
+                        case 'work': return 'Work';
+                        case 'maintenance': return 'Maintenance';
+                        case 'repair': return 'Repair';
+                        case 'ea': return 'EA';
+                        default: return 'Task';
+                      }
+                    };
+                    const label = getTabLabel();
+                    return ["Seq", "Staff Performance Detail", "Shop", "Total", "Done", "On-Time", `${label} Score`, `${label} On-Time Score`].map((header, i) => (
+                      <th key={header} scope="col" className={`px-4 py-4 text-left text-[11px] font-black text-blue-900 uppercase tracking-widest ${i === 1 ? 'min-w-[220px]' : ''}`}>
+                        {header}
+                      </th>
+                    ));
+                  })()}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-50">

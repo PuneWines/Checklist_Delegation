@@ -141,6 +141,11 @@ export default function WorkDetails() {
   // Helper: apply shop-access filter shared by both lists
   const shopFilteredUsers = useMemo(() => {
     return userData.filter(u => {
+      // Exclude inactive users
+      if (u.status && u.status.toLowerCase() !== 'active') {
+        return false;
+      }
+
       const userShopsList = (u.shop_name || u.user_access || "")
         .toLowerCase()
         .split(',')

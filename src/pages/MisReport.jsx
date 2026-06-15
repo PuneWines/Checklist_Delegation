@@ -38,6 +38,8 @@ function StaffTasksPage() {
     const [totalUsersCount, setTotalUsersCount] = useState(0)
     const [availableStaff, setAvailableStaff] = useState([])
     const [searchQuery, setSearchQuery] = useState("")
+    const [selectedRoleFilter, setSelectedRoleFilter] = useState("all")
+    const [userRolesMap, setUserRolesMap] = useState({})
     const itemsPerPage = 50
 
     const [selectedStaff, setSelectedStaff] = useState(null)
@@ -61,19 +63,56 @@ function StaffTasksPage() {
         setTotalStaffCount(0)
     }, [dashboardStaffFilter, startDate, endDate])
 
-    // Optimized filter function with debouncing
+    // Fetch user roles map on mount
     useEffect(() => {
-        if (!searchQuery.trim()) {
-            setFilteredStaffMembers(staffMembers)
-        } else {
+        const fetchUserRoles = async () => {
+            try {
+                const { data } = await supabase.from('users').select('user_name, role');
+                if (data) {
+                    const map = {};
+                    data.forEach(u => {
+                        if (u.user_name) {
+                            map[u.user_name.toLowerCase()] = (u.role || "user").toLowerCase();
+                        }
+                    });
+                    setUserRolesMap(map);
+                }
+            } catch (err) {
+                console.error("Error fetching user roles:", err);
+            }
+        };
+        fetchUserRoles();
+    }, []);
+    // Reset staff filter if the selected staff doesn't match the selected role filter
+    useEffect(() => {
+        if (selectedRoleFilter !== "all" && dashboardStaffFilter !== "all") {
+            const role = userRolesMap[dashboardStaffFilter.toLowerCase()] || "user";
+            if (role !== selectedRoleFilter) {
+                setDashboardStaffFilter("all");
+            }
+        }
+    }, [selectedRoleFilter, dashboardStaffFilter, userRolesMap]);
+    // Optimized filter function with debouncing and role filtering
+    useEffect(() => {
+        let filtered = staffMembers;
+        
+        if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase().trim()
-            const filtered = staffMembers.filter(staff =>
+            filtered = filtered.filter(staff =>
                 staff.name?.toLowerCase().includes(query) ||
                 staff.email?.toLowerCase().includes(query)
             )
-            setFilteredStaffMembers(filtered)
         }
-    }, [staffMembers, searchQuery])
+
+        if (selectedRoleFilter !== "all") {
+            filtered = filtered.filter(staff => {
+                const role = userRolesMap[(staff.name || "").toLowerCase()] || "user";
+                return role === selectedRoleFilter;
+            });
+        }
+
+        setFilteredStaffMembers(filtered)
+    }, [staffMembers, searchQuery, selectedRoleFilter, userRolesMap])
 
     // Combine checklist, delegation, and work data
     const combineStaffData = (checklistData, delegationData, workData) => {
@@ -237,20 +276,52 @@ function StaffTasksPage() {
             isLoadingRef.current = true
             setIsLoading(true)
 
+            const userRoleLower = (localStorage.getItem("role") || "").toLowerCase();
+            const currentUsername = (localStorage.getItem("user-name") || "").toLowerCase();
+
+            let effectiveShopFilter = null;
+            let managerShopUsers = [];
+
+            if (userRoleLower === "manager" && currentUsername) {
+                try {
+                    const { data: mgrData } = await supabase
+                        .from("users")
+                        .select("shop_name")
+                        .ilike("user_name", currentUsername)
+                        .maybeSingle();
+                    if (mgrData?.shop_name) {
+                        effectiveShopFilter = mgrData.shop_name;
+                        const { data: shopUsers } = await supabase
+                            .from("users")
+                            .select("user_name")
+                            .eq("shop_name", mgrData.shop_name)
+                            .eq("status", "active");
+                        if (shopUsers) {
+                            managerShopUsers = shopUsers.map(u => (u.user_name || "").toLowerCase());
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error fetching manager shop:", e);
+                }
+            }
+
             // Load checklist, delegation, and work data in parallel using custom Date Range
             if (page === 1) {
                 const [checklistData, delegationData, workData, staffCount, usersCount] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate),
-                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate),
-                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate),
-                    getStaffTasksCountApi("checklist", dashboardStaffFilter, null, null, startDate, endDate),
-                    getTotalUsersCountApi()
+                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate),
+                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate),
+                    fetchStaffTasksDataApi("work", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate),
+                    getStaffTasksCountApi("checklist", dashboardStaffFilter, effectiveShopFilter, null, startDate, endDate),
+                    getTotalUsersCountApi(effectiveShopFilter)
                 ]);
 
                 setTotalStaffCount(staffCount)
                 setTotalUsersCount(usersCount)
 
-                const combinedData = combineStaffData(checklistData, delegationData, workData)
+                let combinedData = combineStaffData(checklistData, delegationData, workData)
+                if (userRoleLower === "manager" && managerShopUsers.length > 0) {
+                    combinedData = combinedData.filter(staff => managerShopUsers.includes((staff.name || "").toLowerCase()));
+                }
 
                 if (!combinedData || combinedData.length === 0) {
                     setHasMoreData(false)
@@ -265,12 +336,15 @@ function StaffTasksPage() {
             } else {
                 // For subsequent pages, load all data types
                 const [checklistData, delegationData, workData] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate),
-                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate),
-                    fetchStaffTasksDataApi("work", dashboardStaffFilter, null, page, itemsPerPage, null, startDate, endDate)
+                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate),
+                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate),
+                    fetchStaffTasksDataApi("work", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate)
                 ])
 
-                const combinedData = combineStaffData(checklistData, delegationData, workData)
+                let combinedData = combineStaffData(checklistData, delegationData, workData)
+                if (userRoleLower === "manager" && managerShopUsers.length > 0) {
+                    combinedData = combinedData.filter(staff => managerShopUsers.includes((staff.name || "").toLowerCase()));
+                }
 
                 if (!combinedData || combinedData.length === 0) {
                     setHasMoreData(false)
@@ -310,22 +384,46 @@ function StaffTasksPage() {
     useEffect(() => {
         const fetchAvailableStaff = async () => {
             try {
-                const [checklistData, delegationData, workData] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", "all", null, 1, 100, null, startDate, endDate),
-                    fetchStaffTasksDataApi("delegation", "all", null, 1, 100, null, startDate, endDate),
-                    fetchStaffTasksDataApi("work", "all", null, 1, 100, null, startDate, endDate)
-                ])
+                const userRoleLower = (userRole || "").toLowerCase();
+                const currentUsername = (username || "").toLowerCase();
+                let effectiveShopFilter = null;
 
-                const combinedData = combineStaffData(checklistData, delegationData, workData)
-                const uniqueStaff = [...new Set(combinedData.map(staff => staff.name).filter(Boolean))]
-
-                if (userRole !== "admin" && username) {
-                    if (!uniqueStaff.some(staff => staff.toLowerCase() === username.toLowerCase())) {
-                        uniqueStaff.push(username)
-                    }
+                if (userRoleLower === "manager" && currentUsername) {
+                    const { data: mgrData } = await supabase
+                        .from("users")
+                        .select("shop_name")
+                        .ilike("user_name", currentUsername)
+                        .maybeSingle();
+                    effectiveShopFilter = mgrData?.shop_name || null;
                 }
 
-                setAvailableStaff(uniqueStaff)
+                const [checklistData, delegationData, workData] = await Promise.all([
+                    fetchStaffTasksDataApi("checklist", "all", effectiveShopFilter, 1, 100, null, startDate, endDate),
+                    fetchStaffTasksDataApi("delegation", "all", effectiveShopFilter, 1, 100, null, startDate, endDate),
+                    fetchStaffTasksDataApi("work", "all", effectiveShopFilter, 1, 100, null, startDate, endDate)
+                ])
+
+                let combinedData = combineStaffData(checklistData, delegationData, workData)
+                
+                if (userRoleLower === "manager" && effectiveShopFilter) {
+                    const { data: shopUsers } = await supabase
+                        .from("users")
+                        .select("user_name")
+                        .eq("shop_name", effectiveShopFilter)
+                        .eq("status", "active");
+                    const shopUsersList = (shopUsers || []).map(u => u.user_name).filter(Boolean);
+                    setAvailableStaff(shopUsersList.sort((a, b) => a.localeCompare(b)));
+                } else {
+                    const uniqueStaff = [...new Set(combinedData.map(staff => staff.name).filter(Boolean))]
+
+                    if (userRole !== "admin" && username) {
+                        if (!uniqueStaff.some(staff => staff.toLowerCase() === username.toLowerCase())) {
+                            uniqueStaff.push(username)
+                        }
+                    }
+
+                    setAvailableStaff(uniqueStaff.sort((a, b) => a.localeCompare(b)))
+                }
             } catch (error) {
                 console.error('Error fetching staff:', error)
             }
@@ -650,6 +748,7 @@ function StaffTasksPage() {
 
         const headers = [
             "Name",
+            "Role",
             "Email",
             "Date Start",
             "Date End",
@@ -679,8 +778,10 @@ function StaffTasksPage() {
                 else statusText = "<60% PERF";
             }
 
+            const role = userRolesMap[(staff.name || "").toLowerCase()] || "user";
             const rowValues = [
                 `"${(staff.name || "").replace(/"/g, '""')}"`,
+                `"${role.toUpperCase()}"`,
                 `"${(staff.email || "").replace(/"/g, '""')}"`,
                 `"${dateStartFormatted}"`,
                 `"${dateEndFormatted}"`,
@@ -712,78 +813,100 @@ function StaffTasksPage() {
             <div className="space-y-6">
                 {/* Header Section */}
                 <div className="bg-white rounded-lg border border-purple-200 shadow-md">
-                    <div className="p-6">
-                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                            {/* Title Section */}
-                            <div className="flex-1">
+                    <div className="p-6 space-y-6">
+                        {/* Title and Action Row */}
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-purple-100 pb-4">
+                            <div>
                                 <h1 className="text-2xl font-bold text-purple-700">Staff MIS Report</h1>
                                 <p className="text-sm text-gray-600 mt-1">Combined Task Management System Data</p>
                             </div>
+                            <div className="w-full md:w-auto">
+                                <button
+                                    onClick={handleExportCSV}
+                                    disabled={filteredStaffMembers.length === 0}
+                                    className="w-full md:w-auto px-4 py-2 bg-purple-600 text-white font-medium rounded-md hover:bg-purple-700 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                    </svg>
+                                    Export CSV
+                                </button>
+                            </div>
+                        </div>
 
-                            {/* Filters Section */}
-                            <div className="flex flex-col xl:flex-row gap-3 items-center w-full xl:w-auto">
-                                {/* Search Bar */}
-                                <div className="w-full sm:w-60">
-                                    <input
-                                        type="text"
-                                        placeholder="Search staff..."
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="w-full rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm"
-                                    />
-                                </div>
+                        {/* Filters Row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                            {/* Search Bar */}
+                            <div className="space-y-1">
+                                <span className="text-xs text-gray-500 font-semibold">Search Staff</span>
+                                <input
+                                    type="text"
+                                    placeholder="Search staff..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm"
+                                />
+                            </div>
 
-                                {/* Date Range Pickers */}
-                                <div className="flex flex-col sm:flex-row gap-2 items-center w-full sm:w-auto">
-                                    <div className="flex items-center gap-1 w-full sm:w-auto">
-                                        <span className="text-xs text-gray-500 font-medium whitespace-nowrap">From:</span>
-                                        <input
-                                            type="date"
-                                            value={startDate}
-                                            onChange={(e) => setStartDate(e.target.value)}
-                                            className="rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm w-full sm:w-36"
-                                        />
-                                    </div>
-                                    <div className="flex items-center gap-1 w-full sm:w-auto">
-                                        <span className="text-xs text-gray-500 font-medium whitespace-nowrap">To:</span>
-                                        <input
-                                            type="date"
-                                            value={endDate}
-                                            onChange={(e) => setEndDate(e.target.value)}
-                                            className="rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm w-full sm:w-36"
-                                        />
-                                    </div>
-                                </div>
+                            {/* From Date */}
+                            <div className="space-y-1">
+                                <span className="text-xs text-gray-500 font-semibold">From Date</span>
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="w-full rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm"
+                                />
+                            </div>
 
-                                {/* Staff Filter */}
-                                <div className="w-full sm:w-44">
-                                    <select
-                                        value={dashboardStaffFilter}
-                                        onChange={(e) => setDashboardStaffFilter(e.target.value)}
-                                        className="w-full rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm"
-                                    >
-                                        <option value="all">All Staff</option>
-                                        {availableStaff.map((staff) => (
+                            {/* To Date */}
+                            <div className="space-y-1">
+                                <span className="text-xs text-gray-500 font-semibold">To Date</span>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="w-full rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm"
+                                />
+                            </div>
+
+                            {/* Staff Dropdown */}
+                            <div className="space-y-1">
+                                <span className="text-xs text-gray-500 font-semibold">Staff Filter</span>
+                                <select
+                                    value={dashboardStaffFilter}
+                                    onChange={(e) => setDashboardStaffFilter(e.target.value)}
+                                    className="w-full rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm"
+                                >
+                                    <option value="all">All Staff</option>
+                                    {availableStaff
+                                        .filter(staff => {
+                                            if (selectedRoleFilter === "all") return true;
+                                            const role = userRolesMap[staff.toLowerCase()] || "user";
+                                            return role === selectedRoleFilter;
+                                        })
+                                        .map((staff) => (
                                             <option key={staff} value={staff}>
                                                 {staff}
                                             </option>
-                                        ))}
-                                    </select>
-                                </div>
+                                        ))
+                                    }
+                                </select>
+                            </div>
 
-                                {/* Export CSV Button */}
-                                <div className="w-full sm:w-auto">
-                                    <button
-                                        onClick={handleExportCSV}
-                                        disabled={filteredStaffMembers.length === 0}
-                                        className="w-full px-4 py-2 bg-purple-600 text-white font-medium rounded-md hover:bg-purple-700 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                                        </svg>
-                                        Export CSV
-                                    </button>
-                                </div>
+                            {/* Role Dropdown */}
+                            <div className="space-y-1">
+                                <span className="text-xs text-gray-500 font-semibold">Role Filter</span>
+                                <select
+                                    value={selectedRoleFilter}
+                                    onChange={(e) => setSelectedRoleFilter(e.target.value)}
+                                    className="w-full rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm"
+                                >
+                                    <option value="all">All Roles</option>
+                                    <option value="user">User</option>
+                                    <option value="manager">Manager</option>
+                                    <option value="admin">Admin</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -808,6 +931,11 @@ function StaffTasksPage() {
                                 {dashboardStaffFilter !== "all" && (
                                     <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
                                         Staff: {dashboardStaffFilter}
+                                    </span>
+                                )}
+                                {selectedRoleFilter !== "all" && (
+                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs uppercase">
+                                        Role: {selectedRoleFilter}
                                     </span>
                                 )}
                                 {searchQuery && (
@@ -863,6 +991,9 @@ function StaffTasksPage() {
                                                         Name
                                                     </th>
                                                     <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                        Role
+                                                    </th>
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                                         Date Start
                                                     </th>
                                                     <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -907,6 +1038,18 @@ function StaffTasksPage() {
                                                                     <div className="text-sm font-semibold text-gray-900">{staff.name}</div>
                                                                     <div className="text-xs text-gray-500">{staff.email}</div>
                                                                 </div>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium uppercase border ${
+                                                                    (() => {
+                                                                        const role = userRolesMap[(staff.name || "").toLowerCase()] || "user";
+                                                                        if (role === "admin") return "bg-red-50 text-red-700 border-red-200";
+                                                                        if (role === "manager") return "bg-blue-50 text-blue-700 border-blue-200";
+                                                                        return "bg-gray-50 text-gray-700 border-gray-200";
+                                                                    })()
+                                                                }`}>
+                                                                    {userRolesMap[(staff.name || "").toLowerCase()] || "user"}
+                                                                </span>
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
                                                                 {dateStartFormatted}

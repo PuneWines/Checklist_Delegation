@@ -13,6 +13,11 @@ const getDateColumn = (dashboardType) => {
   }
 };
 
+const getNameField = (dashboardType) => {
+  return dashboardType === 'repair' ? 'assigned_person' :
+         dashboardType === 'ea' ? 'doer_name' : 'name';
+};
+
 /**
  * Fetch dashboard data with proper server-side filtering and pagination
  */
@@ -45,6 +50,8 @@ export const fetchDashboardDataApi = async (
         dashboardType === 'ea' ? 'ea_tasks' :
           dashboardType === 'work' ? 'work_task' : dashboardType;
 
+    const nameField = getNameField(dashboardType);
+
     let query = supabase
       .from(tableName)
       .select(dashboardType === 'work' ? '*, task_assignments:assignment_id(end_datetime, manager_name)' : '*')
@@ -53,14 +60,14 @@ export const fetchDashboardDataApi = async (
 
     // Apply role-based filtering first
     if (role === 'USER' && username) {
-      query = query.eq('name', username);
+      query = query.eq(nameField, username);
     } else if (role === 'HOD' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+      query = query.in(nameField, reportingUsers);
     }
 
     // Apply shop filter if provided (for checklist and delegation)
@@ -79,7 +86,7 @@ export const fetchDashboardDataApi = async (
 
     // Apply staff filter if provided and not "all" (for admin/HOD/manager users)
     if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD' || role === 'MANAGER')) {
-      query = query.eq('name', staffFilter);
+      query = query.eq(nameField, staffFilter);
     }
 
     // Apply task view filtering on server side
@@ -198,26 +205,28 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
         dashboardType === 'ea' ? 'ea_tasks' :
           dashboardType === 'work' ? 'work_task' : dashboardType;
 
+    const nameField = getNameField(dashboardType);
+
     let query = supabase
       .from(tableName)
       .select('*', { count: 'exact', head: true })
-      .not('name', 'is', null);
+      .not(nameField, 'is', null);
 
     // Apply role-based filtering
     if (role === 'USER' && username) {
-      query = query.eq('name', username);
+      query = query.eq(nameField, username);
     } else if (role === 'HOD' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+      query = query.in(nameField, reportingUsers);
     }
 
     // Apply staff filter
     if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD' || role === 'MANAGER')) {
-      query = query.eq('name', staffFilter);
+      query = query.eq(nameField, staffFilter);
     }
 
     // Apply shop filter
@@ -727,13 +736,17 @@ export const fetchStaffTasksDataApi = async (
             summary[mgrKey].total_tasks++;
             summary[mgrKey].total_completed_tasks++;
 
-            // Manager approved on time only if approved on the same day as task submission
+            // Manager approved on time only if approved on or before the intended current_date of the work task
             const approvalDate = new Date(task.manager_approval_date || task.updated_at);
-            const submissionDate = new Date(task.submission_date);
             const approvalDateOnly = new Date(approvalDate.getFullYear(), approvalDate.getMonth(), approvalDate.getDate());
-            const submissionDateOnly = new Date(submissionDate.getFullYear(), submissionDate.getMonth(), submissionDate.getDate());
+            
+            let currentDateOnly = null;
+            if (task.current_date) {
+              const [cYear, cMonth, cDay] = task.current_date.split('-').map(Number);
+              currentDateOnly = new Date(cYear, cMonth - 1, cDay);
+            }
 
-            if (approvalDateOnly.getTime() === submissionDateOnly.getTime()) {
+            if (currentDateOnly && approvalDateOnly.getTime() <= currentDateOnly.getTime()) {
               summary[mgrKey].total_done_on_time++;
             }
           } else {

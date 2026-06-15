@@ -477,7 +477,7 @@ export default function AdminApprovalPage() {
                                 >
                                     <div className="w-1 h-6 sm:w-1.5 sm:h-8 bg-purple-600 rounded-full" />
                                     <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
-                                        Admin <span className="text-purple-600">Approval</span>
+                                        {currentRole.toLowerCase() === "manager" ? "Manager" : "Admin"} <span className="text-purple-600">Approval</span>
                                     </h1>
                                 </motion.div>
                                 <p className="text-[10px] sm:text-sm font-medium text-gray-400 ml-3 sm:ml-5 hidden sm:flex items-center gap-2">
