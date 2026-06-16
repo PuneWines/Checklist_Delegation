@@ -40,6 +40,7 @@ function StaffTasksPage() {
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedRoleFilter, setSelectedRoleFilter] = useState("all")
     const [userRolesMap, setUserRolesMap] = useState({})
+    const [userReportedByMap, setUserReportedByMap] = useState({})
     const itemsPerPage = 50
 
     const [selectedStaff, setSelectedStaff] = useState(null)
@@ -67,15 +68,19 @@ function StaffTasksPage() {
     useEffect(() => {
         const fetchUserRoles = async () => {
             try {
-                const { data } = await supabase.from('users').select('user_name, role');
+                const { data } = await supabase.from('users').select('user_name, role, reported_by');
                 if (data) {
-                    const map = {};
+                    const rMap = {};
+                    const repMap = {};
                     data.forEach(u => {
                         if (u.user_name) {
-                            map[u.user_name.toLowerCase()] = (u.role || "user").toLowerCase();
+                            const nameLower = u.user_name.toLowerCase();
+                            rMap[nameLower] = (u.role || "user").toLowerCase();
+                            repMap[nameLower] = (u.reported_by || "").toLowerCase().trim();
                         }
                     });
-                    setUserRolesMap(map);
+                    setUserRolesMap(rMap);
+                    setUserReportedByMap(repMap);
                 }
             } catch (err) {
                 console.error("Error fetching user roles:", err);
@@ -114,159 +119,374 @@ function StaffTasksPage() {
         setFilteredStaffMembers(filtered)
     }, [staffMembers, searchQuery, selectedRoleFilter, userRolesMap])
 
-    // Combine checklist, delegation, and work data
-    const combineStaffData = (checklistData, delegationData, workData) => {
-        const combinedMap = new Map()
+    const processStaffReport = (checklistTasks, delegationTasks, workTasks, maintenanceTasks, repairTasks, eaTasks, dbUsers, holidayDates) => {
+        const holidayDatesSet = new Set(holidayDates || []);
 
-        // Process checklist data
-        if (checklistData) {
-            checklistData.forEach(staff => {
-                const total = staff.totalTasks || staff.total_tasks || 0
-                const completed = staff.completedTasks || staff.total_completed_tasks || 0
-                const pending = staff.pendingTasks || (total - completed) || 0
-                const progress = staff.progress || staff.completion_score || 0
-                const doneOnTime = staff.total_done_on_time || 0
-                combinedMap.set(staff.name, {
-                    ...staff,
-                    checklistTotal: total,
-                    checklistCompleted: completed,
-                    checklistPending: pending,
-                    checklistProgress: progress,
-                    checklistDoneOnTime: doneOnTime
-                })
-            })
-        }
+        const filterHolidays = (tasks, dateField) => {
+            return (tasks || []).filter(task => {
+                const taskDateStr = task[dateField];
+                if (!taskDateStr) return true;
+                const dateStr = taskDateStr.split('T')[0];
+                return !holidayDatesSet.has(dateStr);
+            });
+        };
 
-        // Process delegation data
-        if (delegationData) {
-            delegationData.forEach(staff => {
-                const total = staff.totalTasks || staff.total_tasks || 0
-                const completed = staff.completedTasks || staff.total_completed_tasks || 0
-                const pending = staff.pendingTasks || (total - completed) || 0
-                const progress = staff.progress || staff.completion_score || 0
-                const doneOnTime = staff.total_done_on_time || 0
+        const cleanChecklist = filterHolidays(checklistTasks, 'planned_date');
+        const cleanDelegation = filterHolidays(delegationTasks, 'planned_date');
+        const cleanWork = filterHolidays(workTasks, 'current_date');
+        const cleanMaintenance = filterHolidays(maintenanceTasks, 'planned_date');
+        const cleanRepair = filterHolidays(repairTasks, 'created_at');
+        const cleanEA = filterHolidays(eaTasks, 'planned_date');
 
-                const existing = combinedMap.get(staff.name)
-                if (existing) {
-                    combinedMap.set(staff.name, {
-                        ...existing,
-                        delegationTotal: total,
-                        delegationCompleted: completed,
-                        delegationPending: pending,
-                        delegationProgress: progress,
-                        delegationDoneOnTime: doneOnTime
-                    })
-                } else {
-                    combinedMap.set(staff.name, {
-                        ...staff,
-                        name: staff.name,
-                        email: staff.email,
+        const summary = {};
+        if (dbUsers) {
+            dbUsers.forEach(u => {
+                if (u.user_name) {
+                    const nameLower = u.user_name.toLowerCase();
+                    summary[nameLower] = {
+                        name: u.user_name,
+                        email: u.email_id || `${nameLower}@example.com`,
+                        role: (u.role || "user").toLowerCase(),
+                        reported_by: (u.reported_by || "").toLowerCase().trim(),
+                        shop_name: u.shop_name || "No Shop",
+                        profile_image: u.profile_image || null,
+                        
                         checklistTotal: 0,
                         checklistCompleted: 0,
                         checklistPending: 0,
-                        checklistProgress: 0,
                         checklistDoneOnTime: 0,
-                        delegationTotal: total,
-                        delegationCompleted: completed,
-                        delegationPending: pending,
-                        delegationProgress: progress,
-                        delegationDoneOnTime: doneOnTime
-                    })
-                }
-            })
-        }
 
-        // Process work data
-        if (workData) {
-            workData.forEach(staff => {
-                const total = staff.totalTasks || staff.total_tasks || 0
-                const completed = staff.completedTasks || staff.total_completed_tasks || 0
-                const pending = staff.pendingTasks || (total - completed) || 0
-                const progress = staff.progress || staff.completion_score || 0
-                const doneOnTime = staff.total_done_on_time || 0
-
-                const existing = combinedMap.get(staff.name)
-                if (existing) {
-                    combinedMap.set(staff.name, {
-                        ...existing,
-                        workTotal: total,
-                        workCompleted: completed,
-                        workPending: pending,
-                        workProgress: progress,
-                        workDoneOnTime: doneOnTime
-                    })
-                } else {
-                    combinedMap.set(staff.name, {
-                        ...staff,
-                        name: staff.name,
-                        email: staff.email,
-                        checklistTotal: 0,
-                        checklistCompleted: 0,
-                        checklistPending: 0,
-                        checklistProgress: 0,
-                        checklistDoneOnTime: 0,
                         delegationTotal: 0,
                         delegationCompleted: 0,
                         delegationPending: 0,
-                        delegationProgress: 0,
                         delegationDoneOnTime: 0,
-                        workTotal: total,
-                        workCompleted: completed,
-                        workPending: pending,
-                        workProgress: progress,
-                        workDoneOnTime: doneOnTime
-                    })
+
+                        workTotal: 0,
+                        workCompleted: 0,
+                        workPending: 0,
+                        workDoneOnTime: 0,
+
+                        maintenanceTotal: 0,
+                        maintenanceCompleted: 0,
+                        maintenancePending: 0,
+                        maintenanceDoneOnTime: 0,
+
+                        repairTotal: 0,
+                        repairCompleted: 0,
+                        repairPending: 0,
+                        repairDoneOnTime: 0,
+
+                        eaTotal: 0,
+                        eaCompleted: 0,
+                        eaPending: 0,
+                        eaDoneOnTime: 0,
+
+                        rawChecklist: [],
+                        rawDelegation: [],
+                        rawWork: [],
+                        rawMaintenance: [],
+                        rawRepair: [],
+                        rawEA: []
+                    };
                 }
-            })
+            });
         }
 
-        // Calculate combined totals and return array
-        return Array.from(combinedMap.values()).map(staff => {
-            const checklistTotal = staff.checklistTotal || 0
-            const checklistCompleted = staff.checklistCompleted || 0
-            const checklistPending = staff.checklistPending || 0
-            const checklistDoneOnTime = staff.checklistDoneOnTime || 0
+        // Distribute Checklist
+        (cleanChecklist || []).forEach(task => {
+            const name = task.name;
+            if (name) {
+                const nameLower = name.toLowerCase();
+                if (summary[nameLower]) {
+                    summary[nameLower].rawChecklist.push(task);
+                }
+            }
+        });
 
-            const delegationTotal = staff.delegationTotal || 0
-            const delegationCompleted = staff.delegationCompleted || 0
-            const delegationPending = staff.delegationPending || 0
-            const delegationDoneOnTime = staff.delegationDoneOnTime || 0
+        // Distribute Delegation
+        (cleanDelegation || []).forEach(task => {
+            const name = task.name;
+            if (name) {
+                const nameLower = name.toLowerCase();
+                if (summary[nameLower]) {
+                    summary[nameLower].rawDelegation.push(task);
+                }
+            }
+        });
 
-            const workTotal = staff.workTotal || 0
-            const workCompleted = staff.workCompleted || 0
-            const workPending = staff.workPending || 0
-            const workDoneOnTime = staff.workDoneOnTime || 0
+        // Distribute Work
+        (cleanWork || []).forEach(task => {
+            const name = task.name;
+            if (name) {
+                const nameLower = name.toLowerCase();
+                if (summary[nameLower]) {
+                    summary[nameLower].rawWork.push(task);
+                }
+            }
+        });
 
-            const totalTasks = checklistTotal + delegationTotal + workTotal
-            const completed = checklistCompleted + delegationCompleted + workCompleted
-            const pending = checklistPending + delegationPending + workPending
-            const doneOnTime = checklistDoneOnTime + delegationDoneOnTime + workDoneOnTime
-            const progress = totalTasks > 0 ? Math.round((completed / totalTasks) * 100) : 0
-            const ontimeScore = totalTasks > 0 ? Math.round((doneOnTime / totalTasks) * 100) : 0
+        // Distribute Maintenance
+        (cleanMaintenance || []).forEach(task => {
+            const name = task.name;
+            if (name) {
+                const nameLower = name.toLowerCase();
+                if (summary[nameLower]) {
+                    summary[nameLower].rawMaintenance.push(task);
+                }
+            }
+        });
+
+        // Distribute Repair
+        (cleanRepair || []).forEach(task => {
+            const name = task.assigned_person;
+            if (name) {
+                const nameLower = name.toLowerCase();
+                if (summary[nameLower]) {
+                    summary[nameLower].rawRepair.push(task);
+                }
+            }
+        });
+
+        // Distribute EA
+        (cleanEA || []).forEach(task => {
+            const name = task.doer_name;
+            if (name) {
+                const nameLower = name.toLowerCase();
+                if (summary[nameLower]) {
+                    summary[nameLower].rawEA.push(task);
+                }
+            }
+        });
+
+        // Base Individual totals
+        Object.values(summary).forEach(staff => {
+            staff.rawChecklist.forEach(task => {
+                staff.checklistTotal++;
+                const isCompleted = task.submission_date !== null || (task.status || "").toLowerCase() === "yes" || (task.status || "").toLowerCase().includes("done");
+                if (isCompleted) {
+                    staff.checklistCompleted++;
+                    if (isEmployeeOnTime(task, "checklist")) {
+                        staff.checklistDoneOnTime++;
+                    }
+                } else {
+                    staff.checklistPending++;
+                }
+            });
+
+            staff.rawDelegation.forEach(task => {
+                staff.delegationTotal++;
+                const isCompleted = task.submission_date !== null || (task.status || "").toLowerCase() === "yes" || (task.status || "").toLowerCase().includes("done") || task.admin_done === true;
+                if (isCompleted) {
+                    staff.delegationCompleted++;
+                    if (isEmployeeOnTime(task, "delegation")) {
+                        staff.delegationDoneOnTime++;
+                    }
+                } else {
+                    staff.delegationPending++;
+                }
+            });
+
+            staff.rawWork.forEach(task => {
+                staff.workTotal++;
+                const isCompleted = task.submission_date !== null || (task.status || "").toLowerCase() === "yes" || (task.status || "").toLowerCase().includes("done") || (task.status || "").toLowerCase().includes("approved");
+                if (isCompleted) {
+                    staff.workCompleted++;
+                    if (isEmployeeOnTime(task, "work")) {
+                        staff.workDoneOnTime++;
+                    }
+                } else {
+                    staff.workPending++;
+                }
+            });
+
+            staff.rawMaintenance.forEach(task => {
+                staff.maintenanceTotal++;
+                const isCompleted = task.submission_date !== null || (task.status || "").toLowerCase() === "yes" || (task.status || "").toLowerCase().includes("done");
+                if (isCompleted) {
+                    staff.maintenanceCompleted++;
+                    if (isEmployeeOnTime(task, "maintenance")) {
+                        staff.maintenanceDoneOnTime++;
+                    }
+                } else {
+                    staff.maintenancePending++;
+                }
+            });
+
+            staff.rawRepair.forEach(task => {
+                staff.repairTotal++;
+                const isCompleted = task.submission_date !== null || (task.status || "").toLowerCase() === "yes" || (task.status || "").toLowerCase().includes("done") || (task.status || "").toLowerCase() === "repaired" || (task.status || "").toLowerCase() === "resolved";
+                if (isCompleted) {
+                    staff.repairCompleted++;
+                    if (isEmployeeOnTime(task, "repair")) {
+                        staff.repairDoneOnTime++;
+                    }
+                } else {
+                    staff.repairPending++;
+                }
+            });
+
+            staff.rawEA.forEach(task => {
+                staff.eaTotal++;
+                const isCompleted = task.submission_date !== null || (task.status || "").toLowerCase() === "yes" || (task.status || "").toLowerCase().includes("done") || (task.status || "").toLowerCase().includes("approved");
+                if (isCompleted) {
+                    staff.eaCompleted++;
+                    if (isEmployeeOnTime(task, "ea")) {
+                        staff.eaDoneOnTime++;
+                    }
+                } else {
+                    staff.eaPending++;
+                }
+            });
+        });
+
+        // Manager Scoring Adjustments
+        Object.values(summary).forEach(staff => {
+            if (staff.role === "manager") {
+                const staffNameLower = staff.name.toLowerCase();
+                const employees = Object.values(summary).filter(e => e.reported_by === staffNameLower);
+
+                const empChecklistTotal = employees.reduce((sum, e) => sum + e.checklistTotal, 0);
+                const empChecklistCompleted = employees.reduce((sum, e) => sum + e.checklistCompleted, 0);
+                const empChecklistPending = employees.reduce((sum, e) => sum + e.checklistPending, 0);
+
+                const empDelegationTotal = employees.reduce((sum, e) => sum + e.delegationTotal, 0);
+                const empDelegationCompleted = employees.reduce((sum, e) => sum + e.delegationCompleted, 0);
+                const empDelegationPending = employees.reduce((sum, e) => sum + e.delegationPending, 0);
+
+                const empWorkTotal = employees.reduce((sum, e) => sum + e.workTotal, 0);
+                const empWorkCompleted = employees.reduce((sum, e) => sum + e.workCompleted, 0);
+                const empWorkPending = employees.reduce((sum, e) => sum + e.workPending, 0);
+
+                const empMaintenanceTotal = employees.reduce((sum, e) => sum + e.maintenanceTotal, 0);
+                const empMaintenanceCompleted = employees.reduce((sum, e) => sum + e.maintenanceCompleted, 0);
+                const empMaintenancePending = employees.reduce((sum, e) => sum + e.maintenancePending, 0);
+
+                const empRepairTotal = employees.reduce((sum, e) => sum + e.repairTotal, 0);
+                const empRepairCompleted = employees.reduce((sum, e) => sum + e.repairCompleted, 0);
+                const empRepairPending = employees.reduce((sum, e) => sum + e.repairPending, 0);
+
+                const empEATotal = employees.reduce((sum, e) => sum + e.eaTotal, 0);
+                const empEACompleted = employees.reduce((sum, e) => sum + e.eaCompleted, 0);
+                const empEAPending = employees.reduce((sum, e) => sum + e.eaPending, 0);
+
+                staff.checklistTotal += empChecklistTotal;
+                staff.checklistCompleted += empChecklistCompleted;
+                staff.checklistPending += empChecklistPending;
+
+                staff.delegationTotal += empDelegationTotal;
+                staff.delegationCompleted += empDelegationCompleted;
+                staff.delegationPending += empDelegationPending;
+
+                staff.workTotal += empWorkTotal;
+                staff.workCompleted += empWorkCompleted;
+                staff.workPending += empWorkPending;
+
+                staff.maintenanceTotal += empMaintenanceTotal;
+                staff.maintenanceCompleted += empMaintenanceCompleted;
+                staff.maintenancePending += empMaintenancePending;
+
+                staff.repairTotal += empRepairTotal;
+                staff.repairCompleted += empRepairCompleted;
+                staff.repairPending += empRepairPending;
+
+                staff.eaTotal += empEATotal;
+                staff.eaCompleted += empEACompleted;
+                staff.eaPending += empEAPending;
+
+                // Done on time is based on manager on time approvals
+                let mgrChecklistDoneOnTime = 0;
+                staff.rawChecklist.forEach(task => {
+                    if (isManagerOnTimeApproval(task, "checklist")) mgrChecklistDoneOnTime++;
+                });
+                employees.forEach(e => {
+                    e.rawChecklist.forEach(task => {
+                        if (isManagerOnTimeApproval(task, "checklist")) mgrChecklistDoneOnTime++;
+                    });
+                });
+                staff.checklistDoneOnTime = mgrChecklistDoneOnTime;
+
+                let mgrDelegationDoneOnTime = 0;
+                staff.rawDelegation.forEach(task => {
+                    if (isManagerOnTimeApproval(task, "delegation")) mgrDelegationDoneOnTime++;
+                });
+                employees.forEach(e => {
+                    e.rawDelegation.forEach(task => {
+                        if (isManagerOnTimeApproval(task, "delegation")) mgrDelegationDoneOnTime++;
+                    });
+                });
+                staff.delegationDoneOnTime = mgrDelegationDoneOnTime;
+
+                let mgrWorkDoneOnTime = 0;
+                staff.rawWork.forEach(task => {
+                    if (isManagerOnTimeApproval(task, "work")) mgrWorkDoneOnTime++;
+                });
+                employees.forEach(e => {
+                    e.rawWork.forEach(task => {
+                        if (isManagerOnTimeApproval(task, "work")) mgrWorkDoneOnTime++;
+                    });
+                });
+                staff.workDoneOnTime = mgrWorkDoneOnTime;
+
+                let mgrMaintenanceDoneOnTime = 0;
+                staff.rawMaintenance.forEach(task => {
+                    if (isManagerOnTimeApproval(task, "maintenance")) mgrMaintenanceDoneOnTime++;
+                });
+                employees.forEach(e => {
+                    e.rawMaintenance.forEach(task => {
+                        if (isManagerOnTimeApproval(task, "maintenance")) mgrMaintenanceDoneOnTime++;
+                    });
+                });
+                staff.maintenanceDoneOnTime = mgrMaintenanceDoneOnTime;
+
+                let mgrRepairDoneOnTime = 0;
+                staff.rawRepair.forEach(task => {
+                    if (isManagerOnTimeApproval(task, "repair")) mgrRepairDoneOnTime++;
+                });
+                employees.forEach(e => {
+                    e.rawRepair.forEach(task => {
+                        if (isManagerOnTimeApproval(task, "repair")) mgrRepairDoneOnTime++;
+                    });
+                });
+                staff.repairDoneOnTime = mgrRepairDoneOnTime;
+
+                let mgrEADoneOnTime = 0;
+                staff.rawEA.forEach(task => {
+                    if (isManagerOnTimeApproval(task, "ea")) mgrEADoneOnTime++;
+                });
+                employees.forEach(e => {
+                    e.rawEA.forEach(task => {
+                        if (isManagerOnTimeApproval(task, "ea")) mgrEADoneOnTime++;
+                    });
+                });
+                staff.eaDoneOnTime = mgrEADoneOnTime;
+            }
+        });
+
+        return Object.values(summary).map(staff => {
+            const totalTasks = staff.checklistTotal + staff.delegationTotal + staff.workTotal + staff.maintenanceTotal + staff.repairTotal + staff.eaTotal;
+            const completedTasks = staff.checklistCompleted + staff.delegationCompleted + staff.workCompleted + staff.maintenanceCompleted + staff.repairCompleted + staff.eaCompleted;
+            const pendingTasks = staff.checklistPending + staff.delegationPending + staff.workPending + staff.maintenancePending + staff.repairPending + staff.eaPending;
+            const doneOnTime = staff.checklistDoneOnTime + staff.delegationDoneOnTime + staff.workDoneOnTime + staff.maintenanceDoneOnTime + staff.repairDoneOnTime + staff.eaDoneOnTime;
+
+            const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+            const ontimeScore = totalTasks > 0 ? Math.round((doneOnTime / totalTasks) * 100) : 0;
 
             return {
                 ...staff,
-                checklistTotal,
-                checklistCompleted,
-                checklistPending,
-                checklistDoneOnTime,
-                delegationTotal,
-                delegationCompleted,
-                delegationPending,
-                delegationDoneOnTime,
-                workTotal,
-                workCompleted,
-                workPending,
-                workDoneOnTime,
                 totalTasks,
-                completedTasks: completed,
-                pendingTasks: pending,
+                completedTasks,
+                pendingTasks,
                 doneOnTime,
                 progress,
                 ontimeScore
-            }
-        })
-    }
+            };
+        });
+    };
+
+    const combineStaffData = (checklistData, delegationData, workData) => {
+        // Retained for legacy compatibility but not used for main scoring calculations
+        return [];
+    };
 
     // Optimized data loading with parallel requests using Date Range parameters
     const loadStaffData = useCallback(async (page = 1, append = false) => {
@@ -305,59 +525,111 @@ function StaffTasksPage() {
                 }
             }
 
-            // Load checklist, delegation, and work data in parallel using custom Date Range
-            if (page === 1) {
-                const [checklistData, delegationData, workData, staffCount, usersCount] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate),
-                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate),
-                    fetchStaffTasksDataApi("work", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate),
-                    getStaffTasksCountApi("checklist", dashboardStaffFilter, effectiveShopFilter, null, startDate, endDate),
-                    getTotalUsersCountApi(effectiveShopFilter)
-                ]);
+            // Helper to fetch all records paginating to bypass Supabase 1000 limit
+            const fetchAllRecords = async (fetchFn) => {
+                let allData = [];
+                let page = 0;
+                const limit = 1000;
+                let hasMore = true;
 
-                setTotalStaffCount(staffCount)
-                setTotalUsersCount(usersCount)
-
-                let combinedData = combineStaffData(checklistData, delegationData, workData)
-                if (userRoleLower === "manager" && managerShopUsers.length > 0) {
-                    combinedData = combinedData.filter(staff => managerShopUsers.includes((staff.name || "").toLowerCase()));
+                while (hasMore) {
+                    const { data, error } = await fetchFn(page * limit, (page + 1) * limit - 1);
+                    if (error) {
+                        throw error;
+                    }
+                    if (data && data.length > 0) {
+                        allData = [...allData, ...data];
+                        if (data.length < limit) {
+                            hasMore = false;
+                        } else {
+                            page++;
+                        }
+                    } else {
+                        hasMore = false;
+                    }
                 }
+                return allData;
+            };
 
-                if (!combinedData || combinedData.length === 0) {
-                    setHasMoreData(false)
-                    setStaffMembers([])
-                    setFilteredStaffMembers([])
-                    return
-                }
+            // Fetch raw tasks and users (all 6 modules) using pagination helper
+            const [
+                checklistData,
+                delegationData,
+                workData,
+                maintenanceData,
+                repairData,
+                eaData,
+                dbUsersData,
+                holidaysRes,
+                usersCount
+            ] = await Promise.all([
+                fetchAllRecords((from, to) =>
+                    supabase.from('checklist').select('*').gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`).range(from, to)
+                ),
+                fetchAllRecords((from, to) =>
+                    supabase.from('delegation').select('*').gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`).range(from, to)
+                ),
+                fetchAllRecords((from, to) =>
+                    supabase.from('work_task').select('*, task_assignments:assignment_id(manager_name)').gte('current_date', startDate).lte('current_date', endDate).range(from, to)
+                ),
+                fetchAllRecords((from, to) =>
+                    supabase.from('maintenance_tasks').select('*').gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`).range(from, to)
+                ),
+                fetchAllRecords((from, to) =>
+                    supabase.from('repair_tasks').select('*').gte('created_at', `${startDate}T00:00:00`).lte('created_at', `${endDate}T23:59:59`).range(from, to)
+                ),
+                fetchAllRecords((from, to) =>
+                    supabase.from('ea_tasks').select('*').gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`).range(from, to)
+                ),
+                fetchAllRecords((from, to) =>
+                    supabase.from('users').select('user_name, role, reported_by, email_id, shop_name, profile_image, status').eq('status', 'active').range(from, to)
+                ),
+                supabase.from('holidays').select('holiday_date'),
+                getTotalUsersCountApi(effectiveShopFilter)
+            ]);
 
-                setStaffMembers(combinedData)
-                setFilteredStaffMembers(combinedData)
-                setHasMoreData(combinedData.length === itemsPerPage)
-            } else {
-                // For subsequent pages, load all data types
-                const [checklistData, delegationData, workData] = await Promise.all([
-                    fetchStaffTasksDataApi("checklist", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate),
-                    fetchStaffTasksDataApi("delegation", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate),
-                    fetchStaffTasksDataApi("work", dashboardStaffFilter, effectiveShopFilter, page, itemsPerPage, null, startDate, endDate)
-                ])
+            if (holidaysRes.error) throw holidaysRes.error;
 
-                let combinedData = combineStaffData(checklistData, delegationData, workData)
-                if (userRoleLower === "manager" && managerShopUsers.length > 0) {
-                    combinedData = combinedData.filter(staff => managerShopUsers.includes((staff.name || "").toLowerCase()));
-                }
+            setTotalUsersCount(usersCount)
 
-                if (!combinedData || combinedData.length === 0) {
-                    setHasMoreData(false)
-                    return
-                }
+            const holidayDates = holidaysRes.data ? holidaysRes.data.map(h => h.holiday_date) : [];
+            const combinedData = processStaffReport(
+                checklistData,
+                delegationData,
+                workData,
+                maintenanceData,
+                repairData,
+                eaData,
+                dbUsersData,
+                holidayDates
+            );
 
-                setStaffMembers(prev => {
-                    const newStaff = [...prev, ...combinedData]
-                    setFilteredStaffMembers(newStaff)
-                    return newStaff
-                })
-                setHasMoreData(combinedData.length === itemsPerPage)
+            let filtered = combinedData;
+
+            // Apply manager shop filter if logged in as manager
+            if (userRoleLower === "manager" && managerShopUsers.length > 0) {
+                filtered = filtered.filter(staff => managerShopUsers.includes((staff.name || "").toLowerCase()));
             }
+
+            // Sort by completion score descending
+            filtered.sort((a, b) => b.progress - a.progress || b.completedTasks - a.completedTasks);
+
+            setTotalStaffCount(filtered.length)
+
+            if (filtered.length === 0) {
+                setHasMoreData(false)
+                setStaffMembers([])
+                setFilteredStaffMembers([])
+                return
+            }
+
+            // Paginated slice
+            const limit = page * itemsPerPage;
+            const paginated = filtered.slice(0, limit);
+
+            setStaffMembers(filtered)
+            setFilteredStaffMembers(paginated)
+            setHasMoreData(paginated.length < filtered.length)
 
         } catch (error) {
             console.error('Error loading staff data:', error)
@@ -556,7 +828,7 @@ function StaffTasksPage() {
         const endTimeStr = task.end_time; // e.g. "18:00:00"
         
         if (!plannedDateStr) return null;
-        if (!endTimeStr) {
+        if (!endTimeStr || endTimeStr === "00:00:00" || endTimeStr === "00:00") {
             return new Date(`${plannedDateStr}T23:59:59+05:30`);
         }
         
@@ -591,25 +863,75 @@ function StaffTasksPage() {
         return `${pad(h)}:${pad(m)}:${pad(s)}`;
     };
 
+    // Determine if employee completed on time
+    const isEmployeeOnTime = (task, moduleId) => {
+        const actual = task.submission_date;
+        if (!actual) return false;
+
+        if (moduleId === "work") {
+            if (!task.current_date) return false;
+            const actualDate = new Date(actual);
+            const plannedDate = new Date(task.current_date);
+            return (
+                actualDate.getFullYear() === plannedDate.getFullYear() &&
+                actualDate.getMonth() === plannedDate.getMonth() &&
+                actualDate.getDate() === plannedDate.getDate()
+            );
+        }
+
+        const planned = task.planned_date || task.task_start_date || task.current_date || task.created_at;
+        if (!planned) return false;
+        const plannedDate = new Date(planned);
+        const actualDate = new Date(actual);
+        const plannedDay = new Date(plannedDate.getFullYear(), plannedDate.getMonth(), plannedDate.getDate());
+        const actualDay = new Date(actualDate.getFullYear(), actualDate.getMonth(), actualDate.getDate());
+        return actualDay <= plannedDay;
+    };
+
+    // Determine if manager approved on time
+    const isManagerOnTimeApproval = (task, moduleId) => {
+        const actual = task.submission_date;
+        if (!actual) return false;
+
+        const statusLower = (task.status || "").toLowerCase();
+        const isApproved = (task.manager_approved_by || task.admin_approved_by || 
+                            statusLower.includes("approved") || statusLower.includes("done") || 
+                            statusLower.includes("completed") || task.admin_done === true);
+        if (!isApproved) return false;
+
+        const approvalDateStr = task.manager_approval_date || task.admin_approval_date || task.updated_at || task.submission_date;
+        if (!approvalDateStr) return false;
+
+        const appDate = new Date(approvalDateStr);
+
+        if (moduleId === "work") {
+            if (!task.current_date) return false;
+            const plannedDate = new Date(task.current_date);
+            return (
+                appDate.getFullYear() === plannedDate.getFullYear() &&
+                appDate.getMonth() === plannedDate.getMonth() &&
+                appDate.getDate() === plannedDate.getDate()
+            );
+        }
+
+        const subDate = new Date(actual);
+        return (
+            appDate.getFullYear() === subDate.getFullYear() &&
+            appDate.getMonth() === subDate.getMonth() &&
+            appDate.getDate() === subDate.getDate()
+        );
+    };
+
     // Determine per-task status: 'ontime', 'delay', 'pending'
-    const getTaskStatus = (task, moduleId) => {
+    const getTaskStatus = (task, moduleId, staffRole = "user") => {
         const actual = task.submission_date;
         if (!actual) return "pending";
 
-        if (moduleId === "work") {
-            const deadline = getWorkTaskDeadline(task);
-            if (!deadline) return "pending";
-            const actualDate = new Date(actual);
-            return actualDate <= deadline ? "ontime" : "delay";
+        if (staffRole === "manager") {
+            return isManagerOnTimeApproval(task, moduleId) ? "ontime" : "delay";
+        } else {
+            return isEmployeeOnTime(task, moduleId) ? "ontime" : "delay";
         }
-
-        const planned = task.planned_date || task.task_start_date || task.current_date;
-        const plannedDate = new Date(planned);
-        const actualDate = new Date(actual);
-        // Compare date only (ignore time) for on-time check
-        const plannedDay = new Date(plannedDate.getFullYear(), plannedDate.getMonth(), plannedDate.getDate());
-        const actualDay = new Date(actualDate.getFullYear(), actualDate.getMonth(), actualDate.getDate());
-        return actualDay <= plannedDay ? "ontime" : "delay";
     };
 
     const MODULE_TABLE_MAP = {
@@ -665,11 +987,29 @@ function StaffTasksPage() {
 
             if (!table || !staffName) return;
 
+            // Fetch users list to get roles and reported_by mapping
+            const { data: dbUsers } = await supabase
+                .from('users')
+                .select('user_name, role, reported_by')
+                .eq('status', 'active');
+            
+            const staffNameLower = staffName.toLowerCase();
+            const staffRole = dbUsers ? (dbUsers.find(u => u.user_name.toLowerCase() === staffNameLower)?.role || "user").toLowerCase() : "user";
+            
+            let targetNames = [staffName];
+            if (staffRole === "manager" && dbUsers) {
+                dbUsers.forEach(u => {
+                    if (u.reported_by && u.reported_by.toLowerCase() === staffNameLower) {
+                        targetNames.push(u.user_name);
+                    }
+                });
+            }
+
             const selectQuery = row.id === "work" ? "*, task_assignments:assignment_id(manager_name)" : "*";
             const { data, error } = await supabase
                 .from(table)
                 .select(selectQuery)
-                .eq(nameField, staffName)
+                .in(nameField, targetNames)
                 .gte(dateCol, MODULE_DATE_IS_DATEONLY.has(row.id) ? startDate : `${startDate}T00:00:00`)
                 .lte(dateCol, MODULE_DATE_IS_DATEONLY.has(row.id) ? endDate : `${endDate}T23:59:59`)
                 .order(dateCol, { ascending: true });
@@ -699,26 +1039,79 @@ function StaffTasksPage() {
                 { id: "ea", label: "EA", fmsName: "All EA", dept: "EA" }
             ];
 
-            const results = await Promise.all(
-                modules.map(mod => 
-                    fetchStaffTasksDataApi(mod.id, staff.name, null, 1, 100, null, startDate, endDate)
-                )
-            );
+            // Fetch users list to get roles and reported_by mapping
+            const { data: dbUsers } = await supabase
+                .from('users')
+                .select('user_name, role, reported_by')
+                .eq('status', 'active');
+            
+            const staffNameLower = staff.name.toLowerCase();
+            const staffRole = dbUsers ? (dbUsers.find(u => u.user_name.toLowerCase() === staffNameLower)?.role || "user").toLowerCase() : "user";
+            
+            let targetNames = [staff.name];
+            if (staffRole === "manager" && dbUsers) {
+                dbUsers.forEach(u => {
+                    if (u.reported_by && u.reported_by.toLowerCase() === staffNameLower) {
+                        targetNames.push(u.user_name);
+                    }
+                });
+            }
+
+            const [checklistRes, delegationRes, workRes, maintenanceRes, repairRes, eaRes] = await Promise.all([
+                supabase.from('checklist').select('*').in('name', targetNames).gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`),
+                supabase.from('delegation').select('*').in('name', targetNames).gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`),
+                supabase.from('work_task').select('*, task_assignments:assignment_id(manager_name)').in('name', targetNames).gte('current_date', startDate).lte('current_date', endDate),
+                supabase.from('maintenance_tasks').select('*').in('name', targetNames).gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`),
+                supabase.from('repair_tasks').select('*').in('assigned_person', targetNames).gte('created_at', `${startDate}T00:00:00`).lte('created_at', `${endDate}T23:59:59`),
+                supabase.from('ea_tasks').select('*').in('doer_name', targetNames).gte('planned_date', `${startDate}T00:00:00`).lte('planned_date', `${endDate}T23:59:59`)
+            ]);
+
+            const rawDataMap = {
+                checklist: checklistRes.data || [],
+                delegation: delegationRes.data || [],
+                work: workRes.data || [],
+                maintenance: maintenanceRes.data || [],
+                repair: repairRes.data || [],
+                ea: eaRes.data || []
+            };
 
             const yearSuffix = startDate ? ` ${new Date(startDate).getFullYear()}` : "";
             const rows = [];
 
-            modules.forEach((mod, index) => {
-                const data = results[index] || [];
-                const staffSum = data.find(item => item.name?.toLowerCase() === staff.name?.toLowerCase());
+            modules.forEach((mod) => {
+                const tasks = rawDataMap[mod.id];
+                if (tasks && tasks.length > 0) {
+                    const target = tasks.length;
+                    let achievement = 0;
+                    let doneOnTime = 0;
 
-                if (staffSum && staffSum.total_tasks > 0) {
-                    const target = staffSum.total_tasks;
-                    const achievement = staffSum.total_completed_tasks;
-                    const doneOnTime = staffSum.total_done_on_time;
-                    
-                    const workNotDone = target > 0 ? ((achievement - target) / target) * 100 : 0;
-                    const workNotDoneOnTime = target > 0 ? ((doneOnTime - target) / target) * 100 : 0;
+                    tasks.forEach(task => {
+                        const statusLower = (task.status || "").toLowerCase();
+                        const isCompleted = task.submission_date !== null ||
+                                            statusLower === "yes" ||
+                                            statusLower.includes("done") ||
+                                            statusLower.includes("completed") ||
+                                            statusLower.includes("approved") ||
+                                            (mod.id === "delegation" && task.admin_done === true);
+
+                        if (isCompleted) {
+                            achievement++;
+                        }
+
+                        // Evaluate on time count
+                        if (staffRole === "manager") {
+                            if (isManagerOnTimeApproval(task, mod.id)) {
+                                doneOnTime++;
+                            }
+                        } else {
+                            if (isEmployeeOnTime(task, mod.id)) {
+                                doneOnTime++;
+                            }
+                        }
+                    });
+
+                    const workNotDone = target > 0 ? ((target - achievement) / target) * 100 : 0;
+                    const workNotDoneOnTime = target > 0 ? ((target - doneOnTime) / target) * 100 : 0;
                     const pending = target - achievement;
 
                     rows.push({
@@ -1329,9 +1722,10 @@ function StaffTasksPage() {
                                     No tasks found for {selectedStaff?.name} in this period.
                                 </div>
                             ) : (() => {
+                                const staffRole = userRolesMap[(selectedStaff?.name || "").toLowerCase()] || "user";
                                 const filtered = rawTasks.filter(task => {
                                     if (subModalFilter === "all") return true;
-                                    const status = getTaskStatus(task, selectedModule.id);
+                                    const status = getTaskStatus(task, selectedModule.id, staffRole);
                                     return status === subModalFilter;
                                 });
                                 const labelField = MODULE_TASK_LABEL_FIELD[selectedModule.id] || "task_description";
@@ -1360,7 +1754,7 @@ function StaffTasksPage() {
                                                 const delay = isWorkModule
                                                     ? calcWorkTaskDelay(task)
                                                     : calcDelay(planned, actual);
-                                                const status = getTaskStatus(task, selectedModule.id);
+                                                const status = getTaskStatus(task, selectedModule.id, staffRole);
                                                 const taskLabel = task[labelField] || task.task_description || task.issue_description || "(no description)";
                                                 return (
                                                     <tr

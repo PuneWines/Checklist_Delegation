@@ -497,6 +497,13 @@ export const fetchStaffTasksDataApi = async (
     //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
     const dateColumn = getDateColumn(dashboardType);
 
+    // Fetch active users first
+    const { data: activeUsers } = await supabase
+      .from('users')
+      .select('user_name')
+      .eq('status', 'active');
+    const activeUserNamesSet = new Set((activeUsers || []).map(u => (u.user_name || "").toLowerCase().trim()).filter(Boolean));
+
     // console.log('Date range for filtering:', {
     //   startDate,
     //   endDate,
@@ -625,6 +632,11 @@ export const fetchStaffTasksDataApi = async (
     tasksData.forEach(task => {
       const shopVal = task.shop || task.shop_name || (dashboardType === 'ea' ? 'EA' : 'No Shop');
       const nameVal = task.name || task.assigned_person || task.doer_name || 'Unnamed Staff';
+
+      if (!activeUserNamesSet.has(nameVal.toLowerCase())) {
+        return;
+      }
+
       const key = `${shopVal}-${nameVal}`;
 
       if (!summary[key]) {
@@ -706,6 +718,9 @@ export const fetchStaffTasksDataApi = async (
         if (!task.submission_date) {
           // Employee hasn't completed the task -> down-score responsible managers
           responsibleManagers.forEach(mgrName => {
+            if (!activeUserNamesSet.has(mgrName.toLowerCase())) {
+              return;
+            }
             const mgrKey = `${shopVal}-${mgrName}`;
             if (!summary[mgrKey]) {
               summary[mgrKey] = {
@@ -723,35 +738,40 @@ export const fetchStaffTasksDataApi = async (
           if (task.manager_approved_by) {
             // Manager approved it
             const mgrName = task.manager_approved_by;
-            const mgrKey = `${shopVal}-${mgrName}`;
-            if (!summary[mgrKey]) {
-              summary[mgrKey] = {
-                shop: shopVal,
-                name: mgrName,
-                total_tasks: 0,
-                total_completed_tasks: 0,
-                total_done_on_time: 0
-              };
-            }
-            summary[mgrKey].total_tasks++;
-            summary[mgrKey].total_completed_tasks++;
+            if (activeUserNamesSet.has(mgrName.toLowerCase())) {
+              const mgrKey = `${shopVal}-${mgrName}`;
+              if (!summary[mgrKey]) {
+                summary[mgrKey] = {
+                  shop: shopVal,
+                  name: mgrName,
+                  total_tasks: 0,
+                  total_completed_tasks: 0,
+                  total_done_on_time: 0
+                };
+              }
+              summary[mgrKey].total_tasks++;
+              summary[mgrKey].total_completed_tasks++;
 
-            // Manager approved on time only if approved on or before the intended current_date of the work task
-            const approvalDate = new Date(task.manager_approval_date || task.updated_at);
-            const approvalDateOnly = new Date(approvalDate.getFullYear(), approvalDate.getMonth(), approvalDate.getDate());
-            
-            let currentDateOnly = null;
-            if (task.current_date) {
-              const [cYear, cMonth, cDay] = task.current_date.split('-').map(Number);
-              currentDateOnly = new Date(cYear, cMonth - 1, cDay);
-            }
+              // Manager approved on time only if approved on or before the intended current_date of the work task
+              const approvalDate = new Date(task.manager_approval_date || task.updated_at);
+              const approvalDateOnly = new Date(approvalDate.getFullYear(), approvalDate.getMonth(), approvalDate.getDate());
+              
+              let currentDateOnly = null;
+              if (task.current_date) {
+                const [cYear, cMonth, cDay] = task.current_date.split('-').map(Number);
+                currentDateOnly = new Date(cYear, cMonth - 1, cDay);
+              }
 
-            if (currentDateOnly && approvalDateOnly.getTime() <= currentDateOnly.getTime()) {
-              summary[mgrKey].total_done_on_time++;
+              if (currentDateOnly && approvalDateOnly.getTime() <= currentDateOnly.getTime()) {
+                summary[mgrKey].total_done_on_time++;
+              }
             }
           } else {
             // Completed by employee, but pending manager approval -> down-score responsible managers
             responsibleManagers.forEach(mgrName => {
+              if (!activeUserNamesSet.has(mgrName.toLowerCase())) {
+                return;
+              }
               const mgrKey = `${shopVal}-${mgrName}`;
               if (!summary[mgrKey]) {
                 summary[mgrKey] = {
@@ -860,6 +880,13 @@ export const getStaffTasksCountApi = async (
     // OLD: const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance' || dashboardType === 'ea') ? 'planned_date' : 
     //                        (dashboardType === 'work') ? 'current_date' : 'created_at';
     const dateColumn = getDateColumn(dashboardType);
+
+    // Fetch active users first
+    const { data: activeUsers } = await supabase
+      .from('users')
+      .select('user_name')
+      .eq('status', 'active');
+    const activeUserNamesSet = new Set((activeUsers || []).map(u => (u.user_name || "").toLowerCase().trim()).filter(Boolean));
 
     const nameField = dashboardType === 'repair' ? 'assigned_person' :
       dashboardType === 'ea' ? 'doer_name' : 'name';
@@ -975,7 +1002,10 @@ export const getStaffTasksCountApi = async (
     data.forEach(item => {
       const shopVal = item.shop || item.shop_name || (dashboardType === 'ea' ? 'EA' : 'No Shop');
       const nameVal = item.name || item.assigned_person || item.doer_name || 'Unnamed Staff';
-      uniqueStaff.add(`${shopVal}-${nameVal}`);
+      
+      if (activeUserNamesSet.has(nameVal.toLowerCase())) {
+        uniqueStaff.add(`${shopVal}-${nameVal}`);
+      }
 
       if (dashboardType === 'work') {
         const shopKey = (item.shop_name || "").trim().toLowerCase();
@@ -990,10 +1020,12 @@ export const getStaffTasksCountApi = async (
         }
 
         responsibleManagers.forEach(mgrName => {
-          uniqueStaff.add(`${shopVal}-${mgrName}`);
+          if (activeUserNamesSet.has(mgrName.toLowerCase())) {
+            uniqueStaff.add(`${shopVal}-${mgrName}`);
+          }
         });
 
-        if (item.manager_approved_by) {
+        if (item.manager_approved_by && activeUserNamesSet.has(item.manager_approved_by.toLowerCase())) {
           uniqueStaff.add(`${shopVal}-${item.manager_approved_by}`);
         }
       }
@@ -1034,6 +1066,7 @@ export const getTotalUsersCountApi = async (shopFilter = null) => {
     let query = supabase
       .from('users')
       .select('user_name, shop_name', { count: 'exact', head: true })
+      .eq('status', 'active')
       .not('user_name', 'is', null)
       .not('user_name', 'eq', '');
 

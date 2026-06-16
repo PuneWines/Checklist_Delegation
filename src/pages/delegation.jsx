@@ -291,6 +291,9 @@ function DelegationDataPage() {
         const plannedDate = new Date(task.planned_date);
         plannedDate.setHours(0, 0, 0, 0);
 
+        const startDateVal = task.task_start_date ? new Date(task.task_start_date) : null;
+        if (startDateVal) startDateVal.setHours(0, 0, 0, 0);
+
         switch (dateFilter) {
           case "overdue":
             matchesDateFilter = plannedDate < today;
@@ -300,8 +303,11 @@ function DelegationDataPage() {
               // Extended tasks show in Today until the date arrives (stays in Today on that date too)
               matchesDateFilter = plannedDate >= today;
             } else {
-              // Non-extended tasks show in Today only on the exact date
-              matchesDateFilter = plannedDate.getTime() === today.getTime();
+              if (startDateVal) {
+                matchesDateFilter = today >= startDateVal && today <= plannedDate;
+              } else {
+                matchesDateFilter = plannedDate.getTime() === today.getTime();
+              }
             }
             break;
           case "upcoming":
@@ -309,7 +315,11 @@ function DelegationDataPage() {
               // Extended tasks are already counted in Today, so exclude from Upcoming
               matchesDateFilter = false;
             } else {
-              matchesDateFilter = plannedDate >= tomorrow;
+              if (startDateVal) {
+                matchesDateFilter = startDateVal > today;
+              } else {
+                matchesDateFilter = plannedDate >= tomorrow;
+              }
             }
             break;
           default:
@@ -328,12 +338,17 @@ function DelegationDataPage() {
         const pDate = new Date(taskDateStr);
         pDate.setHours(0, 0, 0, 0);
 
+        const sDate = task.task_start_date ? new Date(task.task_start_date) : null;
+        if (sDate) sDate.setHours(0, 0, 0, 0);
+
         if (pDate < today) {
           timeStatus = "Overdue";
         } else if (pDate.getTime() === today.getTime() || (task.status === "extend" && pDate >= today)) {
           // Keep extended tasks in "Today" if they are due today or in the future?
           // Wait, the user said "extended but need to show that aal before upcoming task in the group of todays".
           // This implies extended tasks should be grouped with Today.
+          timeStatus = "Today";
+        } else if (sDate && today >= sDate && today <= pDate) {
           timeStatus = "Today";
         } else {
           timeStatus = "Upcoming";
@@ -1408,9 +1423,18 @@ function DelegationDataPage() {
                                   </div>
                                 </td>
                                 <td className="px-2 sm:px-6 py-2 sm:py-4 bg-green-50">
-                                  <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                                    {formatDateTimeForDisplay(task.planned_date)}
-                                  </div>
+                                  {task.task_start_date && formatDateTimeForDisplay(task.task_start_date) !== formatDateTimeForDisplay(task.planned_date) ? (
+                                    <div className="flex flex-col gap-0.5">
+                                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Start:</span>
+                                      <span className="text-xs font-semibold text-gray-700">{formatDateTimeForDisplay(task.task_start_date).split(' ')[0]}</span>
+                                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Due:</span>
+                                      <span className="text-xs font-bold text-purple-700">{formatDateTimeForDisplay(task.planned_date).split(' ')[0]}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words font-medium">
+                                      {formatDateTimeForDisplay(task.planned_date)}
+                                    </div>
+                                  )}
                                 </td>
                                 <td className="px-2 sm:px-6 py-2 sm:py-4 bg-blue-50">
                                   <select
@@ -1644,11 +1668,26 @@ function DelegationDataPage() {
                               </div>
 
                               <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50">
-                                <div className="space-y-1">
-                                  <p className="text-[10px] text-green-500 uppercase font-semibold">Planned Date</p>
-                                  <p className="text-xs font-black text-gray-900">{formatDateTimeForDisplay(task.planned_date)}</p>
-                                </div>
-                                <div className="space-y-1 text-right">
+                                {task.task_start_date && formatDateTimeForDisplay(task.task_start_date) !== formatDateTimeForDisplay(task.planned_date) ? (
+                                  <div className="space-y-1 col-span-2">
+                                    <div className="flex justify-between items-center bg-purple-50/50 p-2 rounded-lg border border-purple-100/50">
+                                      <div>
+                                        <p className="text-[9px] text-gray-400 uppercase font-semibold">Start Date</p>
+                                        <p className="text-xs font-bold text-gray-700">{formatDateTimeForDisplay(task.task_start_date).split(' ')[0]}</p>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-[9px] text-purple-500 uppercase font-semibold">Planned Date</p>
+                                        <p className="text-xs font-black text-purple-700">{formatDateTimeForDisplay(task.planned_date).split(' ')[0]}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] text-green-500 uppercase font-semibold">Planned Date</p>
+                                    <p className="text-xs font-black text-gray-900">{formatDateTimeForDisplay(task.planned_date)}</p>
+                                  </div>
+                                )}
+                                <div className={`space-y-1 ${task.task_start_date && formatDateTimeForDisplay(task.task_start_date) !== formatDateTimeForDisplay(task.planned_date) ? 'col-span-2 flex justify-between items-center' : 'text-right'}`}>
                                   <p className="text-[10px] text-purple-600 uppercase font-semibold">Last Activity</p>
                                   <p className="text-[10px] font-bold text-gray-900">{task.submission_date ? formatDateTimeForDisplay(task.submission_date) : "New Task"}</p>
                                 </div>

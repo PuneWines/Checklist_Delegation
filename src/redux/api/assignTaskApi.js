@@ -132,7 +132,7 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
       name: task.doer,
       task_description: task.task_description || task.description || null, // Support both naming conventions
       // task_start_date and planned_date are the same — both use the specific occurrence date (dueDate)
-      task_start_date: task.dueDate,
+      task_start_date: task.task_start_date || task.dueDate,
       planned_date: task.dueDate,
       frequency: task.frequency,
       duration: task.duration || null,
@@ -171,7 +171,7 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
       name: task.doer,
       task_description: task.task_description || task.description || null, // Support both naming conventions
       // task_start_date and planned_date are the same — both use the specific occurrence date (dueDate)
-      task_start_date: task.dueDate,
+      task_start_date: task.task_start_date || task.dueDate,
       planned_date: task.dueDate,
       frequency: task.frequency,
       duration: task.duration || null,

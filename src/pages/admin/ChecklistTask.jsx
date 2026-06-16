@@ -39,6 +39,8 @@ const defaultTask = () => ({
     enableReminders: true,
     requireAttachment: false,
     date: null,
+    startDate: null,
+    showStartCalendar: false,
     time: "09:00",
     task_level: "",
     recordedAudio: null,
@@ -67,7 +69,12 @@ const getYouTubeId = (url) => {
 // Single Task Card
 function TaskCard({ task, index, total, shops, doerName, givenBy, levels, dispatch, onUpdate, onRemove }) {
     const handleChange = (e) => {
-        onUpdate(task.id, { [e.target.name]: e.target.value });
+        const updates = { [e.target.name]: e.target.value };
+        if (e.target.name === "frequency" && e.target.value !== "One Time (No Recurrence)") {
+            updates.startDate = null;
+            updates.showStartCalendar = false;
+        }
+        onUpdate(task.id, updates);
     };
 
     // Filter doers based on task date and leave status
@@ -364,65 +371,120 @@ function TaskCard({ task, index, total, shops, doerName, givenBy, levels, dispat
                 </div>
 
                 {/* Date, Time, Frequency, Duration */}
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="relative">
-                        <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Planned Date <span className="text-red-500">*</span></label>
-                        <button
-                            type="button"
-                            onClick={() => !task.dateLocked && onUpdate(task.id, { showCalendar: !task.showCalendar })}
-                            className={`w-full px-3 py-2.5 text-left border border-gray-200 rounded-lg bg-gray-50 hover:bg-white focus:ring-2 focus:ring-purple-500 transition-all flex items-center justify-between text-xs ${task.dateLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
-                            disabled={task.dateLocked}
-                        >
-                            <span className={task.date ? "text-gray-800" : "text-gray-400"}>
-                                {task.date ? formatDate(task.date) : "Select"}
-                            </span>
-                            <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                        </button>
-                        {task.showCalendar && (
-                            <div className="absolute top-full left-0 mt-1 z-50">
-                                <CalendarComponent
-                                    date={task.date}
-                                    onChange={(d) => onUpdate(task.id, { date: d, showCalendar: false })}
-                                    onClose={() => onUpdate(task.id, { showCalendar: false })}
-                                />
+                <div className="space-y-3">
+                    {task.frequency === "One Time (No Recurrence)" && (
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="relative">
+                                <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Start Date <span className="text-red-500">*</span></label>
+                                <button
+                                    type="button"
+                                    onClick={() => onUpdate(task.id, { showStartCalendar: !task.showStartCalendar, showCalendar: false })}
+                                    className="w-full px-3 py-2.5 text-left border border-gray-200 rounded-lg bg-gray-50 hover:bg-white focus:ring-2 focus:ring-purple-500 transition-all flex items-center justify-between text-xs"
+                                >
+                                    <span className={task.startDate ? "text-gray-800" : "text-gray-400"}>
+                                        {task.startDate ? formatDate(task.startDate) : "Select"}
+                                    </span>
+                                    <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                </button>
+                                {task.showStartCalendar && (
+                                    <div className="absolute top-full left-0 mt-1 z-50">
+                                        <CalendarComponent
+                                            date={task.startDate}
+                                            onChange={(d) => onUpdate(task.id, { startDate: d, showStartCalendar: false })}
+                                            onClose={() => onUpdate(task.id, { showStartCalendar: false })}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                            <div className="relative">
+                                <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Planned Date <span className="text-red-500">*</span></label>
+                                <button
+                                    type="button"
+                                    onClick={() => !task.dateLocked && onUpdate(task.id, { showCalendar: !task.showCalendar, showStartCalendar: false })}
+                                    className={`w-full px-3 py-2.5 text-left border border-gray-200 rounded-lg bg-gray-50 hover:bg-white focus:ring-2 focus:ring-purple-500 transition-all flex items-center justify-between text-xs ${task.dateLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                    disabled={task.dateLocked}
+                                >
+                                    <span className={task.date ? "text-gray-800" : "text-gray-400"}>
+                                        {task.date ? formatDate(task.date) : "Select"}
+                                    </span>
+                                    <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                </button>
+                                {task.showCalendar && (
+                                    <div className="absolute top-full left-0 mt-1 z-50">
+                                        <CalendarComponent
+                                            date={task.date}
+                                            onChange={(d) => onUpdate(task.id, { date: d, showCalendar: false })}
+                                            onClose={() => onUpdate(task.id, { showCalendar: false })}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                        {task.frequency !== "One Time (No Recurrence)" && (
+                            <div className="relative">
+                                <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Planned Date <span className="text-red-500">*</span></label>
+                                <button
+                                    type="button"
+                                    onClick={() => !task.dateLocked && onUpdate(task.id, { showCalendar: !task.showCalendar, showStartCalendar: false })}
+                                    className={`w-full px-3 py-2.5 text-left border border-gray-200 rounded-lg bg-gray-50 hover:bg-white focus:ring-2 focus:ring-purple-500 transition-all flex items-center justify-between text-xs ${task.dateLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                    disabled={task.dateLocked}
+                                >
+                                    <span className={task.date ? "text-gray-800" : "text-gray-400"}>
+                                        {task.date ? formatDate(task.date) : "Select"}
+                                    </span>
+                                    <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                </button>
+                                {task.showCalendar && (
+                                    <div className="absolute top-full left-0 mt-1 z-50">
+                                        <CalendarComponent
+                                            date={task.date}
+                                            onChange={(d) => onUpdate(task.id, { date: d, showCalendar: false })}
+                                            onClose={() => onUpdate(task.id, { showCalendar: false })}
+                                        />
+                                    </div>
+                                )}
                             </div>
                         )}
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Time</label>
-                        <input
-                            type="time"
-                            name="time"
-                            value={task.time}
-                            onChange={handleChange}
-                            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm"
-                        />
-                    </div>                    <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Frequency</label>
-                        <select
-                            name="frequency"
-                            value={task.frequency}
-                            onChange={handleChange}
-                            disabled={task.frequencyLocked}
-                            className={`w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-xs ${task.frequencyLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
-                        >
-                            <option value="" disabled>Select Frequency</option>
-                            {FREQUENCY_OPTIONS.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                        </select>
-                    </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Time</label>
+                            <input
+                                type="time"
+                                name="time"
+                                value={task.time}
+                                onChange={handleChange}
+                                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-sm"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Frequency</label>
+                            <select
+                                name="frequency"
+                                value={task.frequency}
+                                onChange={handleChange}
+                                disabled={task.frequencyLocked}
+                                className={`w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-xs ${task.frequencyLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
+                                <option value="" disabled>Select Frequency</option>
+                                {FREQUENCY_OPTIONS.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                            </select>
+                        </div>
 
-                    <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> Duration
-                        </label>
-                        <input
-                            type="text"
-                            name="duration"
-                            value={task.duration}
-                            onChange={handleChange}
-                            placeholder="e.g. 30 mins"
-                            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
-                        />
+                        <div>
+                            <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> Duration
+                            </label>
+                            <input
+                                type="text"
+                                name="duration"
+                                value={task.duration}
+                                onChange={handleChange}
+                                placeholder="e.g. 30 mins"
+                                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -654,6 +716,18 @@ export default function ChecklistTask() {
                 if (!t.doer || !t.date) {
                     return { success: false, message: `Task ${i + 1}: Please fill in Doer and Date.` };
                 }
+                if (t.frequency === "One Time (No Recurrence)") {
+                    if (!t.startDate) {
+                        return { success: false, message: `Task ${i + 1}: Please fill in the Start Date.` };
+                    }
+                    const startD = new Date(t.startDate);
+                    const endD = new Date(t.date);
+                    startD.setHours(0, 0, 0, 0);
+                    endD.setHours(0, 0, 0, 0);
+                    if (startD > endD) {
+                        return { success: false, message: `Task ${i + 1}: Start Date cannot be after the Planned Date.` };
+                    }
+                }
                 // Frequency is required for manual tasks (no task level)
                 if (!t.task_level && !t.frequency) {
                     return { success: false, message: `Task ${i + 1}: Please select a Frequency.` };
@@ -792,6 +866,20 @@ export default function ChecklistTask() {
                 alert(`Task ${i + 1}: Please fill in Doer and Date.`);
                 return;
             }
+            if (t.frequency === "One Time (No Recurrence)") {
+                if (!t.startDate) {
+                    alert(`Task ${i + 1}: Please fill in the Start Date.`);
+                    return;
+                }
+                const startD = new Date(t.startDate);
+                const endD = new Date(t.date);
+                startD.setHours(0, 0, 0, 0);
+                endD.setHours(0, 0, 0, 0);
+                if (startD > endD) {
+                    alert(`Task ${i + 1}: Start Date cannot be after the Planned Date.`);
+                    return;
+                }
+            }
             // If no task level selected, at least one instructional detail is required
             if (!t.task_level && !t.description && !t.recordedAudio && (!t.references || t.references.length === 0)) {
                 alert(`Task ${i + 1}: Please enter a Task Description (or select a Task Level to use pre-stored tasks).`);
@@ -923,6 +1011,10 @@ export default function ChecklistTask() {
                 const freqKey = freqMap[freq] || freq;
 
                 for (const dueDate of dates) {
+                    const taskStartDateStr = (originalTask.frequency === "One Time (No Recurrence)" && originalTask.startDate)
+                        ? formatDateISO(originalTask.startDate) + `T${originalTask.time || "09:00"}:00`
+                        : dueDate;
+
                     allTasksToSubmit.push({
                         shop_name: originalTask.shop,
                         givenBy: originalTask.givenBy,
@@ -939,6 +1031,7 @@ export default function ChecklistTask() {
                         task_description: previewTask.description || "",
                         frequency: freqKey,
                         dueDate,
+                        task_start_date: taskStartDateStr,
                         series_id: seriesId
                     });
                 }
