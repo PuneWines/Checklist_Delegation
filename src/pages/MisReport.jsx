@@ -39,6 +39,7 @@ function StaffTasksPage() {
     const [availableStaff, setAvailableStaff] = useState([])
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedRoleFilter, setSelectedRoleFilter] = useState("all")
+    const [selectedShopFilter, setSelectedShopFilter] = useState("all")
     const [userRolesMap, setUserRolesMap] = useState({})
     const [userReportedByMap, setUserReportedByMap] = useState({})
     const itemsPerPage = 50
@@ -97,7 +98,7 @@ function StaffTasksPage() {
             }
         }
     }, [selectedRoleFilter, dashboardStaffFilter, userRolesMap]);
-    // Optimized filter function with debouncing and role filtering
+    // Optimized filter function with debouncing, role, and shop filtering
     useEffect(() => {
         let filtered = staffMembers;
         
@@ -116,8 +117,12 @@ function StaffTasksPage() {
             });
         }
 
+        if (selectedShopFilter !== "all") {
+            filtered = filtered.filter(staff => staff.shop_name === selectedShopFilter);
+        }
+
         setFilteredStaffMembers(filtered)
-    }, [staffMembers, searchQuery, selectedRoleFilter, userRolesMap])
+    }, [staffMembers, searchQuery, selectedRoleFilter, selectedShopFilter, userRolesMap])
 
     const processStaffReport = (checklistTasks, delegationTasks, workTasks, maintenanceTasks, repairTasks, eaTasks, dbUsers, holidayDates) => {
         const holidayDatesSet = new Set(holidayDates || []);
@@ -1228,7 +1233,7 @@ function StaffTasksPage() {
                         </div>
 
                         {/* Filters Row */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-end">
                             {/* Search Bar */}
                             <div className="space-y-1">
                                 <span className="text-xs text-gray-500 font-semibold">Search Staff</span>
@@ -1301,6 +1306,23 @@ function StaffTasksPage() {
                                     <option value="admin">Admin</option>
                                 </select>
                             </div>
+
+                            {/* Shop Dropdown */}
+                            <div className="space-y-1">
+                                <span className="text-xs text-gray-500 font-semibold">Shop Filter</span>
+                                <select
+                                    value={selectedShopFilter}
+                                    onChange={(e) => setSelectedShopFilter(e.target.value)}
+                                    className="w-full rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm"
+                                >
+                                    <option value="all">All Shops</option>
+                                    {[...new Set(staffMembers.map(s => s.shop_name).filter(Boolean))].sort().map((shop) => (
+                                        <option key={shop} value={shop}>
+                                            {shop}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1329,6 +1351,11 @@ function StaffTasksPage() {
                                 {selectedRoleFilter !== "all" && (
                                     <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs uppercase">
                                         Role: {selectedRoleFilter}
+                                    </span>
+                                )}
+                                {selectedShopFilter !== "all" && (
+                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs uppercase">
+                                        Shop: {selectedShopFilter}
                                     </span>
                                 )}
                                 {searchQuery && (
