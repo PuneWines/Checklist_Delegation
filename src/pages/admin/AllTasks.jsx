@@ -100,10 +100,25 @@ const AllTasks = () => {
     billCopy: null
   });
 
+  const getFirstDayOfMonth = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}-01`;
+  };
+
+  const getCurrentDayOfMonth = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const [username, setUsername] = useState("");
   const [userRole, setUserRole] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(getFirstDayOfMonth());
+  const [endDate, setEndDate] = useState(getCurrentDayOfMonth());
 
   // Infinite Scroll Tracking
   const [visibleCount, setVisibleCount] = useState(50);
@@ -1227,10 +1242,16 @@ const AllTasks = () => {
                   {userRole && userRole.toLowerCase() !== "user" && (
                     <button
                       onClick={() => {
-                        setShowHistory(!showHistory);
+                        const nextShowHistory = !showHistory;
+                        setShowHistory(nextShowHistory);
                         setSearchTerm("");
-                        setStartDate("");
-                        setEndDate("");
+                        if (nextShowHistory) {
+                          setStartDate(getFirstDayOfMonth());
+                          setEndDate(getCurrentDayOfMonth());
+                        } else {
+                          setStartDate("");
+                          setEndDate("");
+                        }
                       }}
                       className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200/80 rounded-xl hover:bg-gray-50 hover:text-purple-600 transition-all shadow-sm"
                     >

@@ -10,7 +10,8 @@ import {
   ChevronDown,
   Filter,
   Camera,
-  Loader2
+  Loader2,
+  Download
 } from "lucide-react";
 import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../context/MagicToastContext";
@@ -849,6 +850,259 @@ const WorkTasksTab = ({
     };
   }, [handleSubmit, registerSubmit]);
 
+  const handleExportCSV = useCallback(async () => {
+    showToast("Preparing CSV export...", "info");
+
+    try {
+      const tableName = "work_task";
+      let query = supabase.from(tableName).select("*, task_assignments:assignment_id(start_datetime, end_datetime, manager_name)");
+
+      const currentUsername = (username || "");
+      const currentUserRole = (userRole || "").toLowerCase();
+      const isSuperAdmin = currentUsername.toLowerCase() === "admin";
+
+      let reportingUsers = [currentUsername];
+      let applyNameFilter = true;
+      let allowedShops = [];
+      let filterByShop = false;
+
+      if (isSuperAdmin) {
+        applyNameFilter = false;
+      } else if (currentUserRole === "admin") {
+        applyNameFilter = false;
+        const userAccess = localStorage.getItem("user_access") || "";
+        if (userAccess && userAccess.toLowerCase() !== "all" && userAccess.toLowerCase() !== "admin") {
+          allowedShops = userAccess.split(',').map(shop => shop.trim().toLowerCase()).filter(d => d && d !== 'all');
+          if (allowedShops.length > 0) {
+            filterByShop = true;
+          }
+        }
+      } else if (currentUserRole === "hod") {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        if (reports && reports.length > 0) {
+          reportingUsers = [currentUsername, ...reports.map((r) => (r.user_name || ""))];
+        }
+      } else if (currentUserRole === "manager") {
+        const { data: allDbUsers } = await supabase
+          .from("users")
+          .select("user_name, shop_name, user_access");
+        if (allDbUsers) {
+          const userAccess = localStorage.getItem("user_access") || "";
+          const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+          const matchedUsers = allDbUsers.filter(u => {
+            const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+            const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+            return userShopsList.some(s => managerShops.includes(s));
+          }).map(u => u.user_name || "");
+          reportingUsers = [...new Set([currentUsername, ...matchedUsers])].filter(Boolean);
+        }
+      }
+
+      if (applyNameFilter) {
+        query = query.in("name", reportingUsers);
+      }
+
+      const getLocalStyleDate = (d) => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
+
+      const todayStr = getLocalStyleDate(new Date());
+      query = query.or(`submission_date.not.is.null,current_date.lt.${todayStr}`);
+      if (startDate) {
+        query = query.gte("current_date", startDate);
+      }
+      if (endDate) {
+        query = query.lte("current_date", endDate);
+      }
+      query = query.order('current_date', { ascending: false });
+
+      if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
+        const cleanTerm = debouncedSearchTerm.trim();
+        const searchFields = ["task_description", "shop_name", "name"];
+
+        const orQueryParts = [];
+        searchFields.forEach(f => {
+          orQueryParts.push(`${f}.ilike.%${cleanTerm}%`);
+        });
+
+        if (orQueryParts.length > 0) {
+          query = query.or(orQueryParts.join(','));
+        }
+      }
+
+      if (workEmployeeFilter && workEmployeeFilter !== "all") {
+        query = query.eq('name', workEmployeeFilter);
+      }
+
+      const { data, error: fetchError } = await query;
+      if (fetchError) {
+        console.error("Export fetch error:", fetchError);
+        throw fetchError;
+      }
+
+      const mappedData = (data || []).map(item => {
+        const mapped = {
+          ...item,
+          id: item.id || item.task_id,
+          _table: item._table || tableName,
+          shop: item.shop || item.shop_name || "-",
+          manager_name: item.task_assignments?.manager_name || "—"
+        };
+
+        if (mapped.status === "REJECTED") {
+          const todayStr = getLocalStyleDate(new Date());
+          mapped.current_date = todayStr;
+          mapped.submission_date = null;
+        }
+
+        return mapped;
+      });
+
+      let filteredWorkTasks = mappedData;
+      if (filterByShop) {
+        filteredWorkTasks = mappedData.filter(item => {
+          const shopName = (item.shop_name || "").toLowerCase();
+          return allowedShops.includes(shopName);
+        });
+      }
+
+      if (currentUserRole === "manager") {
+        filteredWorkTasks = filteredWorkTasks.filter(item =>
+          item.name === currentUsername || item.manager_name === currentUsername
+        );
+      }
+
+      filteredWorkTasks = filteredWorkTasks.filter(item => {
+        const taskDate = item.current_date?.split('T')[0];
+        if (!taskDate) return true;
+        const isHoliday = holidaysList.includes(taskDate);
+        return !isHoliday;
+      });
+
+      const historyTasks = filteredWorkTasks.filter(item => {
+        const ds = getWorkTaskDynamicStatus(item, currentTime);
+        return ds === "NOT_DONE" || item.submission_date;
+      });
+
+      const finalTasks = historyTasks.filter((task) => {
+        let matchesShop = true;
+        if (historyShopFilter && historyShopFilter !== "all") {
+          const taskShop = (task.shop_name || "").trim().toLowerCase();
+          matchesShop = taskShop === historyShopFilter.trim().toLowerCase();
+        }
+
+        let matchesManager = true;
+        if (historyManagerFilter && historyManagerFilter !== "all") {
+          const taskManager = (task.manager_name || "").trim().toLowerCase();
+          matchesManager = taskManager === historyManagerFilter.trim().toLowerCase();
+        }
+
+        return matchesShop && matchesManager;
+      });
+
+      if (finalTasks.length === 0) {
+        showToast("No tasks found for the selected filter criteria", "error");
+        return;
+      }
+
+      const headers = [
+        "Task ID",
+        "Date",
+        "Description",
+        "Manager Name",
+        "Shop",
+        "Department",
+        "Employee",
+        "Duration (Mins)",
+        "Employee Status",
+        "Submission Date",
+        "Manager Status",
+        "Manager Approval Date",
+        "Admin Status",
+        "Admin Approval Date",
+        "Remarks"
+      ];
+
+      const formatValue = (val) => {
+        if (val === null || val === undefined) return '""';
+        let str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+      };
+
+      const rows = finalTasks.map(task => {
+        const userDone = !!(task.submission_date || ["SUBMITTED", "MANAGER_APPROVED", "APPROVED"].includes(task.status));
+        const empStatus = userDone ? "Done" : "Not Done";
+
+        const isApproved = task.status === "APPROVED" || task.status === "MANAGER_APPROVED" || !!task.manager_approval_date;
+        const isRejected = task.status === "REJECTED" && !!task.manager_approved_by;
+        let mgrStatus = "Pending";
+        if (isApproved) mgrStatus = "Approved";
+        else if (isRejected) mgrStatus = "Rejected";
+        else if (!userDone) mgrStatus = "—";
+
+        const isAdminApproved = task.status === "APPROVED" || !!task.admin_approval_date;
+        const isAdminRejected = task.status === "REJECTED" && !!task.admin_approved_by;
+        let admStatus = "Pending";
+        if (isAdminApproved) admStatus = "Approved";
+        else if (isAdminRejected) admStatus = "Rejected";
+        else if (!userDone) admStatus = "—";
+
+        return [
+          task.id || task.task_id || "",
+          task.current_date ? formatDate(task.current_date) : "",
+          task.task_description || "",
+          task.manager_name || "",
+          task.shop || task.shop_name || "",
+          task.department || "",
+          task.name || "",
+          task.duration || "0",
+          empStatus,
+          task.submission_date ? formatDateWithTime(task.submission_date) : "",
+          mgrStatus,
+          task.manager_approval_date ? formatDateWithTime(task.manager_approval_date) : "",
+          admStatus,
+          task.admin_approval_date ? formatDateWithTime(task.admin_approval_date) : "",
+          task.remark || task.remarks || ""
+        ].map(formatValue).join(",");
+      });
+
+      const csvContent = [headers.join(","), ...rows].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `work_tasks_history_${new Date().toISOString().slice(0, 10)}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("CSV exported successfully", "success");
+    } catch (err) {
+      console.error("Export CSV error:", err);
+      showToast("Failed to export CSV: " + err.message, "error");
+    }
+  }, [
+    username,
+    userRole,
+    startDate,
+    endDate,
+    debouncedSearchTerm,
+    workEmployeeFilter,
+    historyShopFilter,
+    historyManagerFilter,
+    holidaysList,
+    currentTime,
+    formatDate,
+    formatDateWithTime,
+    showToast
+  ]);
+
   return (
     <>
 
@@ -926,6 +1180,15 @@ const WorkTasksTab = ({
                 </select>
               </div>
             )}
+
+            {/* Export CSV Button */}
+            <button
+              onClick={handleExportCSV}
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-semibold rounded-md shadow-sm transition-colors cursor-pointer"
+            >
+              <Download className="h-4 w-4" />
+              <span>Export CSV</span>
+            </button>
           </div>
         )}
 

@@ -43,6 +43,8 @@ export default function AdminApprovalPage() {
     const [activeTab, setActiveTab] = useState(isManager ? "work" : "checklist");
     const [viewMode, setViewMode] = useState("pending"); // 'pending' or 'history'
     const [pendingTasks, setPendingTasks] = useState([]);
+    const [mgrStartDate, setMgrStartDate] = useState("");
+    const [mgrEndDate, setMgrEndDate] = useState("");
     const [loading, setLoading] = useState(true);
     const [processingId, setProcessingId] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
@@ -471,16 +473,33 @@ export default function AdminApprovalPage() {
     };
 
     const filteredTasks = pendingTasks.filter(task => {
-        if (!searchTerm) return true;
-        const term = searchTerm.toLowerCase();
-        return (
-            task.doer_name?.toLowerCase().includes(term) ||
-            task.name?.toLowerCase().includes(term) ||
-            task.task_description?.toLowerCase().includes(term) ||
-            task.given_by?.toLowerCase().includes(term) ||
-            task.machine_name?.toLowerCase().includes(term) ||
-            task.issue_description?.toLowerCase().includes(term)
-        );
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            const matchesSearch = (
+                task.doer_name?.toLowerCase().includes(term) ||
+                task.name?.toLowerCase().includes(term) ||
+                task.task_description?.toLowerCase().includes(term) ||
+                task.given_by?.toLowerCase().includes(term) ||
+                task.machine_name?.toLowerCase().includes(term) ||
+                task.issue_description?.toLowerCase().includes(term)
+            );
+            if (!matchesSearch) return false;
+        }
+
+        if (viewMode === "history" && !isManager) {
+            if (mgrStartDate || mgrEndDate) {
+                if (!task.manager_approval_date) return false;
+                const approvalDateStr = task.manager_approval_date.split('T')[0];
+                if (mgrStartDate && approvalDateStr < mgrStartDate) {
+                    return false;
+                }
+                if (mgrEndDate && approvalDateStr > mgrEndDate) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     });
 
     const formatDate = (dateStr) => {
@@ -599,7 +618,38 @@ export default function AdminApprovalPage() {
                             </div>
 
                             {/* View Mode & Search */}
-                            <div className="flex flex-row items-center gap-2 sm:gap-3 w-full lg:w-auto">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto">
+                                {viewMode === 'history' && !isManager && activeTab === 'work' && (
+                                    <div className="flex flex-wrap items-center gap-2 border border-purple-100 bg-purple-50/50 rounded-lg p-1.5">
+                                        <span className="text-[10px] sm:text-xs font-bold text-purple-700 whitespace-nowrap">Mgr. Approval Range:</span>
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-[9px] sm:text-[10px] text-gray-500">From</span>
+                                            <input
+                                                type="date"
+                                                value={mgrStartDate}
+                                                onChange={(e) => setMgrStartDate(e.target.value)}
+                                                className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-[9px] sm:text-[10px] text-gray-500">To</span>
+                                            <input
+                                                type="date"
+                                                value={mgrEndDate}
+                                                onChange={(e) => setMgrEndDate(e.target.value)}
+                                                className="text-[10px] sm:text-xs border border-gray-200 rounded-md p-1 focus:ring-1 focus:ring-purple-400 outline-none bg-white font-medium"
+                                            />
+                                        </div>
+                                        {(mgrStartDate || mgrEndDate) && (
+                                            <button 
+                                                onClick={() => { setMgrStartDate(""); setMgrEndDate(""); }} 
+                                                className="text-[10px] sm:text-xs text-red-500 hover:underline font-bold px-1"
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="flex items-center bg-gray-100 rounded-lg p-0.5 sm:p-1 border border-gray-200 shrink-0">
                                     <button
                                         onClick={() => setViewMode("pending")}
@@ -788,8 +838,14 @@ export default function AdminApprovalPage() {
                                                                 <span className="text-xs font-bold text-indigo-700">{task.manager_approved_by}</span>
                                                             </>
                                                         )}
-                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">At Time</span>
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Admin Approval Time</span>
                                                         <span className="text-xs text-blue-600 font-medium">{formatDate(task.admin_approval_date || task.updated_at || task.submission_date)}</span>
+                                                        {activeTab === 'work' && task.manager_approval_date && (
+                                                            <>
+                                                                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mt-1">Mgr. Approval Time</span>
+                                                                <span className="text-xs text-indigo-600 font-medium">{formatDate(task.manager_approval_date)}</span>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 )}
                                             </td>
@@ -976,10 +1032,20 @@ export default function AdminApprovalPage() {
                                                         <Clock size={10} /> {viewMode === 'pending' ? 'Submitted' : 'Approved'}: {formatDate(viewMode === 'pending' ? (task.submission_date || task.submission_timestamp || task.created_at) : (task.admin_approval_date || task.updated_at || task.submission_date))}
                                                     </p>
                                                      {viewMode === 'history' && (
-                                                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
-                                                            <User size={10} /> By: {task.admin_approved_by || "Admin"}
-                                                        </p>
-                                                    )}
+                                                         <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                             <User size={10} /> By: {task.admin_approved_by || "Admin"}
+                                                         </p>
+                                                     )}
+                                                     {viewMode === 'history' && activeTab === 'work' && task.manager_approved_by && (
+                                                         <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                             <CheckCircle2 size={10} className="shrink-0" /> Mgr. Approved By: {task.manager_approved_by}
+                                                         </p>
+                                                     )}
+                                                     {viewMode === 'history' && activeTab === 'work' && task.manager_approval_date && (
+                                                         <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                             <Clock size={10} className="shrink-0" /> Mgr. Approval Time: {formatDate(task.manager_approval_date)}
+                                                         </p>
+                                                     )}
                                                     {task.status === 'extend' && (
                                                         <p className="text-[10px] text-amber-600 font-black uppercase tracking-wider flex items-center gap-1 mt-0.5">
                                                             <Clock size={10} /> Extended To: {formatDate(task.next_extend_date)}
