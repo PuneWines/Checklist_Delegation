@@ -169,6 +169,26 @@ export default function WorkDetails() {
     return shopFilteredUsers.filter(u => (u.role || "").toLowerCase() === "manager");
   }, [shopFilteredUsers]);
 
+  const getManagersForTask = useCallback((taskShopName) => {
+    const isOffice = (taskShopName || "").toLowerCase() === "office";
+    if (isOffice) {
+      return shopFilteredUsers.filter(u => {
+        const r = (u.role || "").toLowerCase();
+        if (r === "manager") return true;
+        if (r === "admin") {
+          const userShopsList = (u.shop_name || u.user_access || "")
+            .toLowerCase()
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean);
+          return userShopsList.includes("office");
+        }
+        return false;
+      });
+    }
+    return managerUserData;
+  }, [shopFilteredUsers, managerUserData]);
+
   // Employee dropdown: users whose role is "user" OR "manager"
   const employeeUserData = useMemo(() => {
     return shopFilteredUsers.filter(u => {
@@ -1042,9 +1062,9 @@ export default function WorkDetails() {
                           />
                           {searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
                             <div className={`absolute z-50 left-0 min-w-[220px] w-max bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 ${index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"}`}>
-                              {managerUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
+                              {getManagersForTask(item.shopName).filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
                                 <div className="px-4 py-3 text-[11px] text-gray-400 font-semibold text-center">No managers found</div>
-                              ) : managerUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
+                              ) : getManagersForTask(item.shopName).filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
                                 <button
                                   key={user.id}
                                   className="w-full text-left px-3 py-2.5 text-[11px] font-semibold text-gray-700 hover:bg-blue-50 flex items-center justify-between gap-3 transition-colors border-b border-gray-50 last:border-0"
@@ -1307,9 +1327,9 @@ export default function WorkDetails() {
                       />
                       {searchDropdown.type === "manager" && searchDropdown.id === item.taskId && (
                         <div className="absolute z-50 left-0 min-w-[220px] w-max bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto mt-1">
-                          {managerUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
+                          {getManagersForTask(item.shopName).filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
                             <div className="px-4 py-3 text-[11px] text-gray-400 font-semibold text-center">No managers found</div>
-                          ) : managerUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
+                          ) : getManagersForTask(item.shopName).filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => (
                             <button
                               key={user.id}
                               type="button"

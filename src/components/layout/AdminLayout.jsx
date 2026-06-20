@@ -122,7 +122,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Assign Task",
       icon: CheckSquare,
       active: location.pathname === "/dashboard/assign-task",
-      showFor: ["admin", "HOD"],
+      showFor: ["admin", "HOD", "manager"],
     },
     {
       href: "/dashboard/work-details",
@@ -136,7 +136,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Delegation",
       icon: ClipboardList,
       active: location.pathname === "/dashboard/delegation",
-      showFor: ["admin", "user", "HOD"],
+      showFor: ["admin", "user", "HOD", "manager"],
     },
     {
       href: "/dashboard/task",
@@ -150,7 +150,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       label: "Calendar",
       icon: CalendarIcon,
       active: location.pathname === "/dashboard/calendar",
-      showFor: ["admin", "user", "HOD"],
+      showFor: ["admin", "user", "HOD", "manager"],
     },
     {
       label: "Holiday",

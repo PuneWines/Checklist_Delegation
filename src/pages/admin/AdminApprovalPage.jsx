@@ -123,7 +123,7 @@ export default function AdminApprovalPage() {
         const username = localStorage.getItem("user-name");
         const currentUsername = (username || "").toLowerCase();
         const currentUserRole = (userRole || "").toLowerCase();
-        const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
+        const isSystemAdmin = currentUsername === "admin";
         const managerShops = (localStorage.getItem("user_access") || "")
             .toLowerCase()
             .split(",")
@@ -202,6 +202,9 @@ export default function AdminApprovalPage() {
                     const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
                     if (!isShopAllowed) return false;
 
+                    // OFFICE tasks bypass manager approval stage (they show up directly to OFFICE admin)
+                    if (taskShop === "office") return false;
+
                     const isPast = isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at);
                     if (viewMode === "history") {
                         const isApprovedByMe = (task.manager_approved_by || "").toLowerCase() === currentUsername;
@@ -212,8 +215,59 @@ export default function AdminApprovalPage() {
                         return !isPast;
                     }
                 });
+            } else if (currentUserRole === "admin" && activeTab === "work") {
+                // Shop-specific admin filtering for Work Details
+                filteredData = filteredData.filter(task => {
+                    const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
+                    const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
+                    if (!isShopAllowed) return false;
+
+                    const taskStatus = (task.status || "").toLowerCase();
+                    const isOffice = taskShop === "office";
+                    const isPast = isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at);
+
+                    if (viewMode === "history") {
+                        const isApprovedByMe = (task.admin_approved_by || "").toLowerCase() === currentUsername;
+                        return isApprovedByMe;
+                    } else {
+                        if (isPast) return false;
+                        if (isOffice) {
+                            // OFFICE tasks show up directly in SUBMITTED / Done status
+                            return taskStatus === "submitted" || taskStatus === "done" || taskStatus === "manager_approved";
+                        } else {
+                            // Other shops require MANAGER_APPROVED status first
+                            return taskStatus === "manager_approved";
+                        }
+                    }
+                });
+            } else if (currentUserRole === "admin") {
+                // Shop-specific admin filtering for other tabs
+                filteredData = filteredData.filter(task => {
+                    const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
+                    const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
+                    return isShopAllowed;
+                });
             } else {
                 filteredData = [];
+            }
+        } else {
+            // For Global Super Admin (username === "admin")
+            if (activeTab === "work") {
+                filteredData = filteredData.filter(task => {
+                    const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
+                    const taskStatus = (task.status || "").toLowerCase();
+                    const isOffice = taskShop === "office";
+
+                    if (viewMode === "history") {
+                        return true;
+                    } else {
+                        if (isOffice) {
+                            return taskStatus === "submitted" || taskStatus === "done" || taskStatus === "manager_approved";
+                        } else {
+                            return taskStatus === "manager_approved";
+                        }
+                    }
+                });
             }
         }
 

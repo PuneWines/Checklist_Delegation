@@ -273,7 +273,7 @@ export const fetchPendingWorkApprovalsApi = async (role) => {
     if (userRole === 'manager') {
       query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done');
     } else if (userRole === 'admin') {
-      query = query.eq('status', 'MANAGER_APPROVED');
+      query = query.or('status.eq.MANAGER_APPROVED,status.eq.SUBMITTED,status.eq.Done,status.eq.done');
     } else {
       query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done');
     }

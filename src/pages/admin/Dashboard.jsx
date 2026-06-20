@@ -219,6 +219,20 @@ export default function AdminDashboard() {
         if (reports) {
             reportingUsers = [username.toLowerCase(), ...reports.map(r => r.user_name.toLowerCase())];
         }
+    } else if (userRole === "manager") {
+        const { data: allDbUsers } = await supabase
+            .from("users")
+            .select("user_name, shop_name, user_access");
+        if (allDbUsers) {
+            const userAccess = localStorage.getItem("user_access") || "";
+            const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+            const matchedUsers = allDbUsers.filter(u => {
+                const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+                const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+                return userShopsList.some(s => managerShopsList.includes(s));
+            }).map(u => (u.user_name || "").toLowerCase());
+            reportingUsers = [...new Set([username.toLowerCase(), ...matchedUsers])].filter(Boolean);
+        }
     }
 
     let totalTasks = 0;
@@ -253,7 +267,7 @@ export default function AdminDashboard() {
         const assignedUser = (task.name || task.assigned_person || task.doer_name || "").toLowerCase();
         const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
 
-        if (userRole === "hod") {
+        if (userRole === "hod" || userRole === "manager") {
             if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
                 return null;
             }
@@ -729,6 +743,20 @@ export default function AdminDashboard() {
           if (reports) {
               reportingUsers = [username.toLowerCase(), ...reports.map(r => (r.user_name || "").toLowerCase())];
           }
+      } else if (currentUserRole === "manager") {
+          const { data: allDbUsers } = await supabase
+              .from("users")
+              .select("user_name, shop_name, user_access");
+          if (allDbUsers) {
+              const userAccess = localStorage.getItem("user_access") || "";
+              const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+              const matchedUsers = allDbUsers.filter(u => {
+                  const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+                  const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+                  return userShopsList.some(s => managerShopsList.includes(s));
+              }).map(u => (u.user_name || "").toLowerCase());
+              reportingUsers = [...new Set([username.toLowerCase(), ...matchedUsers])].filter(Boolean);
+          }
       }
 
       // Process tasks with your field names
@@ -741,7 +769,7 @@ export default function AdminDashboard() {
           const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
 
           if (roleNormalized !== "admin") {
-            if (roleNormalized === 'hod') {
+            if (roleNormalized === 'hod' || roleNormalized === 'manager') {
                 if (!reportingUsers.includes(assignedUser) && createdByUser !== currentUserName) {
                     return null;
                 }
@@ -1030,7 +1058,14 @@ export default function AdminDashboard() {
           queryFn: () => getUniqueShopsApi(),
           staleTime: 10 * 60 * 1000 // 10 minutes
         });
-        setAvailableShops(shops);
+        const currentUserRole = (userRole || "").toLowerCase();
+        if (currentUserRole === "manager") {
+          const userAccess = localStorage.getItem("user_access") || "";
+          const managerShopsList = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+          setAvailableShops(shops.filter(s => managerShopsList.includes(s.toLowerCase())));
+        } else {
+          setAvailableShops(shops);
+        }
       } catch (error) {
         console.error('Error fetching shops:', error);
         setAvailableShops([]);

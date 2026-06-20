@@ -139,12 +139,14 @@ const AllTasks = () => {
       return allUsers.map(u => typeof u === 'object' ? u.user_name : u).filter(Boolean);
     } else if (role === "manager") {
       const managerUser = allUsers.find(u => typeof u === 'object' && u.user_name === currentUsername);
-      const managerShop = managerUser ? (managerUser.shop_name || "").trim().toLowerCase() : "";
+      const userAccess = localStorage.getItem("user_access") || (managerUser ? managerUser.user_access : "") || "";
+      const managerShops = userAccess.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       
       const matched = allUsers.filter(u => {
         if (typeof u !== 'object') return false;
-        const userShop = (u.shop_name || "").trim().toLowerCase();
-        return managerShop && userShop === managerShop;
+        const userShop = (u.shop_name || u.user_access || "").toLowerCase();
+        const userShopsList = userShop.split(',').map(s => s.trim()).filter(Boolean);
+        return userShopsList.some(s => managerShops.includes(s));
       }).map(u => u.user_name);
       
       return [...new Set([currentUsername, ...matched])].filter(Boolean);

@@ -22,7 +22,8 @@ export default function TaskManagementTabs({ activeTab, setActiveTab }) {
     const cacheKey = `user_tasks_visibility_${username}`;
 
     const [userHasTasks, setUserHasTasks] = useState(() => {
-        if (role !== "user" || !username) {
+        const isSuperAdmin = username.toLowerCase() === "admin";
+        if (isSuperAdmin || !username) {
             return { checklist: true, work: true, maintenance: true, repair: true, ea: true };
         }
         if (memoryCache[username]) {
@@ -48,7 +49,8 @@ export default function TaskManagementTabs({ activeTab, setActiveTab }) {
     });
 
     const [isLoading, setIsLoading] = useState(() => {
-        if (role !== "user" || !username) return false;
+        const isSuperAdmin = username.toLowerCase() === "admin";
+        if (isSuperAdmin || !username) return false;
         if (memoryCache[username]) return false;
         try {
             return !sessionStorage.getItem(cacheKey);
@@ -59,7 +61,8 @@ export default function TaskManagementTabs({ activeTab, setActiveTab }) {
 
     useEffect(() => {
         const username = localStorage.getItem("user-name");
-        if (role !== "user" || !username) return;
+        const isSuperAdmin = (username || "").toLowerCase() === "admin";
+        if (isSuperAdmin || !username) return;
 
         // Skip fetch if already in memory cache
         if (memoryCache[username]) {
@@ -101,31 +104,22 @@ export default function TaskManagementTabs({ activeTab, setActiveTab }) {
                     console.error("Error writing task visibility cache:", e);
                 }
             } catch (error) {
-                console.error("Error checking tasks for user role in TaskManagementTabs:", error);
+                console.error("Error checking tasks for user in TaskManagementTabs:", error);
             } finally {
                 setIsLoading(false);
             }
         };
 
         checkUserTasks();
-    }, [role, username]);
+    }, [username]);
 
     const tabs = useMemo(() => {
         return allTabs.filter(tab => {
-            if (role === "hod") {
-                if (tab.id === "checklist") return true;
-                if (tab.id === "repair" && isMachineOperator) return true;
-                return false;
-            }
-            if (role === "manager") {
-                return tab.id === "work";
-            }
-            if (role === "user") {
-                return userHasTasks[tab.id];
-            }
-            return true;
+            const isSuperAdmin = username.toLowerCase() === "admin";
+            if (isSuperAdmin) return true;
+            return userHasTasks[tab.id];
         });
-    }, [role, isMachineOperator, userHasTasks]);
+    }, [userHasTasks, username]);
 
     useEffect(() => {
         if (tabs.length > 0) {

@@ -23,7 +23,7 @@ export default function DashboardHeader({
     const [startDate, setStartDate] = useState("")
     const [endDate, setEndDate] = useState("")
     const normalizedRole = (userRole || "").toLowerCase();
-    const isAdmin = normalizedRole === "admin";
+    const isAdmin = normalizedRole === "admin" || normalizedRole === "manager";
     const isHOD = normalizedRole === "hod";
 
     // Fetch total users count - UPDATED VERSION
