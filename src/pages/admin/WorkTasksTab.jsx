@@ -269,15 +269,27 @@ const WorkTasksTab = ({
   useEffect(() => {
     const fetchFilterOptions = async () => {
       try {
-        const [shopsRes, managersRes] = await Promise.all([
+        const [shopsRes, managersRes, officeAdminsRes] = await Promise.all([
           supabase.from('shop').select('shop_name').order('shop_name', { ascending: true }),
-          supabase.from('users').select('user_name').eq('status', 'active').ilike('role', 'manager').order('user_name', { ascending: true })
+          supabase.from('users').select('user_name').eq('status', 'active').ilike('role', 'manager').order('user_name', { ascending: true }),
+          // Also fetch admins with OFFICE shop access (they act as managers for OFFICE tasks)
+          supabase.from('users').select('user_name, shop_name, user_access').eq('status', 'active').ilike('role', 'admin')
         ]);
         if (shopsRes.data) {
           setAvailableShops(shopsRes.data.map(s => s.shop_name).filter(Boolean));
         }
         if (managersRes.data) {
-          setAvailableManagers(managersRes.data.map(u => u.user_name).filter(Boolean));
+          const managerNames = managersRes.data.map(u => u.user_name).filter(Boolean);
+          // Add OFFICE admins who act as managers for OFFICE shop tasks
+          const officeAdminNames = (officeAdminsRes.data || [])
+            .filter(u => {
+              const shops = (u.shop_name || u.user_access || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+              return shops.includes('office');
+            })
+            .map(u => u.user_name)
+            .filter(Boolean);
+          const combined = [...new Set([...managerNames, ...officeAdminNames])].sort();
+          setAvailableManagers(combined);
         }
       } catch (err) {
         console.error("Error fetching history filter options:", err);
