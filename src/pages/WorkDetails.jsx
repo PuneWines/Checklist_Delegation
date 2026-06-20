@@ -197,6 +197,26 @@ export default function WorkDetails() {
     });
   }, [shopFilteredUsers]);
 
+  const getEmployeesForTask = useCallback((taskShopName) => {
+    const isOffice = (taskShopName || "").toLowerCase() === "office";
+    if (isOffice) {
+      return shopFilteredUsers.filter(u => {
+        const r = (u.role || "").toLowerCase();
+        if (r === "user" || r === "manager") return true;
+        if (r === "admin") {
+          const userShopsList = (u.shop_name || u.user_access || "")
+            .toLowerCase()
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean);
+          return userShopsList.includes("office");
+        }
+        return false;
+      });
+    }
+    return employeeUserData;
+  }, [shopFilteredUsers, employeeUserData]);
+
   // Local state for modified fields (spreadsheet-style editing)
   const [modifiedRows, setModifiedRows] = useState({});
 
@@ -1138,9 +1158,9 @@ export default function WorkDetails() {
 
                               {searchDropdown.type === "employee" && searchDropdown.id === item.taskId && (
                                 <div className={`absolute z-50 left-0 min-w-[220px] w-max bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 ${index >= filteredTasks.length - 3 ? "bottom-full mb-1" : "top-full mt-1"}`}>
-                                  {employeeUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
+                                  {getEmployeesForTask(item.shopName).filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
                                     <div className="px-4 py-3 text-[11px] text-gray-400 font-semibold text-center">No employees found</div>
-                                  ) : employeeUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
+                                  ) : getEmployeesForTask(item.shopName).filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
                                     const isSelected = item.employee_name?.split(',').map(e => e.trim()).filter(Boolean).includes(user.user_name);
                                     return (
                                       <button
@@ -1415,9 +1435,9 @@ export default function WorkDetails() {
 
                           {searchDropdown.type === "employee" && searchDropdown.id === item.taskId && (
                             <div className="absolute z-50 left-0 min-w-[220px] w-max bg-white border border-gray-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto mt-1 top-full">
-                              {employeeUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
+                              {getEmployeesForTask(item.shopName).filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).length === 0 ? (
                                 <div className="px-4 py-3 text-[11px] text-gray-400 font-semibold text-center">No employees found</div>
-                              ) : employeeUserData.filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
+                              ) : getEmployeesForTask(item.shopName).filter(u => u.user_name?.toLowerCase().includes(searchDropdown.term.toLowerCase())).map(user => {
                                 const isSelected = item.employee_name?.split(',').map(e => e.trim()).filter(Boolean).includes(user.user_name);
                                 return (
                                   <button
