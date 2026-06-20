@@ -216,37 +216,30 @@ export default function AdminApprovalPage() {
                     }
                 });
             } else if (currentUserRole === "admin" && activeTab === "work") {
-                // Shop-specific admin filtering for Work Details
+                // Admin sees work tasks from ALL shops — no shop restriction for admin role
                 filteredData = filteredData.filter(task => {
                     const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
-                    const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
-                    if (!isShopAllowed) return false;
-
                     const taskStatus = (task.status || "").toLowerCase();
                     const isOffice = taskShop === "office";
                     const isPast = isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at);
 
                     if (viewMode === "history") {
-                        const isApprovedByMe = (task.admin_approved_by || "").toLowerCase() === currentUsername;
-                        return isApprovedByMe;
+                        // History: show tasks approved by any admin (not restricted to current user)
+                        return !!task.admin_approved_by || task.status === "APPROVED";
                     } else {
                         if (isPast) return false;
                         if (isOffice) {
-                            // OFFICE tasks show up directly in SUBMITTED / Done status
+                            // OFFICE exception: submitted tasks bypass manager approval → go directly to admin
                             return taskStatus === "submitted" || taskStatus === "done" || taskStatus === "manager_approved";
                         } else {
-                            // Other shops require MANAGER_APPROVED status first
+                            // All other shops: task must be MANAGER_APPROVED first before admin sees it
                             return taskStatus === "manager_approved";
                         }
                     }
                 });
             } else if (currentUserRole === "admin") {
-                // Shop-specific admin filtering for other tabs
-                filteredData = filteredData.filter(task => {
-                    const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
-                    const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
-                    return isShopAllowed;
-                });
+                // Admin sees tasks from ALL shops for non-work tabs (checklist, delegation, maintenance, repair, ea)
+                // No shop restriction — admin can approve anyone's task
             } else {
                 filteredData = [];
             }
