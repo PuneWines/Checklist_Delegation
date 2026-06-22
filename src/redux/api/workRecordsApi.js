@@ -271,11 +271,11 @@ export const fetchPendingWorkApprovalsApi = async (role) => {
     let query = supabase.from('work_task').select('*, task_assignments:assignment_id(manager_name)');
 
     if (userRole === 'manager') {
-      query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done');
+      query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done,status.eq.COMPLETED,status.eq.completed');
     } else if (userRole === 'admin') {
-      query = query.or('status.eq.MANAGER_APPROVED,status.eq.SUBMITTED,status.eq.Done,status.eq.done');
+      query = query.or('status.eq.MANAGER_APPROVED,status.eq.SUBMITTED,status.eq.Done,status.eq.done,status.eq.COMPLETED,status.eq.completed');
     } else {
-      query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done');
+      query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done,status.eq.COMPLETED,status.eq.completed');
     }
 
     const { data, error } = await query
@@ -301,7 +301,7 @@ export const fetchWorkTaskHistoryApi = async (role, username) => {
 
     if (userRole === 'manager') {
       query = query
-        .or(`manager_approved_by.eq."${userName}",status.in.("SUBMITTED","Done","done")`)
+        .or(`manager_approved_by.eq."${userName}",admin_approved_by.eq."${userName}",status.in.("SUBMITTED","Done","done","COMPLETED","completed","APPROVED","REJECTED")`)
         .order('submission_date', { ascending: false });
     } else {
       query = query
@@ -327,8 +327,19 @@ export const approveWorkTaskApi = async (taskId) => {
     const userName = localStorage.getItem("user-name");
     const now = new Date().toISOString();
 
+    // Fetch the task first to check if it's an OFFICE task
+    const { data: taskData, error: taskError } = await supabase
+      .from('work_task')
+      .select('shop_name')
+      .eq('id', taskId)
+      .single();
+
+    if (taskError) throw taskError;
+
+    const isOffice = (taskData?.shop_name || "").toLowerCase().trim() === "office";
+
     let updateFields = {};
-    if (role === 'manager') {
+    if (role === 'manager' && !isOffice) {
       updateFields = {
         status: 'MANAGER_APPROVED',
         manager_approved_by: userName,
@@ -366,8 +377,19 @@ export const rejectWorkTaskApi = async (taskId, reason) => {
     const userName = localStorage.getItem("user-name");
     const now = new Date().toISOString();
 
+    // Fetch the task first to check if it's an OFFICE task
+    const { data: taskData, error: taskError } = await supabase
+      .from('work_task')
+      .select('shop_name')
+      .eq('id', taskId)
+      .single();
+
+    if (taskError) throw taskError;
+
+    const isOffice = (taskData?.shop_name || "").toLowerCase().trim() === "office";
+
     let updateFields = {};
-    if (role === 'manager') {
+    if (role === 'manager' && !isOffice) {
       updateFields = {
         status: 'REJECTED',
         rejection_reason: reason,

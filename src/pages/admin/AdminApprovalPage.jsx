@@ -202,10 +202,20 @@ export default function AdminApprovalPage() {
                     const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
                     if (!isShopAllowed) return false;
 
-                    // OFFICE tasks bypass manager approval stage (they show up directly to OFFICE admin)
-                    if (taskShop === "office") return false;
-
+                    const isOffice = taskShop === "office";
                     const isPast = isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at);
+
+                    if (isOffice) {
+                        const taskStatus = (task.status || "").toLowerCase();
+                        if (viewMode === "history") {
+                            // History: show approved/rejected OFFICE tasks (approved by this user/admin)
+                            return !!task.admin_approved_by || task.status === "APPROVED" || task.status === "REJECTED" || (task.manager_approved_by || "").toLowerCase() === currentUsername;
+                        } else {
+                            // Pending mode: show submitted tasks directly to OFFICE admin/manager
+                            return ["submitted", "done", "manager_approved", "completed"].includes(taskStatus);
+                        }
+                    }
+
                     if (viewMode === "history") {
                         const isApprovedByMe = (task.manager_approved_by || "").toLowerCase() === currentUsername;
                         const isPastUnapproved = !task.manager_approved_by && isPast;
@@ -227,11 +237,11 @@ export default function AdminApprovalPage() {
                         // History: show tasks approved by any admin (not restricted to current user)
                         return !!task.admin_approved_by || task.status === "APPROVED";
                     } else {
-                        if (isPast) return false;
                         if (isOffice) {
                             // OFFICE exception: submitted tasks bypass manager approval → go directly to admin
-                            return taskStatus === "submitted" || taskStatus === "done" || taskStatus === "manager_approved";
+                            return ["submitted", "done", "manager_approved", "completed"].includes(taskStatus);
                         } else {
+                            if (isPast) return false;
                             // All other shops: task must be MANAGER_APPROVED first before admin sees it
                             return taskStatus === "manager_approved";
                         }
@@ -255,7 +265,7 @@ export default function AdminApprovalPage() {
                         return true;
                     } else {
                         if (isOffice) {
-                            return taskStatus === "submitted" || taskStatus === "done" || taskStatus === "manager_approved";
+                            return ["submitted", "done", "manager_approved", "completed"].includes(taskStatus);
                         } else {
                             return taskStatus === "manager_approved";
                         }
@@ -305,7 +315,8 @@ export default function AdminApprovalPage() {
             return;
         }
 
-        if (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
+        const isOffice = (task.shop || task.shop_name || "").toLowerCase().trim() === "office";
+        if (isManager && !isOffice && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
             showToast("You cannot approve a past task.", "error");
             return;
         }
@@ -349,7 +360,8 @@ export default function AdminApprovalPage() {
     };
 
     const handleReject = (task) => {
-        if (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
+        const isOffice = (task.shop || task.shop_name || "").toLowerCase().trim() === "office";
+        if (isManager && !isOffice && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
             showToast("You cannot reject a past task.", "error");
             return;
         }
@@ -391,7 +403,8 @@ export default function AdminApprovalPage() {
             const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
             const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
             const isNotSelf = isSystemAdmin || doerName !== currentUsername;
-            const isNotPastForManager = !isManager || !isPastSubmission(t.submission_date || t.submission_timestamp || t.created_at);
+            const isOfficeTask = (t.shop || t.shop_name || "").toLowerCase().trim() === "office";
+            const isNotPastForManager = !isManager || isOfficeTask || !isPastSubmission(t.submission_date || t.submission_timestamp || t.created_at);
             
             return isSelected && isNotExtended && isNotSelf && isNotPastForManager;
         });
@@ -795,7 +808,7 @@ export default function AdminApprovalPage() {
                                                         className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                                                         checked={selectedTaskIds.includes(task.id)}
                                                         onChange={() => toggleTaskSelection(task.id)}
-                                                        disabled={isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)}
+                                                        disabled={isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && (task.shop || task.shop_name || "").toLowerCase().trim() !== "office"}
                                                     />
                                                 </td>
                                             )}
@@ -953,7 +966,7 @@ export default function AdminApprovalPage() {
                                                         <div className="flex items-center gap-2">
                                                              <button
                                                                  onClick={() => handleApprove(task)}
-                                                                 disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at))}
+                                                                 disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && (task.shop || task.shop_name || "").toLowerCase().trim() !== "office")}
                                                                  className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-green-100 text-xs font-bold border-none"
                                                              >
                                                                  {processingId === task.id ? (
@@ -965,7 +978,7 @@ export default function AdminApprovalPage() {
                                                              </button>
                                                              <button
                                                                  onClick={() => handleReject(task)}
-                                                                 disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at))}
+                                                                 disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && (task.shop || task.shop_name || "").toLowerCase().trim() !== "office")}
                                                                  className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-bold"
                                                              >
                                                                  <XCircle size={14} />
@@ -974,7 +987,7 @@ export default function AdminApprovalPage() {
                                                          </div>
                                                     )
                                                 ) : (
-                                            isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !task.manager_approved_by ? (
+                                             isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !task.manager_approved_by && (task.shop || task.shop_name || "").toLowerCase().trim() !== "office" ? (
                                                 <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-800">
                                                     Unable to Approve
                                                 </span>
@@ -986,7 +999,7 @@ export default function AdminApprovalPage() {
                                                         <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-yellow-100 text-yellow-800">
                                                             Extended
                                                         </span>
-                                                    ) : task.status === 'pending' ? (
+                                                    ) : (task.status === 'pending' || ['submitted', 'done'].includes((task.status || '').toLowerCase())) ? (
                                                         <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-orange-100 text-orange-800">
                                                             Pending Approval
                                                         </span>
@@ -1069,7 +1082,7 @@ export default function AdminApprovalPage() {
                                                     className="w-5 h-5 mt-1 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                                                     checked={selectedTaskIds.includes(task.id)}
                                                     onChange={() => toggleTaskSelection(task.id)}
-                                                    disabled={isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)}
+                                                    disabled={isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && (task.shop || task.shop_name || "").toLowerCase().trim() !== "office"}
                                                 />
                                             )}
                                             <div className="space-y-1">
@@ -1236,7 +1249,7 @@ export default function AdminApprovalPage() {
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <button
                                                         onClick={() => handleApprove(task)}
-                                                        disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at))}
+                                                        disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && (task.shop || task.shop_name || "").toLowerCase().trim() !== "office")}
                                                         className="flex items-center justify-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black shadow-lg shadow-green-100 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all"
                                                     >
                                                         {processingId === task.id ? (
@@ -1248,7 +1261,7 @@ export default function AdminApprovalPage() {
                                                     </button>
                                                     <button
                                                         onClick={() => handleReject(task)}
-                                                        disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at))}
+                                                        disabled={processingId === task.id || (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && (task.shop || task.shop_name || "").toLowerCase().trim() !== "office")}
                                                         className="flex items-center justify-center gap-2 py-2.5 bg-red-100 text-red-600 rounded-xl text-xs font-black disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all"
                                                     >
                                                         <XCircle size={16} />
@@ -1257,11 +1270,13 @@ export default function AdminApprovalPage() {
                                                 </div>
                                             )
                                         ) : (
-                                             <div className="text-center space-y-1">
-                                                 {isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !task.manager_approved_by ? (
-                                                     <span className="block w-full py-1.5 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Unable to Approve</span>
-                                                 ) : task.rejection_reason ? (
+                                            <div className="text-center space-y-1">
+                                                {isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !task.manager_approved_by && (task.shop || task.shop_name || "").toLowerCase().trim() !== "office" ? (
+                                                    <span className="block w-full py-1.5 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Unable to Approve</span>
+                                                ) : task.rejection_reason ? (
                                                     <span className="block w-full py-1.5 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Rejected: {task.rejection_reason}</span>
+                                                ) : (task.status === 'pending' || ['submitted', 'done'].includes((task.status || '').toLowerCase())) ? (
+                                                    <span className="block w-full py-1.5 bg-orange-50 text-orange-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Pending Approval</span>
                                                 ) : task.status === 'MANAGER_APPROVED' ? (
                                                     <span className="block w-full py-1.5 bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Manager Approved</span>
                                                 ) : (
