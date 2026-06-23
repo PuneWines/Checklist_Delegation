@@ -305,8 +305,8 @@ export const fetchWorkTaskHistoryApi = async (role, username) => {
         .order('submission_date', { ascending: false });
     } else {
       query = query
-        .in('status', ['APPROVED', 'REJECTED'])
-        .order('admin_approval_date', { ascending: false });
+        .in('status', ['APPROVED', 'REJECTED', 'MANAGER_APPROVED', 'SUBMITTED', 'Done', 'done', 'COMPLETED', 'completed'])
+        .order('submission_date', { ascending: false });
     }
 
     const { data, error } = await query;

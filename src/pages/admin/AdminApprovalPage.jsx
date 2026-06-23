@@ -239,7 +239,7 @@ export default function AdminApprovalPage() {
                 filteredData = [];
             }
         } else {
-            // For Global Super Admin (username === "admin")
+            // For Global Super Admin (username === "admin") or any Admin role
             if (activeTab === "work") {
                 filteredData = filteredData.filter(task => {
                     const taskStatus = (task.status || "").toLowerCase();
@@ -247,7 +247,8 @@ export default function AdminApprovalPage() {
                     if (viewMode === "history") {
                         return true;
                     } else {
-                        return taskStatus === "manager_approved";
+                        const isPast = isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at);
+                        return !isPast && taskStatus === "manager_approved";
                     }
                 });
             }
@@ -294,7 +295,7 @@ export default function AdminApprovalPage() {
             return;
         }
 
-        if (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
+        if ((currentUserRole === "manager" || currentUserRole === "admin") && activeTab === "work" && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
             showToast("You cannot approve a past task.", "error");
             return;
         }
@@ -336,9 +337,9 @@ export default function AdminApprovalPage() {
             setProcessingId(null);
         }
     };
-
     const handleReject = (task) => {
-        if (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
+        const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
+        if ((currentUserRole === "manager" || currentUserRole === "admin") && activeTab === "work" && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
             showToast("You cannot reject a past task.", "error");
             return;
         }
@@ -380,9 +381,9 @@ export default function AdminApprovalPage() {
             const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
             const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
             const isNotSelf = isSystemAdmin || doerName !== currentUsername;
-            const isNotPastForManager = !isManager || !isPastSubmission(t.submission_date || t.submission_timestamp || t.created_at);
+            const isNotPastForApproval = activeTab !== "work" || (currentUserRole !== "manager" && currentUserRole !== "admin") || !isPastSubmission(t.submission_date || t.submission_timestamp || t.created_at);
             
-            return isSelected && isNotExtended && isNotSelf && isNotPastForManager;
+            return isSelected && isNotExtended && isNotSelf && isNotPastForApproval;
         });
 
         if (tasksToApprove.length === 0) {
@@ -852,38 +853,53 @@ export default function AdminApprovalPage() {
                                                 </td>
                                             )}
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                {viewMode === 'pending' ? (
-                                                    <div className="flex flex-col gap-1">
-                                                        <span className="text-xs text-gray-500 font-medium">
-                                                            {formatDate(task.submission_date || task.submission_timestamp || task.created_at)}
-                                                        </span>
-                                                        {/* Show manager approval timestamp to admin */}
-                                                        {activeTab === 'work' && !isManager && task.manager_approval_date && (
-                                                            <span className="text-[10px] text-indigo-500 font-bold">
-                                                                Mgr. Approved: {formatDate(task.manager_approval_date)}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex flex-col gap-1">
-                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Approved By</span>
-                                                        <span className="text-sm font-bold text-gray-800">{task.admin_approved_by || "Admin"}</span>
-                                                        {activeTab === 'work' && task.manager_approved_by && (
-                                                            <>
-                                                                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mt-0.5">Mgr. Approved By</span>
-                                                                <span className="text-xs font-bold text-indigo-700">{task.manager_approved_by}</span>
-                                                            </>
-                                                        )}
-                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Admin Approval Time</span>
-                                                        <span className="text-xs text-blue-600 font-medium">{formatDate(task.admin_approval_date || task.updated_at || task.submission_date)}</span>
-                                                        {activeTab === 'work' && task.manager_approval_date && (
-                                                            <>
-                                                                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mt-1">Mgr. Approval Time</span>
-                                                                <span className="text-xs text-indigo-600 font-medium">{formatDate(task.manager_approval_date)}</span>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                )}
+                                                 {viewMode === 'pending' ? (
+                                                     <div className="flex flex-col gap-1">
+                                                         <span className="text-xs text-gray-500 font-medium">
+                                                             {formatDate(task.submission_date || task.submission_timestamp || task.created_at)}
+                                                         </span>
+                                                         {/* Show manager approval timestamp to admin */}
+                                                         {activeTab === 'work' && !isManager && task.manager_approval_date && (
+                                                             <span className="text-[10px] text-indigo-500 font-bold">
+                                                                 Mgr. Approved: {formatDate(task.manager_approval_date)}
+                                                             </span>
+                                                         )}
+                                                     </div>
+                                                 ) : (
+                                                     activeTab === 'work' && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !['approved', 'rejected'].includes((task.status || '').toLowerCase()) ? (
+                                                         <div className="flex flex-col gap-1">
+                                                             <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Unapproved (Past Date)</span>
+                                                             <span className="text-xs text-gray-500 font-medium">Submitted: {formatDate(task.submission_date || task.submission_timestamp || task.created_at)}</span>
+                                                             {task.manager_approved_by && (
+                                                                 <>
+                                                                     <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mt-0.5">Mgr. Approved By</span>
+                                                                     <span className="text-xs font-bold text-indigo-700">{task.manager_approved_by}</span>
+                                                                     <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mt-1">Mgr. Approval Time</span>
+                                                                     <span className="text-xs text-indigo-600 font-medium">{formatDate(task.manager_approval_date)}</span>
+                                                                 </>
+                                                             )}
+                                                         </div>
+                                                     ) : (
+                                                         <div className="flex flex-col gap-1">
+                                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Approved By</span>
+                                                             <span className="text-sm font-bold text-gray-800">{task.admin_approved_by || "Admin"}</span>
+                                                             {activeTab === 'work' && task.manager_approved_by && (
+                                                                 <>
+                                                                     <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mt-0.5">Mgr. Approved By</span>
+                                                                     <span className="text-xs font-bold text-indigo-700">{task.manager_approved_by}</span>
+                                                                 </>
+                                                             )}
+                                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Admin Approval Time</span>
+                                                             <span className="text-xs text-blue-600 font-medium">{formatDate(task.admin_approval_date || task.updated_at || task.submission_date)}</span>
+                                                             {activeTab === 'work' && task.manager_approval_date && (
+                                                                 <>
+                                                                     <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mt-1">Mgr. Approval Time</span>
+                                                                     <span className="text-xs text-indigo-600 font-medium">{formatDate(task.manager_approval_date)}</span>
+                                                                 </>
+                                                             )}
+                                                         </div>
+                                                     )
+                                                 )}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {(() => {
@@ -963,11 +979,11 @@ export default function AdminApprovalPage() {
                                                          </div>
                                                     )
                                                 ) : (
-                                             isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !task.manager_approved_by && (task.shop || task.shop_name || "").toLowerCase().trim() !== "office" ? (
-                                                <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-800">
-                                                    Unable to Approve
-                                                </span>
-                                            ) : task.status === 'rejected' || task.rejection_reason ? (
+                                              activeTab === 'work' && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !['approved', 'rejected'].includes((task.status || '').toLowerCase()) ? (
+                                                  <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-800">
+                                                      Unable to Approve
+                                                  </span>
+                                              ) : task.status === 'rejected' || task.rejection_reason ? (
                                                         <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-800" title={task.rejection_reason || task.reason}>
                                                             Rejected
                                                         </span>
@@ -1063,24 +1079,47 @@ export default function AdminApprovalPage() {
                                             )}
                                             <div className="space-y-1">
                                                 <p className="text-sm font-black text-gray-900">{task.doer_name || task.name || task.filled_by}</p>
-                                                <div className="space-y-1 mt-1">
-                                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                                                        <Clock size={10} /> {viewMode === 'pending' ? 'Submitted' : 'Approved'}: {formatDate(viewMode === 'pending' ? (task.submission_date || task.submission_timestamp || task.created_at) : (task.admin_approval_date || task.updated_at || task.submission_date))}
-                                                    </p>
-                                                     {viewMode === 'history' && (
-                                                         <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
-                                                             <User size={10} /> By: {task.admin_approved_by || "Admin"}
-                                                         </p>
-                                                     )}
-                                                     {viewMode === 'history' && activeTab === 'work' && task.manager_approved_by && (
-                                                         <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
-                                                             <CheckCircle2 size={10} className="shrink-0" /> Mgr. Approved By: {task.manager_approved_by}
-                                                         </p>
-                                                     )}
-                                                     {viewMode === 'history' && activeTab === 'work' && task.manager_approval_date && (
-                                                         <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
-                                                             <Clock size={10} className="shrink-0" /> Mgr. Approval Time: {formatDate(task.manager_approval_date)}
-                                                         </p>
+                                                 <div className="space-y-1 mt-1">
+                                                     {viewMode === 'history' && activeTab === 'work' && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !['approved', 'rejected'].includes((task.status || '').toLowerCase()) ? (
+                                                         <>
+                                                             <p className="text-[10px] text-red-500 font-black uppercase tracking-wider flex items-center gap-1">
+                                                                 <Clock size={10} /> Unapproved (Past Date)
+                                                             </p>
+                                                             <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                                                                 Submitted: {formatDate(task.submission_date || task.submission_timestamp || task.created_at)}
+                                                             </p>
+                                                             {task.manager_approved_by && (
+                                                                 <>
+                                                                     <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                                         <CheckCircle2 size={10} className="shrink-0" /> Mgr. Approved By: {task.manager_approved_by}
+                                                                     </p>
+                                                                     <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                                         <Clock size={10} className="shrink-0" /> Mgr. Approval Time: {formatDate(task.manager_approval_date)}
+                                                                     </p>
+                                                                 </>
+                                                             )}
+                                                         </>
+                                                     ) : (
+                                                         <>
+                                                             <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                                                                 <Clock size={10} /> {viewMode === 'pending' ? 'Submitted' : 'Approved'}: {formatDate(viewMode === 'pending' ? (task.submission_date || task.submission_timestamp || task.created_at) : (task.admin_approval_date || task.updated_at || task.submission_date))}
+                                                             </p>
+                                                             {viewMode === 'history' && (
+                                                                 <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                                     <User size={10} /> By: {task.admin_approved_by || "Admin"}
+                                                                 </p>
+                                                             )}
+                                                             {viewMode === 'history' && activeTab === 'work' && task.manager_approved_by && (
+                                                                 <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                                     <CheckCircle2 size={10} className="shrink-0" /> Mgr. Approved By: {task.manager_approved_by}
+                                                                 </p>
+                                                             )}
+                                                             {viewMode === 'history' && activeTab === 'work' && task.manager_approval_date && (
+                                                                 <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                                                                     <Clock size={10} className="shrink-0" /> Mgr. Approval Time: {formatDate(task.manager_approval_date)}
+                                                                 </p>
+                                                             )}
+                                                         </>
                                                      )}
                                                     {task.status === 'extend' && (
                                                         <p className="text-[10px] text-amber-600 font-black uppercase tracking-wider flex items-center gap-1 mt-0.5">
@@ -1247,7 +1286,7 @@ export default function AdminApprovalPage() {
                                             )
                                         ) : (
                                             <div className="text-center space-y-1">
-                                                {isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !task.manager_approved_by && (task.shop || task.shop_name || "").toLowerCase().trim() !== "office" ? (
+                                                {activeTab === 'work' && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at) && !['approved', 'rejected'].includes((task.status || '').toLowerCase()) ? (
                                                     <span className="block w-full py-1.5 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Unable to Approve</span>
                                                 ) : task.rejection_reason ? (
                                                     <span className="block w-full py-1.5 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Rejected: {task.rejection_reason}</span>
