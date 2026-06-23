@@ -123,7 +123,7 @@ export default function AdminApprovalPage() {
         const username = localStorage.getItem("user-name");
         const currentUsername = (username || "").toLowerCase();
         const currentUserRole = (userRole || "").toLowerCase();
-        const isSystemAdmin = currentUsername === "admin";
+        const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
         const managerShops = (localStorage.getItem("user_access") || "")
             .toLowerCase()
             .split(",")
@@ -202,19 +202,7 @@ export default function AdminApprovalPage() {
                     const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
                     if (!isShopAllowed) return false;
 
-                    const isOffice = taskShop === "office";
                     const isPast = isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at);
-
-                    if (isOffice) {
-                        const taskStatus = (task.status || "").toLowerCase();
-                        if (viewMode === "history") {
-                            // History: show approved/rejected OFFICE tasks (approved by this user/admin)
-                            return !!task.admin_approved_by || task.status === "APPROVED" || task.status === "REJECTED" || (task.manager_approved_by || "").toLowerCase() === currentUsername;
-                        } else {
-                            // Pending mode: show submitted tasks directly to OFFICE admin/manager
-                            return ["submitted", "done", "manager_approved", "completed"].includes(taskStatus);
-                        }
-                    }
 
                     if (viewMode === "history") {
                         const isApprovedByMe = (task.manager_approved_by || "").toLowerCase() === currentUsername;
@@ -233,21 +221,15 @@ export default function AdminApprovalPage() {
                     if (!isShopAllowed) return false;
 
                     const taskStatus = (task.status || "").toLowerCase();
-                    const isOffice = taskShop === "office";
                     const isPast = isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at);
 
                     if (viewMode === "history") {
                         // History: show tasks approved by any admin (not restricted to current user)
                         return !!task.admin_approved_by || task.status === "APPROVED";
                     } else {
-                        if (isOffice) {
-                            // OFFICE exception: submitted tasks bypass manager approval → go directly to admin
-                            return ["submitted", "done", "manager_approved", "completed"].includes(taskStatus);
-                        } else {
-                            if (isPast) return false;
-                            // All other shops: task must be MANAGER_APPROVED first before admin sees it
-                            return taskStatus === "manager_approved";
-                        }
+                        if (isPast) return false;
+                        // All shops: task must be MANAGER_APPROVED first before admin sees it
+                        return taskStatus === "manager_approved";
                     }
                 });
             } else if (currentUserRole === "admin") {
@@ -260,18 +242,12 @@ export default function AdminApprovalPage() {
             // For Global Super Admin (username === "admin")
             if (activeTab === "work") {
                 filteredData = filteredData.filter(task => {
-                    const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
                     const taskStatus = (task.status || "").toLowerCase();
-                    const isOffice = taskShop === "office";
 
                     if (viewMode === "history") {
                         return true;
                     } else {
-                        if (isOffice) {
-                            return ["submitted", "done", "manager_approved", "completed"].includes(taskStatus);
-                        } else {
-                            return taskStatus === "manager_approved";
-                        }
+                        return taskStatus === "manager_approved";
                     }
                 });
             }
@@ -318,8 +294,7 @@ export default function AdminApprovalPage() {
             return;
         }
 
-        const isOffice = (task.shop || task.shop_name || "").toLowerCase().trim() === "office";
-        if (isManager && !isOffice && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
+        if (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
             showToast("You cannot approve a past task.", "error");
             return;
         }
@@ -363,8 +338,7 @@ export default function AdminApprovalPage() {
     };
 
     const handleReject = (task) => {
-        const isOffice = (task.shop || task.shop_name || "").toLowerCase().trim() === "office";
-        if (isManager && !isOffice && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
+        if (isManager && isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at)) {
             showToast("You cannot reject a past task.", "error");
             return;
         }
@@ -406,8 +380,7 @@ export default function AdminApprovalPage() {
             const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
             const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
             const isNotSelf = isSystemAdmin || doerName !== currentUsername;
-            const isOfficeTask = (t.shop || t.shop_name || "").toLowerCase().trim() === "office";
-            const isNotPastForManager = !isManager || isOfficeTask || !isPastSubmission(t.submission_date || t.submission_timestamp || t.created_at);
+            const isNotPastForManager = !isManager || !isPastSubmission(t.submission_date || t.submission_timestamp || t.created_at);
             
             return isSelected && isNotExtended && isNotSelf && isNotPastForManager;
         });

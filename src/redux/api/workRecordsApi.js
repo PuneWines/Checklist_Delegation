@@ -273,7 +273,7 @@ export const fetchPendingWorkApprovalsApi = async (role) => {
     if (userRole === 'manager') {
       query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done,status.eq.COMPLETED,status.eq.completed');
     } else if (userRole === 'admin') {
-      query = query.or('status.eq.MANAGER_APPROVED,status.eq.SUBMITTED,status.eq.Done,status.eq.done,status.eq.COMPLETED,status.eq.completed');
+      query = query.eq('status', 'MANAGER_APPROVED');
     } else {
       query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done,status.eq.COMPLETED,status.eq.completed');
     }
@@ -327,19 +327,8 @@ export const approveWorkTaskApi = async (taskId) => {
     const userName = localStorage.getItem("user-name");
     const now = new Date().toISOString();
 
-    // Fetch the task first to check if it's an OFFICE task
-    const { data: taskData, error: taskError } = await supabase
-      .from('work_task')
-      .select('shop_name')
-      .eq('id', taskId)
-      .single();
-
-    if (taskError) throw taskError;
-
-    const isOffice = (taskData?.shop_name || "").toLowerCase().trim() === "office";
-
     let updateFields = {};
-    if (role === 'manager' && !isOffice) {
+    if (role === 'manager') {
       updateFields = {
         status: 'MANAGER_APPROVED',
         manager_approved_by: userName,
@@ -377,19 +366,8 @@ export const rejectWorkTaskApi = async (taskId, reason) => {
     const userName = localStorage.getItem("user-name");
     const now = new Date().toISOString();
 
-    // Fetch the task first to check if it's an OFFICE task
-    const { data: taskData, error: taskError } = await supabase
-      .from('work_task')
-      .select('shop_name')
-      .eq('id', taskId)
-      .single();
-
-    if (taskError) throw taskError;
-
-    const isOffice = (taskData?.shop_name || "").toLowerCase().trim() === "office";
-
     let updateFields = {};
-    if (role === 'manager' && !isOffice) {
+    if (role === 'manager') {
       updateFields = {
         status: 'REJECTED',
         rejection_reason: reason,
