@@ -176,10 +176,10 @@ export default function AdminApprovalPage() {
         let filteredData = data || [];
         
         if (!isSystemAdmin) {
-            // HOD and Users cannot approve their own tasks
+            // HOD and Users cannot approve their own tasks (Admins can)
             filteredData = (data || []).filter(task => {
                 const doerName = (task.name || task.doer_name || task.filled_by || "").toLowerCase();
-                return doerName !== currentUsername;
+                return currentUserRole === "admin" || doerName !== currentUsername;
             });
 
             if (currentUserRole === "hod") {
@@ -226,9 +226,12 @@ export default function AdminApprovalPage() {
                     }
                 });
             } else if (currentUserRole === "admin" && activeTab === "work") {
-                // Admin sees work tasks from ALL shops — no shop restriction for admin role
+                // Admin sees work tasks from assigned shops only — shop restriction for admin role in work details
                 filteredData = filteredData.filter(task => {
                     const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
+                    const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
+                    if (!isShopAllowed) return false;
+
                     const taskStatus = (task.status || "").toLowerCase();
                     const isOffice = taskShop === "office";
                     const isPast = isPastSubmission(task.submission_date || task.submission_timestamp || task.created_at);
