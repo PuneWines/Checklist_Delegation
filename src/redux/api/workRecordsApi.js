@@ -280,7 +280,7 @@ export const fetchPendingWorkApprovalsApi = async (role) => {
 
     const { data, error } = await query
       .not('submission_date', 'is', null)
-      .order('submission_date', { ascending: true });
+      .order('submission_date', { ascending: false });
 
     if (error) throw error;
     return data || [];
