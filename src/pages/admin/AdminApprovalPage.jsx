@@ -94,6 +94,39 @@ const isPastSubmission = (submissionDateStr) => {
   return taskDateStr < todayStr;
 };
 
+const getWorkTaskDeadline = (task) => {
+  if (!task || !task.current_date) return null;
+  const plannedDateStr = task.current_date; // YYYY-MM-DD
+  
+  let timeStr = task.end_time || "";
+  if (!timeStr && task.task_assignments?.end_datetime) {
+    const parts = task.task_assignments.end_datetime.split("T");
+    if (parts.length > 1) {
+      timeStr = parts[1].substring(0, 8); // e.g. "18:00:00"
+    }
+  }
+  
+  if (!timeStr || timeStr === "00:00:00" || timeStr === "00:00") {
+    timeStr = "23:59:59";
+  }
+  
+  const reconstructedStr = timeStr.includes('+') || timeStr.includes('Z')
+      ? `${plannedDateStr}T${timeStr}`
+      : `${plannedDateStr}T${timeStr}+05:30`;
+      
+  const deadlineDate = new Date(reconstructedStr);
+  if (isNaN(deadlineDate.getTime())) {
+      return new Date(`${plannedDateStr}T23:59:59+05:30`);
+  }
+  return deadlineDate;
+};
+
+const isPastDeadline = (task) => {
+  const deadline = getWorkTaskDeadline(task);
+  if (!deadline) return false;
+  return new Date() > deadline;
+};
+
 export default function AdminApprovalPage() {
   const { showToast } = useMagicToast();
   const currentRole = (localStorage.getItem("role") || "").toLowerCase();
@@ -266,11 +299,10 @@ export default function AdminApprovalPage() {
       console.error("Error loading tasks:", error);
     }
 
-    // Filter tasks if not super admin
+    // Filter tasks if not super admin/admin (HOD/Users cannot approve their own tasks)
     let filteredData = data || [];
 
     if (!isSystemAdmin) {
-      // HOD and Users cannot approve their own tasks (Admins can)
       filteredData = (data || []).filter((task) => {
         const doerName = (
           task.name ||
@@ -278,9 +310,56 @@ export default function AdminApprovalPage() {
           task.filled_by ||
           ""
         ).toLowerCase();
-        return currentUserRole === "admin" || doerName !== currentUsername;
+        return doerName !== currentUsername;
       });
+    }
 
+    if (activeTab === "work") {
+      filteredData = filteredData.filter((task) => {
+        const isPast = isPastDeadline(task);
+        const taskStatus = (task.status || "").toLowerCase();
+
+        if (currentUserRole === "manager") {
+          // Manager filtering
+          // 1. Must be assigned to this manager
+          const taskManager = (task.manager_name || '').toLowerCase();
+          const isAssignedToMe = taskManager.split(',').map(m => m.trim()).includes(currentUsername);
+          if (!isAssignedToMe) return false;
+
+          // 2. Must match allowed shops (if restricted)
+          const taskShop = (task.shop || task.shop_name || "").toLowerCase().trim();
+          const isShopAllowed = managerShops.length === 0 || managerShops.includes(taskShop);
+          if (!isShopAllowed) return false;
+
+          if (viewMode === "pending") {
+            // Pending: not past deadline, and has been submitted but not approved by manager
+            const isSubmitted = ["submitted", "done", "completed"].includes(taskStatus);
+            return !isPast && isSubmitted && !task.manager_approved_by;
+          } else {
+            // History: approved/rejected by me, or past deadline unapproved
+            const isApprovedByMe = (task.manager_approved_by || "").toLowerCase() === currentUsername;
+            const isRejectedByMe = taskStatus === "rejected" && (task.manager_approved_by || "").toLowerCase() === currentUsername;
+            const isPastUnapproved = isPast && !task.manager_approved_by;
+            return isApprovedByMe || isRejectedByMe || isPastUnapproved;
+          }
+        } else if (isSystemAdmin) {
+          // Admin / Super Admin filtering
+          if (viewMode === "pending") {
+            // Pending: task status is MANAGER_APPROVED and NOT past deadline
+            return taskStatus === "manager_approved" && !isPast;
+          } else {
+            // History: approved/rejected by any admin (or current admin), or past deadline (unable to approve)
+            const isAdminProcessed = !!task.admin_approved_by || taskStatus === "approved" || taskStatus === "rejected";
+            const isPastUnapproved = isPast && taskStatus === "manager_approved";
+            return isAdminProcessed || isPastUnapproved;
+          }
+        } else {
+          // Non-manager, non-admin cannot view/approve work tasks
+          return false;
+        }
+      });
+    } else {
+      // Non-work tabs filtering (checklist, delegation, maintenance, repair, ea)
       if (currentUserRole === "hod") {
         let reportingUsers = [];
         const { data: reports } = await supabase
@@ -302,64 +381,13 @@ export default function AdminApprovalPage() {
           ).toLowerCase();
           return reportingUsers.includes(doerName);
         });
-      } else if (currentUserRole === "manager" && activeTab === "work") {
-        filteredData = filteredData.filter((task) => {
-          const taskShop = (task.shop || task.shop_name || "")
-            .toLowerCase()
-            .trim();
-          const isShopAllowed =
-            managerShops.length === 0 || managerShops.includes(taskShop);
-          if (!isShopAllowed) return false;
-
-          const isPast = isPastSubmission(
-            task.submission_date ||
-              task.submission_timestamp ||
-              task.created_at,
-          );
-
-          if (viewMode === "history") {
-            const isApprovedByMe =
-              (task.manager_approved_by || "").toLowerCase() ===
-              currentUsername;
-            const isPastUnapproved = !task.manager_approved_by && isPast;
-            return isApprovedByMe || isPastUnapproved;
-          } else {
-            // Pending mode: show only tasks that are NOT in the past (so they can be approved today)
-            return !isPast;
-          }
-        });
-      } else if (currentUserRole === "admin" && activeTab === "work") {
-        // Admin sees ALL MANAGER_APPROVED work tasks — no shop or date restriction
-        filteredData = filteredData.filter((task) => {
-          const taskStatus = (task.status || "").toLowerCase();
-
-          if (viewMode === "history") {
-            // History: show tasks approved by any admin
-            return !!task.admin_approved_by || task.status === "APPROVED";
-          } else {
-            // Pending: task must be MANAGER_APPROVED first before admin sees it
-            return taskStatus === "manager_approved";
-          }
-        });
-      } else if (currentUserRole === "admin") {
-        // Admin sees tasks from ALL shops for non-work tabs (checklist, delegation, maintenance, repair, ea)
-        // No shop restriction — admin can approve anyone's task
+      } else if (currentUserRole === "manager") {
+        // Managers only have access to work tab, non-work tabs are filtered out
+        filteredData = [];
+      } else if (isSystemAdmin) {
+        // Admin sees all for non-work tabs — no shop restriction
       } else {
         filteredData = [];
-      }
-    } else {
-      // For Global Super Admin (username === "admin") or any Admin role
-      if (activeTab === "work") {
-        filteredData = filteredData.filter((task) => {
-          const taskStatus = (task.status || "").toLowerCase();
-
-          if (viewMode === "history") {
-            return true;
-          } else {
-            // No date restriction for system admin — show all MANAGER_APPROVED
-            return taskStatus === "manager_approved";
-          }
-        });
       }
     }
 
@@ -415,9 +443,7 @@ export default function AdminApprovalPage() {
     if (
       (currentUserRole === "manager" || currentUserRole === "admin") &&
       activeTab === "work" &&
-      isPastSubmission(
-        task.submission_date || task.submission_timestamp || task.created_at,
-      )
+      isPastDeadline(task)
     ) {
       showToast("You cannot approve a past task.", "error");
       return;
@@ -470,9 +496,7 @@ export default function AdminApprovalPage() {
     if (
       (currentUserRole === "manager" || currentUserRole === "admin") &&
       activeTab === "work" &&
-      isPastSubmission(
-        task.submission_date || task.submission_timestamp || task.created_at,
-      )
+      isPastDeadline(task)
     ) {
       showToast("You cannot reject a past task.", "error");
       return;
@@ -531,9 +555,7 @@ export default function AdminApprovalPage() {
       const isNotPastForApproval =
         activeTab !== "work" ||
         (currentUserRole !== "manager" && currentUserRole !== "admin") ||
-        !isPastSubmission(
-          t.submission_date || t.submission_timestamp || t.created_at,
-        );
+        !isPastDeadline(t);
 
       return isSelected && isNotExtended && isNotSelf && isNotPastForApproval;
     });
@@ -1036,11 +1058,7 @@ export default function AdminApprovalPage() {
                             onChange={() => toggleTaskSelection(task.id)}
                             disabled={
                               isManager &&
-                              isPastSubmission(
-                                task.submission_date ||
-                                  task.submission_timestamp ||
-                                  task.created_at,
-                              ) &&
+                              isPastDeadline(task) &&
                               (task.shop || task.shop_name || "")
                                 .toLowerCase()
                                 .trim() !== "office"
@@ -1158,11 +1176,7 @@ export default function AdminApprovalPage() {
                               )}
                           </div>
                         ) : activeTab === "work" &&
-                          isPastSubmission(
-                            task.submission_date ||
-                              task.submission_timestamp ||
-                              task.created_at,
-                          ) &&
+                          isPastDeadline(task) &&
                           !["approved", "rejected"].includes(
                             (task.status || "").toLowerCase(),
                           ) ? (
@@ -1338,11 +1352,7 @@ export default function AdminApprovalPage() {
                                 disabled={
                                   processingId === task.id ||
                                   (isManager &&
-                                    isPastSubmission(
-                                      task.submission_date ||
-                                        task.submission_timestamp ||
-                                        task.created_at,
-                                    ) &&
+                                    isPastDeadline(task) &&
                                     (task.shop || task.shop_name || "")
                                       .toLowerCase()
                                       .trim() !== "office")
@@ -1361,11 +1371,7 @@ export default function AdminApprovalPage() {
                                 disabled={
                                   processingId === task.id ||
                                   (isManager &&
-                                    isPastSubmission(
-                                      task.submission_date ||
-                                        task.submission_timestamp ||
-                                        task.created_at,
-                                    ) &&
+                                    isPastDeadline(task) &&
                                     (task.shop || task.shop_name || "")
                                       .toLowerCase()
                                       .trim() !== "office")
@@ -1378,11 +1384,7 @@ export default function AdminApprovalPage() {
                             </div>
                           )
                         ) : activeTab === "work" &&
-                          isPastSubmission(
-                            task.submission_date ||
-                              task.submission_timestamp ||
-                              task.created_at,
-                          ) &&
+                          isPastDeadline(task) &&
                           !["approved", "rejected"].includes(
                             (task.status || "").toLowerCase(),
                           ) ? (
@@ -1497,11 +1499,7 @@ export default function AdminApprovalPage() {
                           onChange={() => toggleTaskSelection(task.id)}
                           disabled={
                             isManager &&
-                            isPastSubmission(
-                              task.submission_date ||
-                                task.submission_timestamp ||
-                                task.created_at,
-                            ) &&
+                            isPastDeadline(task) &&
                             (task.shop || task.shop_name || "")
                               .toLowerCase()
                               .trim() !== "office"
@@ -1515,11 +1513,7 @@ export default function AdminApprovalPage() {
                         <div className="space-y-1 mt-1">
                           {viewMode === "history" &&
                           activeTab === "work" &&
-                          isPastSubmission(
-                            task.submission_date ||
-                              task.submission_timestamp ||
-                              task.created_at,
-                          ) &&
+                          isPastDeadline(task) &&
                           !["approved", "rejected"].includes(
                             (task.status || "").toLowerCase(),
                           ) ? (
@@ -1801,11 +1795,7 @@ export default function AdminApprovalPage() {
                             disabled={
                               processingId === task.id ||
                               (isManager &&
-                                isPastSubmission(
-                                  task.submission_date ||
-                                    task.submission_timestamp ||
-                                    task.created_at,
-                                ) &&
+                                isPastDeadline(task) &&
                                 (task.shop || task.shop_name || "")
                                   .toLowerCase()
                                   .trim() !== "office")
@@ -1824,11 +1814,7 @@ export default function AdminApprovalPage() {
                             disabled={
                               processingId === task.id ||
                               (isManager &&
-                                isPastSubmission(
-                                  task.submission_date ||
-                                    task.submission_timestamp ||
-                                    task.created_at,
-                                ) &&
+                                isPastDeadline(task) &&
                                 (task.shop || task.shop_name || "")
                                   .toLowerCase()
                                   .trim() !== "office")
@@ -1843,11 +1829,7 @@ export default function AdminApprovalPage() {
                     ) : (
                       <div className="text-center space-y-1">
                         {activeTab === "work" &&
-                        isPastSubmission(
-                          task.submission_date ||
-                            task.submission_timestamp ||
-                            task.created_at,
-                        ) &&
+                        isPastDeadline(task) &&
                         !["approved", "rejected"].includes(
                           (task.status || "").toLowerCase(),
                         ) ? (

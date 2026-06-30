@@ -268,7 +268,7 @@ export const submitWorkTaskApi = async (taskId, submissionData) => {
 export const fetchPendingWorkApprovalsApi = async (role) => {
   try {
     const userRole = (role || "").toLowerCase();
-    let query = supabase.from('work_task').select('*, task_assignments:assignment_id(manager_name)');
+    let query = supabase.from('work_task').select('*, task_assignments:assignment_id(manager_name, end_datetime)');
 
     if (userRole === 'manager') {
       query = query.or('status.eq.SUBMITTED,status.eq.Done,status.eq.done,status.eq.COMPLETED,status.eq.completed');
@@ -297,7 +297,7 @@ export const fetchWorkTaskHistoryApi = async (role, username) => {
   try {
     const userRole = (role || localStorage.getItem("role") || "").toLowerCase();
     const userName = username || localStorage.getItem("user-name");
-    let query = supabase.from('work_task').select('*, task_assignments:assignment_id(manager_name)');
+    let query = supabase.from('work_task').select('*, task_assignments:assignment_id(manager_name, end_datetime)');
 
     if (userRole === 'manager') {
       query = query
