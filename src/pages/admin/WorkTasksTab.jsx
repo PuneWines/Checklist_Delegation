@@ -406,7 +406,11 @@ const WorkTasksTab = ({
       }
 
       const tableName = "work_task";
-      let query = supabase.from(tableName).select("*, task_assignments:assignment_id(start_datetime, end_datetime, manager_name)");
+      let selectStr = "*, task_assignments:assignment_id(start_datetime, end_datetime, manager_name)";
+      if (showHistory && historyManagerFilter && historyManagerFilter !== "all") {
+        selectStr = "*, task_assignments:assignment_id!inner(start_datetime, end_datetime, manager_name)";
+      }
+      let query = supabase.from(tableName).select(selectStr);
 
       // Apply pagination limit/range in database
       const limit = 50;
@@ -514,6 +518,14 @@ const WorkTasksTab = ({
         query = query.eq('name', workEmployeeFilter);
       }
 
+      if (showHistory && historyShopFilter && historyShopFilter !== "all") {
+        query = query.ilike('shop_name', historyShopFilter);
+      }
+
+      if (showHistory && historyManagerFilter && historyManagerFilter !== "all") {
+        query = query.eq('task_assignments.manager_name', historyManagerFilter);
+      }
+
       const { data, error: fetchError } = await query;
       if (fetchError) {
         console.error("WorkTasksTab Supabase fetch error:", fetchError);
@@ -578,13 +590,13 @@ const WorkTasksTab = ({
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [username, userRole, showHistory, holidaysList, debouncedSearchTerm, workEmployeeFilter, currentTime, dateFilter, startDate, endDate]);
+  }, [username, userRole, showHistory, holidaysList, debouncedSearchTerm, workEmployeeFilter, currentTime, dateFilter, startDate, endDate, historyShopFilter, historyManagerFilter]);
 
   useEffect(() => {
     setPage(0);
     setHasMore(true);
     fetchData(0, false);
-  }, [showHistory, debouncedSearchTerm, dateFilter, workEmployeeFilter, startDate, endDate, username, userRole, fetchData]);
+  }, [showHistory, debouncedSearchTerm, dateFilter, workEmployeeFilter, startDate, endDate, username, userRole, historyShopFilter, historyManagerFilter, fetchData]);
 
   const filteredPendingTasks = useMemo(() => {
     const sortedTasks = [...tasks].sort((a, b) => {
