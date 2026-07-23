@@ -833,7 +833,7 @@ export default function QuickTask() {
                 </p>
               </div>
 
-              {selectedTasks.length > 0 && (
+              {selectedTasks.length > 0 && activeTab !== 'work' && (
                 <button
                   onClick={handleDeleteSelected}
                   disabled={isDeleting}
